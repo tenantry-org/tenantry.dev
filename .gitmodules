@@ -1,0 +1,6 @@
+[submodule "content/_src/core"]
+	path = content/_src/core
+	url = https://github.com/tenantry-org/tenantry-core
+[submodule "content/_src/pro"]
+	path = content/_src/pro
+	url = https://github.com/tenantry-org/tenantry-pro
