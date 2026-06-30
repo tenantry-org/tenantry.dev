@@ -1,0 +1,7 @@
+pnpm-lock.yaml
+
+# Generated docs content (pnpm sync:docs) — formatted upstream in the source repos
+/content/docs/
+
+# fumadocs-mdx generated source
+/.source/

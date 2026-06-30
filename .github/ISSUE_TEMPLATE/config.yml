@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://tenantry.dev/docs
+    about: Read the Tenantry docs before opening an issue.
+  - name: Report a vulnerability
+    url: https://github.com/tenantry-org/site/security/advisories/new
+    about: Please report security vulnerabilities privately via GitHub Security Advisories — do not open a public issue.
