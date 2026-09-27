@@ -1,0 +1,13 @@
+{
+  "note": "Licence format contract between tenantry-site and Tenantry.Pro. Signed with a TEST key derived from a public seed; not valid for any real licence. Keep identical to the copy in the other repo.",
+  "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtT+XB/2BXI2RiKL36z94RwmnTf4rjyRIYk3Uu1AI23v8vlV/WotSXCJo14WUkSL7y+y76E92iqmPKmdFIKqs8Q==",
+  "issuedAt": "2026-09-27T00:00:00.000Z",
+  "claims": {
+    "customerId": "ctm_contract",
+    "tier": "pro",
+    "seats": 3,
+    "notBefore": "2026-09-27T00:00:00.000Z",
+    "expiresAt": "2099-01-01T00:00:00.000Z"
+  },
+  "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJUZW5hbnRyeSIsInN1YiI6ImN0bV9jb250cmFjdCIsInRpZXIiOiJwcm8iLCJzZWF0cyI6MywiaWF0IjoxNzkwNDY3MjAwLCJuYmYiOjE3OTA0NjcyMDAsImV4cCI6NDA3MDkwODgwMH0.MEYCIQCOF9ukpx9biV-rZzyMdxzrUrGl6FQq7URDMg53Y3NLhgIhAMgC04APGTVh2M96ZK5Er50s5P_Ij0HRVdw2Y3JNiy_X"
+}
