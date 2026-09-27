@@ -19,6 +19,7 @@ import {
 import { grantAccess, revokeAccess } from '@/utils/github/provisioning';
 import { sendEmail } from '@/utils/email/send';
 import { accessRevokedEmail, welcomeProEmail } from '@/utils/email/templates';
+import { provisioningAllowed } from '@/utils/provisioning-guard';
 
 // Fallback licence lifetime when Paddle doesn't supply a current billing period (the validator's
 // own 30-day grace then covers any renewal gap; we re-issue on every subscription event).
@@ -74,6 +75,9 @@ export class ProcessWebhook {
       return;
     }
 
+    // Don't invite non-allowlisted customers to "connect GitHub" — they won't be granted access.
+    if (template === welcomeProEmail && !provisioningAllowed(email)) return;
+
     await sendEmail(template(email)); // sendEmail never throws
   }
 
@@ -96,9 +100,28 @@ export class ProcessWebhook {
 
     if (status === 'revoked') {
       await this.revokeEntitlement(data, tier);
-    } else {
-      await this.grantEntitlement(data, tier, status);
+      return;
     }
+
+    // Allowlist gate (sandbox/staging safety): for non-allowlisted customers, record the entitlement
+    // but withhold GitHub access + licence. No-op in production (PROVISION_ALLOWLIST unset).
+    const email = await getCustomerEmail(data.customerId);
+    if (!provisioningAllowed(email)) {
+      console.warn(
+        `Paddle webhook: ${email ?? data.customerId} is not in PROVISION_ALLOWLIST; ` +
+          'recording entitlement but withholding GitHub access and licence.',
+      );
+      await upsertEntitlement({
+        customerId: data.customerId,
+        subscriptionId: data.id,
+        tier,
+        status,
+        githubGranted: false,
+      });
+      return;
+    }
+
+    await this.grantEntitlement(data, tier, status);
   }
 
   private async grantEntitlement(data: SubscriptionEventData, tier: string, status: EntitlementStatus) {

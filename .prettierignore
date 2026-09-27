@@ -1,7 +1,14 @@
 pnpm-lock.yaml
 
+# Docs source submodules (the Core/Pro repos) — formatted upstream, not by this project
+/content/_src/
+
 # Generated docs content (pnpm sync:docs) — formatted upstream in the source repos
 /content/docs/
 
 # fumadocs-mdx generated source
 /.source/
+
+# Supabase CLI temp/local state
+/supabase/.temp/
+/supabase/.branches/

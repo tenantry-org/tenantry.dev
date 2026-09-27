@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server-internal';
 import { grantAccess, hasAccess, revokeAccess } from '@/utils/github/provisioning';
+import { provisioningAllowed } from '@/utils/provisioning-guard';
 
 /**
  * Reconciles entitlements ↔ GitHub access. Catches stragglers a single webhook can miss:
@@ -29,6 +30,10 @@ export async function reconcileEntitlements(): Promise<ReconcileResult> {
   for (const entitlement of pending ?? []) {
     const login = await linkedLogin(supabase, entitlement.customer_id);
     if (!login) continue;
+
+    // Honour the provisioning allowlist (sandbox/staging safety) so reconcile can't backfill a grant
+    // the webhook withheld. No-op in production (PROVISION_ALLOWLIST unset).
+    if (!provisioningAllowed(await customerEmail(supabase, entitlement.customer_id))) continue;
 
     try {
       await grantAccess(login);
@@ -82,4 +87,13 @@ async function linkedLogin(
     .maybeSingle();
 
   return data?.github_login ?? null;
+}
+
+async function customerEmail(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  customerId: string,
+): Promise<string | null> {
+  const { data } = await supabase.from('customers').select('email').eq('customer_id', customerId).maybeSingle();
+
+  return data?.email ?? null;
 }

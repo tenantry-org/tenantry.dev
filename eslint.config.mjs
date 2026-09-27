@@ -3,7 +3,7 @@ import nextTypescript from 'eslint-config-next/typescript';
 
 // Next 16 removes `next lint`; we run the ESLint CLI directly against the native flat configs.
 const eslintConfig = [
-  { ignores: ['.next/**', '.source/**', 'content/docs/**', '_upgrade/**', 'node_modules/**'] },
+  { ignores: ['.next/**', '.source/**', 'content/**', 'node_modules/**'] },
   ...nextCoreWebVitals,
   ...nextTypescript,
   {
