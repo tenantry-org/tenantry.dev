@@ -18,7 +18,7 @@ export const PricingTier: Tier[] = [
     icon: '/assets/icons/price-tiers/free-icon.svg',
     description: 'For a single production application that needs real tenant isolation.',
     features: [
-      'Database-per-tenant & schema-per-tenant',
+      'Database-per-tenant, plus schema-per-tenant on SQL Server & PostgreSQL',
       'Automatic tenant provisioning',
       'EF Core providers (SQL Server, Npgsql, MySQL)',
       'Private NuGet package feed',
@@ -34,7 +34,7 @@ export const PricingTier: Tier[] = [
     description: 'For teams shipping several multi-tenant services.',
     features: [
       'Everything in Solo',
-      'Migration orchestration & tenant lifecycle',
+      'Migration orchestration across tenant databases & tenant lifecycle',
       'Hangfire, MassTransit, Quartz & Rebus integrations',
       'Audit logging & OpenTelemetry',
       'Priority support',

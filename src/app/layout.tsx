@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://tenantry.dev'),
   title: 'Tenantry — Multi-tenancy for .NET',
   description:
-    'Tenantry is a production-grade multi-tenancy toolkit for .NET. Core is open source (row-level, shared-DB tenancy). Pro adds database-per-tenant and schema-per-tenant isolation, provisioning, migration orchestration, and tenant lifecycle management.',
+    'Tenantry is a production-grade multi-tenancy toolkit for .NET. Core is open source (row-level, shared-DB tenancy). Pro adds database-per-tenant and schema-per-tenant isolation, provisioning, migration orchestration across tenant databases, and tenant lifecycle management.',
 };
 
 export default function RootLayout({

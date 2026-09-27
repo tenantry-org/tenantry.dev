@@ -12,8 +12,8 @@ export function HeroSection() {
         </h1>
         <p className={'mx-auto mt-6 max-w-2xl text-[18px] leading-[27px] md:text-[20px] md:leading-[30px]'}>
           Tenantry gives ASP.NET Core apps real tenant isolation — from a shared database with row-level scoping to a
-          database (or schema) per tenant, with provisioning, migration orchestration, and lifecycle management built
-          in.
+          database (or schema) per tenant, with provisioning, lifecycle management, and migration orchestration across
+          tenant databases built in.
         </p>
         <p className={'mx-auto mt-4 max-w-2xl text-base text-muted-foreground'}>
           <span className={'text-primary font-medium'}>Core</span> is open source and free.{' '}
