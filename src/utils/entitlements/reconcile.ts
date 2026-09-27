@@ -31,8 +31,8 @@ export async function reconcileEntitlements(): Promise<ReconcileResult> {
     const login = await linkedLogin(supabase, entitlement.customer_id);
     if (!login) continue;
 
-    // Honour the provisioning allowlist (sandbox/staging safety) so reconcile can't backfill a grant
-    // the webhook withheld. No-op in production (PROVISION_ALLOWLIST unset).
+    // Honour the provisioning gate (PROVISIONING_MODE + allowlist) so reconcile can't backfill a grant
+    // the webhook withheld.
     if (!provisioningAllowed(await customerEmail(supabase, entitlement.customer_id))) continue;
 
     try {

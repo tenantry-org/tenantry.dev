@@ -75,7 +75,7 @@ export class ProcessWebhook {
       return;
     }
 
-    // Don't invite non-allowlisted customers to "connect GitHub" — they won't be granted access.
+    // Don't invite customers to "connect GitHub" when automated provisioning won't grant them access.
     if (template === welcomeProEmail && !provisioningAllowed(email)) return;
 
     await sendEmail(template(email)); // sendEmail never throws
@@ -103,13 +103,13 @@ export class ProcessWebhook {
       return;
     }
 
-    // Allowlist gate (sandbox/staging safety): for non-allowlisted customers, record the entitlement
-    // but withhold GitHub access + licence. No-op in production (PROVISION_ALLOWLIST unset).
+    // Provisioning gate: in manual mode (PROVISIONING_MODE not 'auto') or for a non-allowlisted customer,
+    // record the entitlement but withhold GitHub access + licence.
     const email = await getCustomerEmail(data.customerId);
     if (!provisioningAllowed(email)) {
       console.warn(
-        `Paddle webhook: ${email ?? data.customerId} is not in PROVISION_ALLOWLIST; ` +
-          'recording entitlement but withholding GitHub access and licence.',
+        `Paddle webhook: automated provisioning is off for ${email ?? data.customerId} ` +
+          '(PROVISIONING_MODE/PROVISION_ALLOWLIST); recording entitlement but withholding GitHub access and licence.',
       );
       await upsertEntitlement({
         customerId: data.customerId,

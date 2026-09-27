@@ -1,17 +1,26 @@
 /**
- * Allowlist gate for provisioning.
+ * Gates for automated provisioning (GitHub team access + licence issuance).
  *
- * When `PROVISION_ALLOWLIST` is set (comma-separated emails) only those customers receive GitHub
- * access + a licence. This lets a staging deployment run against the REAL services with Paddle
- * **sandbox** without letting random (free) sandbox checkouts obtain real access — non-allowlisted
- * purchases are recorded but provisioning is withheld.
+ * `PROVISIONING_MODE` is the master switch. Only the exact value `auto` enables automated provisioning;
+ * anything else — including unset or a typo — means manual mode: purchases and entitlements are still
+ * recorded, but nothing grants access or issues a licence automatically. Access is then provisioned by
+ * hand (see the assisted-pilot runbook). This fails closed, so a misconfigured deployment never
+ * provisions.
  *
- * Leave `PROVISION_ALLOWLIST` **unset in production** so every paying customer is provisioned.
+ * `PROVISION_ALLOWLIST` (comma-separated emails) further restricts automated provisioning to the listed
+ * customers. It is an interim guard for deployments that pair Paddle sandbox with real services.
+ * Revocation is never gated: it only ever removes access.
  */
+export function automatedProvisioningEnabled(): boolean {
+  return process.env.PROVISIONING_MODE?.trim().toLowerCase() === 'auto';
+}
+
 export function provisioningAllowed(email: string | null | undefined): boolean {
+  if (!automatedProvisioningEnabled()) return false;
+
   const raw = process.env.PROVISION_ALLOWLIST?.trim();
 
-  if (!raw) return true; // no allowlist → production behaviour: everyone is provisioned
+  if (!raw) return true; // automated mode without an allowlist: every paying customer is provisioned
   if (!email) return false; // allowlist active but email unknown → fail closed
 
   const allowed = raw

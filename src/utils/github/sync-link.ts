@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createServiceClient } from '@/utils/supabase/server-internal';
 import { grantAccess } from '@/utils/github/provisioning';
+import { provisioningAllowed } from '@/utils/provisioning-guard';
 
 /**
  * Reconciles the signed-in user's GitHub identity into `github_links` and, if they hold an active or
@@ -68,6 +69,10 @@ export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
     .maybeSingle();
 
   if (!entitlement) return { linked: true, granted: false, reason: 'no-active-entitlement' };
+
+  // Same gate as the webhook and reconcile paths: manual mode or a non-allowlisted customer links the
+  // account but leaves the grant to the operator.
+  if (!provisioningAllowed(user.email)) return { linked: true, granted: false, reason: 'provisioning-disabled' };
 
   try {
     await grantAccess(login);
