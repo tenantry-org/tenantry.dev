@@ -23,6 +23,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { rewriteLinks } from './docs-links.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = resolve(here, '..');
@@ -98,7 +99,7 @@ function resolveSource(group) {
   return null;
 }
 
-function toFrontmatter(raw) {
+function toFrontmatter(raw, group) {
   const lines = raw.split('\n');
   let title = '';
   const body = [];
@@ -135,11 +136,7 @@ function toFrontmatter(raw) {
     .trim();
   const description = (cleaned.match(/^.*?\.(?:\s|$)/)?.[0] ?? cleaned).trim();
 
-  // Rewrite relative markdown links: (foo.md) and (foo.md#anchor) → (foo) / (foo#anchor)
-  const rewritten = body
-    .join('\n')
-    .replace(/\]\(([^)]+?)\.md(#[^)]*)?\)/g, '](./$1$2)')
-    .trimStart();
+  const rewritten = rewriteLinks(body.join('\n'), group).trimStart();
 
   const yamlTitle = title.replace(/"/g, '\\"');
   const yamlDesc = description.replace(/"/g, '\\"');
@@ -171,7 +168,7 @@ for (const group of groups) {
   for (const file of files) {
     // README.md → index.mdx so the group has a landing page.
     const slug = file.toLowerCase() === 'readme.md' ? 'index' : file.replace(/\.md$/, '');
-    const content = toFrontmatter(readFileSync(join(source, file), 'utf8'));
+    const content = toFrontmatter(readFileSync(join(source, file), 'utf8'), group.name);
     writeFileSync(join(outDir, `${slug}.mdx`), content);
     slugs.push(slug);
     total += 1;
