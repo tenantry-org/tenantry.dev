@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server-internal';
+import { errorMessage } from '@/utils/errors';
 
 /**
  * The webhook inbox (supabase/migrations/20260928130000_webhook_inbox.sql): verified Paddle notifications,
@@ -115,7 +116,7 @@ export async function retryEvent(
       status: giveUp ? 'failed' : 'pending',
       next_attempt_at: nextAttemptAt.toISOString(),
       locked_until: null,
-      last_error: describe(failure).slice(0, 2000),
+      last_error: errorMessage(failure).slice(0, 2000),
     })
     .eq('event_id', event.eventId);
 
@@ -139,10 +140,4 @@ export async function releaseWaitingEvents(customerId: string): Promise<void> {
     .gt('next_attempt_at', now);
 
   if (error) throw error;
-}
-
-function describe(failure: unknown): string {
-  if (failure instanceof Error) return failure.message;
-  if (failure && typeof failure === 'object' && 'message' in failure) return String(failure.message);
-  return String(failure);
 }

@@ -3,8 +3,8 @@ import type { EntitlementRecord, EntitlementStatus } from '@/utils/entitlements/
 
 /**
  * In-memory stand-in for entitlements-store.ts, for tests that follow a customer's access through several
- * events. `setCustomerAccess` behaves as the `set_customer_access` database function does (its own
- * behaviour is tested in supabase/tests/database/customer_access.test.sql).
+ * events. `setCustomerAccess` and `recordLicenceFailure` behave as the `set_customer_access` and
+ * `record_licence_failure` database functions do (tested in supabase/tests/database).
  */
 interface Licence {
   customerId: string;
@@ -20,6 +20,7 @@ const state = {
   entitlements: new Map<string, EntitlementRecord>(),
   access: new Map<string, { status: EntitlementStatus; tier: string | null; githubGranted: boolean }>(),
   licences: [] as Licence[],
+  licenceFailures: new Map<string, { attempts: number; lastError: string }>(),
 };
 
 /** The customer's licences that are not revoked, oldest first. */
@@ -37,6 +38,7 @@ export const memory = {
     state.entitlements.clear();
     state.access.clear();
     state.licences.length = 0;
+    state.licenceFailures.clear();
   },
 
   store: {
@@ -82,6 +84,16 @@ export const memory = {
 
     async revokeLicences(customerId: string) {
       for (const licence of liveLicences(customerId)) licence.revoked = true;
+    },
+
+    async recordLicenceFailure(customerId: string, error: string) {
+      const attempts = (state.licenceFailures.get(customerId)?.attempts ?? 0) + 1;
+      state.licenceFailures.set(customerId, { attempts, lastError: error });
+      return attempts === 1;
+    },
+
+    async clearLicenceFailure(customerId: string) {
+      state.licenceFailures.delete(customerId);
     },
   } satisfies Partial<typeof EntitlementsStore>,
 };

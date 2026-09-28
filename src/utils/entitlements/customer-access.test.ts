@@ -1,13 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EntitlementRecord } from '@/utils/entitlements/entitlements-store';
 import { memory } from '@/utils/testing/memory-entitlements';
-import { aggregateAccess, syncCustomerAccess } from './customer-access';
+import { aggregateAccess, reconcileLicence, syncCustomerAccess } from './customer-access';
 
 const effects = vi.hoisted(() => ({
   grantAccess: vi.fn(),
   revokeAccess: vi.fn(),
   sendEmail: vi.fn(),
   provisioningAllowed: vi.fn(),
+  issueLicence: vi.fn(),
 }));
 vi.mock('@/utils/github/provisioning', () => ({
   grantAccess: effects.grantAccess,
@@ -18,9 +19,11 @@ vi.mock('@/utils/entitlements/entitlements-store', async () => {
   return memory.store;
 });
 vi.mock('@/utils/email/send', () => ({ sendEmail: effects.sendEmail }));
-vi.mock('@/utils/licensing/licence-issuer', () => ({
-  issueLicence: ({ tier, expiresAt }: { tier: string; expiresAt: Date }) => `${tier}:${expiresAt.toISOString()}`,
-}));
+vi.mock('@/utils/licensing/licence-issuer', () => ({ issueLicence: effects.issueLicence }));
+
+function signLicence({ tier, expiresAt }: { tier: string; expiresAt: Date }) {
+  return `${tier}:${expiresAt.toISOString()}`;
+}
 vi.mock('@/utils/provisioning-guard', () => ({ provisioningAllowed: effects.provisioningAllowed }));
 
 const OCTOBER = new Date('2026-10-01T00:00:00Z');
@@ -80,6 +83,7 @@ describe('syncCustomerAccess', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     effects.provisioningAllowed.mockReturnValue(true);
+    effects.issueLicence.mockImplementation(signLicence);
     memory.reset();
     memory.state.emails.set('ctm_1', 'buyer@example.com');
     memory.state.githubLogins.set('ctm_1', 'octocat');
@@ -191,5 +195,121 @@ describe('syncCustomerAccess', () => {
     await expect(syncCustomerAccess('ctm_1')).resolves.toBe('started');
     expect(effects.grantAccess).toHaveBeenCalledOnce();
     listEntitlements.mockRestore();
+  });
+});
+
+describe('licence issuance failures', () => {
+  const alerts = () =>
+    effects.sendEmail.mock.calls.filter(([message]) => message.to === 'ops@example.com').map(([message]) => message);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('ALERT_EMAIL', 'ops@example.com');
+    effects.provisioningAllowed.mockReturnValue(true);
+    effects.issueLicence.mockImplementation(signLicence);
+    memory.reset();
+    memory.state.emails.set('ctm_1', 'buyer@example.com');
+    memory.state.githubLogins.set('ctm_1', 'octocat');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('records a signing failure, alerts once, and issues the licence on reconcile once the key is repaired', async () => {
+    effects.issueLicence.mockImplementation(() => {
+      throw new Error('error:1E08010C:DECODER routines::unsupported');
+    });
+
+    // The purchase: access starts, but the licence cannot be signed.
+    await expect(entitle()).resolves.toBe('started');
+    expect(memory.state.access.get('ctm_1')?.status).toBe('active');
+    expect(effects.grantAccess).toHaveBeenCalledWith('octocat');
+    expect(memory.liveLicences('ctm_1')).toEqual([]);
+    expect(memory.state.licenceFailures.get('ctm_1')).toEqual({
+      attempts: 1,
+      lastError: 'error:1E08010C:DECODER routines::unsupported',
+    });
+    expect(alerts()).toEqual([
+      expect.objectContaining({ subject: '[Tenantry alert] Licence issuance failed for customer ctm_1' }),
+    ]);
+
+    // Reconcile retries while the key is still broken: recorded, but no second alert.
+    await expect(reconcileLicence('ctm_1')).resolves.toBe('failed');
+    expect(memory.state.licenceFailures.get('ctm_1')?.attempts).toBe(2);
+    expect(alerts()).toHaveLength(1);
+
+    // The key is repaired; the next reconcile issues the licence, with no new purchase or event.
+    effects.issueLicence.mockImplementation(signLicence);
+    await expect(reconcileLicence('ctm_1')).resolves.toBe('issued');
+    expect(memory.liveLicences('ctm_1')).toMatchObject([{ tier: 'pro', expiresAt: OCTOBER }]);
+    expect(memory.state.licenceFailures.has('ctm_1')).toBe(false);
+
+    await expect(reconcileLicence('ctm_1')).resolves.toBe('current');
+    expect(memory.liveLicences('ctm_1')).toHaveLength(1);
+    expect(alerts()).toHaveLength(1);
+  });
+
+  it('treats a failure to store the licence the same way, recording the database error message', async () => {
+    // Supabase reports errors as plain objects, not Error instances.
+    const recordLicence = vi
+      .spyOn(memory.store, 'recordLicence')
+      .mockRejectedValueOnce({ code: 'P0001', message: 'licence storage unavailable' });
+
+    await entitle();
+    expect(memory.state.licenceFailures.get('ctm_1')?.lastError).toBe('licence storage unavailable');
+    expect(alerts()[0].html).toContain('licence storage unavailable');
+    expect(alerts()).toHaveLength(1);
+
+    await expect(reconcileLicence('ctm_1')).resolves.toBe('issued');
+    expect(memory.state.licenceFailures.size).toBe(0);
+    recordLicence.mockRestore();
+  });
+
+  it('alerts again for a new run of failures after a licence was issued', async () => {
+    await entitle();
+    effects.issueLicence.mockImplementation(() => {
+      throw new Error('signing failed');
+    });
+
+    await entitle({ currentPeriodEndsAt: NOVEMBER }); // renewal
+    await reconcileLicence('ctm_1');
+
+    expect(alerts()).toHaveLength(1);
+    effects.issueLicence.mockImplementation(signLicence);
+    await reconcileLicence('ctm_1');
+    effects.issueLicence.mockImplementation(() => {
+      throw new Error('signing failed');
+    });
+    await entitle({ currentPeriodEndsAt: new Date('2026-12-01T00:00:00Z') });
+
+    expect(alerts()).toHaveLength(2);
+  });
+
+  it('alerts even when the failure cannot be recorded', async () => {
+    effects.issueLicence.mockImplementation(() => {
+      throw new Error('signing failed');
+    });
+    const recordFailure = vi
+      .spyOn(memory.store, 'recordLicenceFailure')
+      .mockRejectedValue(new Error('database unavailable'));
+
+    await entitle();
+    await reconcileLicence('ctm_1');
+
+    expect(alerts()).toHaveLength(2);
+    recordFailure.mockRestore();
+  });
+
+  it('forgets the failures when access ends', async () => {
+    effects.issueLicence.mockImplementation(() => {
+      throw new Error('signing failed');
+    });
+    await entitle();
+
+    await entitle({ status: 'revoked' });
+
+    expect(memory.state.licenceFailures.size).toBe(0);
+    await expect(reconcileLicence('ctm_1')).resolves.toBeNull();
   });
 });

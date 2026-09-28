@@ -5,9 +5,11 @@ import {
   getCurrentLicence,
   getCustomerEmail,
   getGithubLogin,
+  clearLicenceFailure,
   listEntitlements,
   markGithubGranted,
   recordLicence,
+  recordLicenceFailure,
   revokeLicences,
   setCustomerAccess,
 } from '@/utils/entitlements/entitlements-store';
@@ -16,6 +18,8 @@ import { grantAccess, revokeAccess } from '@/utils/github/provisioning';
 import { sendEmail } from '@/utils/email/send';
 import { accessRevokedEmail, welcomeProEmail } from '@/utils/email/templates';
 import { provisioningAllowed } from '@/utils/provisioning-guard';
+import { alertOperator } from '@/utils/email/alerts';
+import { errorMessage } from '@/utils/errors';
 
 /**
  * Customer-level access. A customer can hold several subscriptions, each with its own entitlement, but
@@ -70,8 +74,8 @@ export function aggregateAccess(entitlements: EntitlementRecord[]): CustomerAcce
  *
  * Called by the webhook worker, which handles one customer's events at a time. Everything that can
  * throw runs before the change is recorded, so a failure is retried as a whole; after that, each side
- * effect is attempted once and a failure is logged: reconcile retries GitHub grants and removals, and an
- * email is not resent.
+ * effect is attempted once and a failure is logged: reconcile retries GitHub grants and removals, licence
+ * issuance and revocation, and an email is not resent.
  */
 export async function syncCustomerAccess(customerId: string): Promise<AccessChange> {
   const access = aggregateAccess(await listEntitlements(customerId));
@@ -134,25 +138,74 @@ async function grantGithubAccess(customerId: string) {
   }
 }
 
+export type LicenceOutcome = 'issued' | 'current' | 'failed';
+
+/**
+ * Makes sure an entitled customer has a licence for their access, for reconcile to retry what failed or
+ * was never done (e.g. access that started while provisioning was manual). Returns null for a customer
+ * who is not entitled. The caller applies the provisioning gate.
+ */
+export async function reconcileLicence(customerId: string): Promise<LicenceOutcome | null> {
+  const access = aggregateAccess(await listEntitlements(customerId));
+
+  return isEntitled(access.status) ? ensureLicence(customerId, access) : null;
+}
+
 // Issues a licence for the customer's current tier and latest billing period, unless the current one
-// already matches. Secret-dependent, so a failure is logged and the next change or renewal retries it.
-async function ensureLicence(customerId: string, access: CustomerAccess) {
+// already matches. A failure is recorded (alerting the operator when it starts a run of failures) and
+// reconcile retries it; success clears the record.
+async function ensureLicence(customerId: string, access: CustomerAccess): Promise<LicenceOutcome> {
+  let outcome: LicenceOutcome = 'current';
+
   try {
     const tier = access.tier as string;
     const current = await getCurrentLicence(customerId);
 
     if (
-      current?.tier === tier &&
-      (!access.licenceExpiresAt || current.expiresAt.getTime() === access.licenceExpiresAt.getTime())
+      current?.tier !== tier ||
+      (access.licenceExpiresAt && current.expiresAt.getTime() !== access.licenceExpiresAt.getTime())
     ) {
-      return;
+      const expiresAt = access.licenceExpiresAt ?? new Date(Date.now() + FALLBACK_LICENCE_DAYS * 24 * 60 * 60 * 1000);
+      const jwt = issueLicence({ customerId, tier, expiresAt });
+      await recordLicence({ customerId, jwt, tier, expiresAt });
+      outcome = 'issued';
     }
-
-    const expiresAt = access.licenceExpiresAt ?? new Date(Date.now() + FALLBACK_LICENCE_DAYS * 24 * 60 * 60 * 1000);
-    const jwt = issueLicence({ customerId, tier, expiresAt });
-    await recordLicence({ customerId, jwt, tier, expiresAt });
   } catch (error) {
-    console.error(`Customer access: failed to issue a licence for customer ${customerId}:`, error);
+    await licenceFailed(customerId, error);
+    return 'failed';
+  }
+
+  await forgetLicenceFailures(customerId);
+  return outcome;
+}
+
+async function licenceFailed(customerId: string, error: unknown) {
+  const message = errorMessage(error);
+  console.error(`Customer access: failed to issue a licence for customer ${customerId}; reconcile retries:`, error);
+
+  // If the failure cannot be recorded either, alert anyway rather than risk staying silent.
+  let firstFailure = true;
+  try {
+    firstFailure = await recordLicenceFailure(customerId, message.slice(0, 2000));
+  } catch (recordError) {
+    console.error(`Customer access: could not record the licence failure for customer ${customerId}:`, recordError);
+  }
+
+  if (firstFailure) {
+    await alertOperator(
+      `Licence issuance failed for customer ${customerId}`,
+      `Issuing a licence for Paddle customer ${customerId} failed: ${message}. The customer has access but no ` +
+        'current licence. Reconcile retries on every run; failed attempts are recorded in licence_failures, ' +
+        'and no further alert is sent until a licence is issued.',
+    );
+  }
+}
+
+async function forgetLicenceFailures(customerId: string) {
+  try {
+    await clearLicenceFailure(customerId);
+  } catch (error) {
+    console.error(`Customer access: could not clear the licence failure for customer ${customerId}:`, error);
   }
 }
 
@@ -170,8 +223,10 @@ async function endAccess(customerId: string, email: string | null) {
   try {
     await revokeLicences(customerId);
   } catch (error) {
-    console.error(`Customer access: failed to revoke licences for customer ${customerId}:`, error);
+    console.error(`Customer access: failed to revoke licences for customer ${customerId}; reconcile retries:`, error);
   }
+
+  await forgetLicenceFailures(customerId);
 
   if (email) {
     await sendEmail(accessRevokedEmail(email));

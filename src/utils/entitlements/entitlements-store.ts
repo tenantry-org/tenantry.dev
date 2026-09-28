@@ -167,3 +167,27 @@ export async function revokeLicences(customerId: string): Promise<void> {
 
   if (error) throw error;
 }
+
+/**
+ * Records a failed licence issuance and returns true if it starts a run of failures, the one to alert on
+ * (see supabase/migrations/20260928150000_licence_failures.sql).
+ */
+export async function recordLicenceFailure(customerId: string, error: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error: rpcError } = await supabase.rpc('record_licence_failure', {
+    p_customer_id: customerId,
+    p_error: error,
+  });
+
+  if (rpcError) throw rpcError;
+
+  return data === true;
+}
+
+/** Forgets a customer's licence failures, once their licence is issued or no longer needed. */
+export async function clearLicenceFailure(customerId: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('licence_failures').delete().eq('customer_id', customerId);
+
+  if (error) throw error;
+}

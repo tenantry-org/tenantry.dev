@@ -29,7 +29,7 @@ export function fakeSupabase(
     },
     from(table: string) {
       const chain: Record<string, unknown> = {};
-      for (const method of ['select', 'eq', 'gt', 'in', 'order', 'limit', 'update', 'upsert', 'insert']) {
+      for (const method of ['select', 'eq', 'gt', 'in', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
         chain[method] = (...args: unknown[]) => {
           calls?.push({ table, method, args });
           return chain;

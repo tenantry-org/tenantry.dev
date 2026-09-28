@@ -171,7 +171,8 @@ export function ProAccessView({ access, githubOrg }: Props) {
             </>
           ) : (
             <p className={'text-secondary'}>
-              No licence has been issued yet. It is generated automatically once your subscription is active.
+              Your licence is being issued and will appear here shortly. If it can&apos;t be issued we are alerted
+              automatically; you can also email <a href={'mailto:support@tenantry.dev'}>support@tenantry.dev</a>.
             </p>
           )}
         </CardContent>
