@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolveTier } from './tier-mapping';
+import { parseTierMap, resolveTier } from './tier-mapping';
 
 const ENV_KEY = 'PADDLE_PRODUCT_TIER_MAP';
 
@@ -9,10 +9,10 @@ describe('resolveTier', () => {
   });
 
   it('resolves a product id from the env-configured map', () => {
-    process.env[ENV_KEY] = JSON.stringify({ pro_real_id: 'pro', ent_real_id: 'enterprise' });
+    process.env[ENV_KEY] = JSON.stringify({ pro_real_id: 'pro', advanced_real_id: 'advanced' });
 
     expect(resolveTier('pro_real_id')).toBe('pro');
-    expect(resolveTier('ent_real_id')).toBe('enterprise');
+    expect(resolveTier('advanced_real_id')).toBe('advanced');
   });
 
   it('returns null for an unmapped product id', () => {
@@ -27,10 +27,22 @@ describe('resolveTier', () => {
     expect(resolveTier('')).toBeNull();
   });
 
-  it('falls back to defaults when the env map is invalid JSON', () => {
-    process.env[ENV_KEY] = '{not valid json';
+  it('fails rather than falling back when the map is missing or invalid', () => {
+    expect(() => resolveTier('pro_real_id')).toThrow(/not set/);
 
-    // Should not throw; unknown id under defaults resolves to null.
-    expect(resolveTier('whatever')).toBeNull();
+    process.env[ENV_KEY] = '{not valid json';
+    expect(() => resolveTier('pro_real_id')).toThrow(/not valid JSON/);
+  });
+});
+
+describe('parseTierMap', () => {
+  it.each([
+    ['an array', '["pro"]'],
+    ['an empty object', '{}'],
+    ['a tier that does not exist', '{"prod_1": "enterprise"}'],
+    ['a non-string tier', '{"prod_1": 1}'],
+    ['an empty product id', '{" ": "pro"}'],
+  ])('rejects %s', (_, raw) => {
+    expect(() => parseTierMap(raw)).toThrow(/PADDLE_PRODUCT_TIER_MAP/);
   });
 });

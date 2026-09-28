@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { ProcessWebhook } from '@/utils/paddle/process-webhook';
 import { getPaddleInstance } from '@/utils/paddle/get-paddle-instance';
 import { hasProcessed, markProcessed } from '@/utils/webhooks/idempotency';
+import { requireEnv } from '@/utils/config/env';
 
 const webhookProcessor = new ProcessWebhook();
 
@@ -11,7 +12,8 @@ const webhookProcessor = new ProcessWebhook();
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('paddle-signature') || '';
   const rawRequestBody = await request.text();
-  const privateKey = process.env['PADDLE_NOTIFICATION_WEBHOOK_SECRET'] || '';
+  // No fallback: without the secret no notification can be verified, so the request fails and Paddle retries.
+  const privateKey = requireEnv('PADDLE_NOTIFICATION_WEBHOOK_SECRET');
 
   try {
     if (!signature || !rawRequestBody) {

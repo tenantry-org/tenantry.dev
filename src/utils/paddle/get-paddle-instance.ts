@@ -1,14 +1,14 @@
 import { Environment, LogLevel, Paddle, PaddleOptions } from '@paddle/paddle-node-sdk';
+import { requireEnv } from '@/utils/config/env';
 
+/** A Paddle API client for the configured environment. There is no default: sandbox must be chosen explicitly. */
 export function getPaddleInstance() {
-  const paddleOptions: PaddleOptions = {
-    environment: (process.env.NEXT_PUBLIC_PADDLE_ENV as Environment) ?? Environment.sandbox,
-    logLevel: LogLevel.error,
-  };
-
-  if (!process.env.PADDLE_API_KEY) {
-    console.error('Paddle API key is missing');
+  const environment = requireEnv('NEXT_PUBLIC_PADDLE_ENV');
+  if (environment !== Environment.sandbox && environment !== Environment.production) {
+    throw new Error(`NEXT_PUBLIC_PADDLE_ENV must be "sandbox" or "production" (it is "${environment}").`);
   }
 
-  return new Paddle(process.env.PADDLE_API_KEY!, paddleOptions);
+  const paddleOptions: PaddleOptions = { environment, logLevel: LogLevel.error };
+
+  return new Paddle(requireEnv('PADDLE_API_KEY'), paddleOptions);
 }

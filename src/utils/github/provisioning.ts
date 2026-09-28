@@ -1,5 +1,6 @@
 import { Octokit } from '@octokit/rest';
 import { createAppAuth } from '@octokit/auth-app';
+import { requireEnv } from '@/utils/config/env';
 
 /**
  * Grants and revokes paying customers' access to the private Tenantry org via team membership.
@@ -15,8 +16,8 @@ import { createAppAuth } from '@octokit/auth-app';
  *   GITHUB_APP_ID                 - the App's id
  *   GITHUB_APP_PRIVATE_KEY        - the App's private key (PEM)
  *   GITHUB_APP_INSTALLATION_ID    - the installation id on the org
- *   GITHUB_ORG   (default: tenantry-org)
- *   GITHUB_TEAM  (default: pro-customers)
+ *   GITHUB_ORG                    - the org (no default: each environment has its own)
+ *   GITHUB_TEAM                   - the customer team in that org (no default)
  */
 
 /** The subset of the GitHub teams API this module uses. Lets tests inject a mock. */
@@ -43,16 +44,6 @@ export interface ProvisioningDeps {
   team: string;
 }
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-
-  if (!value) {
-    throw new Error(`${name} is not configured. The GitHub provisioning service cannot run without it.`);
-  }
-
-  return value;
-}
-
 /** Builds the default deps from env + an App-authenticated Octokit client. */
 export function defaultDeps(): ProvisioningDeps {
   const octokit = new Octokit({
@@ -66,8 +57,8 @@ export function defaultDeps(): ProvisioningDeps {
 
   return {
     api: octokit.rest.teams as unknown as TeamMembershipApi,
-    org: process.env.GITHUB_ORG ?? 'tenantry-org',
-    team: process.env.GITHUB_TEAM ?? 'pro-customers',
+    org: requireEnv('GITHUB_ORG'),
+    team: requireEnv('GITHUB_TEAM'),
   };
 }
 

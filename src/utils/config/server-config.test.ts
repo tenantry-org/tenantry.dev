@@ -1,0 +1,124 @@
+import { generateKeyPairSync } from 'crypto';
+import { describe, expect, it } from 'vitest';
+import { PRODUCTION_LICENCE_PUBLIC_KEY, ServerConfigError, validateServerConfig } from './server-config';
+
+// Stand-ins for the two environments' licence keypairs: the "production" public key is passed to the
+// validator in place of the real embedded one, whose private half never leaves the production secret store.
+function keypair() {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  return {
+    pem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    spki: publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
+  };
+}
+const productionKey = keypair();
+const sandboxKey = keypair();
+
+function environment(paddleEnvironment: 'sandbox' | 'production', overrides: Record<string, string | undefined> = {}) {
+  return {
+    NEXT_PUBLIC_PADDLE_ENV: paddleEnvironment,
+    NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon',
+    SUPABASE_SERVICE_ROLE_KEY: 'service',
+    PADDLE_API_KEY: 'paddle',
+    PADDLE_NOTIFICATION_WEBHOOK_SECRET: 'webhook',
+    CRON_SECRET: 'cron',
+    GITHUB_ORG: paddleEnvironment === 'production' ? 'tenantry-org' : 'tenantry-sandbox',
+    GITHUB_TEAM: 'pro-customers',
+    GITHUB_APP_ID: '1',
+    GITHUB_APP_PRIVATE_KEY: 'app-key',
+    GITHUB_APP_INSTALLATION_ID: '2',
+    PADDLE_PRODUCT_TIER_MAP: '{"pro_01": "pro"}',
+    LICENCE_SIGNING_PRIVATE_KEY: paddleEnvironment === 'production' ? productionKey.pem : sandboxKey.pem,
+    NEXT_PUBLIC_SITE_URL: 'https://tenantry.dev',
+    RESEND_API_KEY: 'resend',
+    EMAIL_FROM: 'Tenantry <hello@tenantry.dev>',
+    ...overrides,
+  };
+}
+
+function problems(env: Record<string, string | undefined>): string[] {
+  try {
+    validateServerConfig(env, productionKey.spki);
+    return [];
+  } catch (error) {
+    expect(error).toBeInstanceOf(ServerConfigError);
+    return (error as ServerConfigError).problems;
+  }
+}
+
+describe('validateServerConfig', () => {
+  it('accepts complete sandbox and production configurations', () => {
+    expect(validateServerConfig(environment('sandbox'), productionKey.spki)).toEqual({ paddleEnvironment: 'sandbox' });
+    expect(validateServerConfig(environment('production'), productionKey.spki)).toEqual({
+      paddleEnvironment: 'production',
+    });
+  });
+
+  it('throws for a misconfigured production environment, listing every problem', () => {
+    const env = environment('production', {
+      GITHUB_ORG: undefined,
+      GITHUB_TEAM: ' ',
+      PADDLE_PRODUCT_TIER_MAP: undefined,
+      LICENCE_SIGNING_PRIVATE_KEY: sandboxKey.pem,
+      RESEND_API_KEY: undefined,
+    });
+
+    expect(() => validateServerConfig(env, productionKey.spki)).toThrow(ServerConfigError);
+    expect(problems(env)).toEqual([
+      expect.stringContaining('GITHUB_ORG is not set'),
+      expect.stringContaining('GITHUB_TEAM is not set'),
+      expect.stringContaining('PADDLE_PRODUCT_TIER_MAP is not set'),
+      expect.stringContaining('is not the production key'),
+      expect.stringContaining('RESEND_API_KEY is not set'),
+    ]);
+  });
+
+  it('has no default Paddle environment', () => {
+    expect(problems(environment('sandbox', { NEXT_PUBLIC_PADDLE_ENV: undefined }))).toEqual([
+      expect.stringContaining('NEXT_PUBLIC_PADDLE_ENV must be "sandbox" or "production" (it is not set)'),
+    ]);
+    expect(problems(environment('sandbox', { NEXT_PUBLIC_PADDLE_ENV: 'live' }))).toEqual([
+      expect.stringContaining('(it is "live")'),
+    ]);
+  });
+
+  it('rejects the production signing key outside production', () => {
+    expect(problems(environment('sandbox', { LICENCE_SIGNING_PRIVATE_KEY: productionKey.pem }))).toEqual([
+      expect.stringContaining('is the production key: sandbox needs its own keypair'),
+    ]);
+  });
+
+  it('rejects a signing key that is not a valid P-256 private key', () => {
+    const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 })
+      .privateKey.export({ type: 'pkcs8', format: 'pem' })
+      .toString();
+
+    expect(problems(environment('sandbox', { LICENCE_SIGNING_PRIVATE_KEY: 'not a key' }))).toEqual([
+      expect.stringContaining('not a valid PKCS#8 private key'),
+    ]);
+    expect(problems(environment('sandbox', { LICENCE_SIGNING_PRIVATE_KEY: rsa }))).toEqual([
+      expect.stringContaining('must be a P-256 EC private key'),
+    ]);
+  });
+
+  it('rejects an invalid product→tier map and an unknown provisioning mode', () => {
+    expect(problems(environment('sandbox', { PADDLE_PRODUCT_TIER_MAP: '{"pro_01": "enterprise"}' }))).toEqual([
+      expect.stringContaining('which is not a tier'),
+    ]);
+    expect(problems(environment('sandbox', { PROVISIONING_MODE: 'atuo' }))).toEqual([
+      expect.stringContaining('PROVISIONING_MODE must be "manual" or "auto"'),
+    ]);
+  });
+
+  it('needs the site URL and email settings only in production', () => {
+    const withoutThem = { NEXT_PUBLIC_SITE_URL: undefined, RESEND_API_KEY: undefined, EMAIL_FROM: undefined };
+
+    expect(problems(environment('sandbox', withoutThem))).toEqual([]);
+    expect(problems(environment('production', withoutThem))).toHaveLength(3);
+  });
+
+  it('checks the real key by default', () => {
+    expect(PRODUCTION_LICENCE_PUBLIC_KEY).toMatch(/^MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/);
+  });
+});

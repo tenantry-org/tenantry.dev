@@ -1,29 +1,40 @@
+import { PricingTier } from '@/constants/pricing-tier';
+
 /**
- * Maps a Paddle product id to a Tenantry entitlement tier.
- *
- * Configure WITHOUT a code change via the `PADDLE_PRODUCT_TIER_MAP` env var (a JSON object of
- * `{ "<paddle_product_id>": "<tier>" }`). When that env var is absent the DEFAULT map below is used.
- *
- * The defaults are PLACEHOLDERS — replace them with the real Paddle product ids (or set the env var)
- * before launch. Unknown products resolve to `null` (no entitlement granted).
+ * Maps a Paddle product id to a Tenantry entitlement tier, from the `PADDLE_PRODUCT_TIER_MAP` env var: a
+ * JSON object of `{ "<paddle_product_id>": "<tier>" }`. Each environment has its own Paddle products, so
+ * there is no built-in map; the server does not start without a valid one (see `server-config.ts`).
  */
-const DEFAULT_PRODUCT_TIER_MAP: Record<string, string> = {
-  // TODO(launch): replace with the real Paddle product id(s), or set PADDLE_PRODUCT_TIER_MAP.
-  pro_REPLACE_WITH_REAL_PRODUCT_ID: 'pro',
-};
 
-function loadMap(): Record<string, string> {
-  const raw = process.env.PADDLE_PRODUCT_TIER_MAP;
+const KNOWN_TIERS = new Set<string>(PricingTier.map((tier) => tier.id));
 
-  if (raw) {
-    try {
-      return JSON.parse(raw) as Record<string, string>;
-    } catch {
-      console.error('PADDLE_PRODUCT_TIER_MAP is not valid JSON; falling back to the default product→tier map.');
+/** Parses and checks a product→tier map; throws a message naming what is wrong. */
+export function parseTierMap(raw: string | undefined): Record<string, string> {
+  if (!raw?.trim()) {
+    throw new Error('PADDLE_PRODUCT_TIER_MAP is not set: purchases could not be mapped to a tier.');
+  }
+
+  let map: unknown;
+  try {
+    map = JSON.parse(raw);
+  } catch {
+    throw new Error('PADDLE_PRODUCT_TIER_MAP is not valid JSON.');
+  }
+
+  if (typeof map !== 'object' || map === null || Array.isArray(map) || Object.keys(map).length === 0) {
+    throw new Error('PADDLE_PRODUCT_TIER_MAP must be a JSON object with at least one "<product id>": "<tier>" entry.');
+  }
+
+  for (const [productId, tier] of Object.entries(map)) {
+    if (!productId.trim() || typeof tier !== 'string' || !KNOWN_TIERS.has(tier)) {
+      throw new Error(
+        `PADDLE_PRODUCT_TIER_MAP maps "${productId}" to ${JSON.stringify(tier)}, which is not a tier ` +
+          `(${[...KNOWN_TIERS].join(', ')}).`,
+      );
     }
   }
 
-  return DEFAULT_PRODUCT_TIER_MAP;
+  return map as Record<string, string>;
 }
 
 /**
@@ -32,5 +43,5 @@ function loadMap(): Record<string, string> {
 export function resolveTier(productId: string | null | undefined): string | null {
   if (!productId) return null;
 
-  return loadMap()[productId] ?? null;
+  return parseTierMap(process.env.PADDLE_PRODUCT_TIER_MAP)[productId] ?? null;
 }
