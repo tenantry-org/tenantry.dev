@@ -8,6 +8,18 @@ import { createClient } from '@/utils/supabase/server-internal';
 
 export type EntitlementStatus = 'active' | 'grace' | 'revoked';
 
+/**
+ * Where the customer's GitHub access stands (`customer_access.github_state`): no grant attempted, an org
+ * invitation pending since `githubInvitedAt`, a member of the team, or the last grant attempt failed.
+ */
+export type GithubState = 'none' | 'invited' | 'active' | 'failed';
+
+export interface CustomerAccessRecord {
+  status: EntitlementStatus;
+  githubState: GithubState;
+  githubInvitedAt: Date | null;
+}
+
 /** A subscription's entitlement. GitHub access and the licence are per customer (see customer-access.ts). */
 export interface EntitlementRecord {
   customerId: string;
@@ -107,7 +119,7 @@ function toEntitlement(row: Record<string, string | null>): EntitlementRecord {
 
 /**
  * Records the customer's access (derived from all their entitlements) and returns the status it replaced,
- * 'revoked' for a customer seen for the first time. Ending access also clears `github_granted`.
+ * 'revoked' for a customer seen for the first time. Ending access also resets the GitHub state to 'none'.
  */
 export async function setCustomerAccess(customerId: string, status: EntitlementStatus): Promise<EntitlementStatus> {
   const supabase = await createClient();
@@ -122,27 +134,35 @@ export async function setCustomerAccess(customerId: string, status: EntitlementS
 }
 
 /** The customer's recorded access, or null for a customer never seen by syncCustomerAccess. */
-export async function getCustomerAccess(
-  customerId: string,
-): Promise<{ status: EntitlementStatus; githubGranted: boolean } | null> {
+export async function getCustomerAccess(customerId: string): Promise<CustomerAccessRecord | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('customer_access')
-    .select('status,github_granted')
+    .select('status,github_state,github_invited_at')
     .eq('customer_id', customerId)
     .maybeSingle();
 
   if (error) throw error;
 
-  return data ? { status: data.status as EntitlementStatus, githubGranted: data.github_granted as boolean } : null;
+  return data
+    ? {
+        status: data.status as EntitlementStatus,
+        githubState: data.github_state as GithubState,
+        githubInvitedAt: data.github_invited_at ? new Date(data.github_invited_at as string) : null,
+      }
+    : null;
 }
 
-/** Records that the customer's GitHub account was added to the team, unless their access has since ended. */
-export async function markGithubGranted(customerId: string): Promise<void> {
+/**
+ * Records the outcome of a GitHub grant or membership check, unless the customer's access has since ended
+ * (ending it resets the state, and the grant is then removed). 'invited' starts the invitation's clock.
+ */
+export async function setGithubState(customerId: string, state: Exclude<GithubState, 'none'>): Promise<void> {
   const supabase = await createClient();
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from('customer_access')
-    .update({ github_granted: true, updated_at: new Date().toISOString() })
+    .update({ github_state: state, github_invited_at: state === 'invited' ? now : null, updated_at: now })
     .eq('customer_id', customerId)
     .in('status', ['active', 'grace']);
 

@@ -4,7 +4,7 @@ import { memory } from '@/utils/testing/memory-entitlements';
 import { aggregateAccess, syncCustomerAccess } from './customer-access';
 
 const effects = vi.hoisted(() => ({
-  grantAccess: vi.fn(),
+  grantAccess: vi.fn().mockResolvedValue('active'),
   revokeAccess: vi.fn(),
   sendEmail: vi.fn(),
   provisioningAllowed: vi.fn(),
@@ -100,7 +100,11 @@ describe('syncCustomerAccess', () => {
     await expect(entitle()).resolves.toBe('started');
 
     expect(effects.grantAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'active', githubGranted: true });
+    expect(memory.state.access.get('ctm_1')).toEqual({
+      status: 'active',
+      githubState: 'active',
+      githubInvitedAt: null,
+    });
     expect(memory.liveLicences('ctm_1')).toMatchObject([{ expiresAt: OCTOBER }]);
     expect(emailSubjects()).toEqual(['Welcome to Tenantry Pro — connect GitHub to get access']);
   });
@@ -141,12 +145,16 @@ describe('syncCustomerAccess', () => {
 
     await expect(entitle({ status: 'grace', graceStartedAt: new Date() })).resolves.toBe('unchanged');
     await expect(entitle({ subscriptionId: 'sub_2', status: 'revoked' })).resolves.toBe('unchanged');
-    expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'grace', githubGranted: true });
+    expect(memory.state.access.get('ctm_1')).toMatchObject({
+      status: 'grace',
+      githubState: 'active',
+      githubInvitedAt: null,
+    });
     expect(effects.revokeAccess).not.toHaveBeenCalled();
 
     await expect(entitle({ status: 'revoked' })).resolves.toBe('ended');
     expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', githubGranted: false });
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', githubState: 'none', githubInvitedAt: null });
     expect(memory.liveLicences('ctm_1')).toEqual([]);
     expect(emailSubjects()).toEqual(['Your Tenantry Pro subscription has ended']);
   });
@@ -162,7 +170,7 @@ describe('syncCustomerAccess', () => {
     effects.provisioningAllowed.mockReturnValue(false);
 
     await expect(entitle()).resolves.toBe('started');
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'active', githubGranted: false });
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'active', githubState: 'none', githubInvitedAt: null });
     expect(effects.grantAccess).not.toHaveBeenCalled();
     expect(memory.liveLicences('ctm_1')).toEqual([]);
     expect(effects.sendEmail).not.toHaveBeenCalled();
@@ -178,7 +186,7 @@ describe('syncCustomerAccess', () => {
     await expect(entitle()).resolves.toBe('started');
 
     expect(effects.grantAccess).not.toHaveBeenCalled();
-    expect(memory.state.access.get('ctm_1')?.githubGranted).toBe(false);
+    expect(memory.state.access.get('ctm_1')?.githubState).toBe('none');
     expect(memory.liveLicences('ctm_1')).toHaveLength(1);
     expect(effects.sendEmail).toHaveBeenCalledOnce();
   });
@@ -188,7 +196,7 @@ describe('syncCustomerAccess', () => {
 
     await expect(entitle()).resolves.toBe('started');
 
-    expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'active', githubGranted: false });
+    expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'active', githubState: 'failed' });
     expect(memory.liveLicences('ctm_1')).toHaveLength(1);
     expect(effects.sendEmail).toHaveBeenCalledOnce();
   });
@@ -365,7 +373,7 @@ describe('grace period', () => {
 
     await expect(entitle(pastDue)).resolves.toBe('unchanged');
 
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'grace', githubGranted: true });
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'grace', githubState: 'active', githubInvitedAt: null });
     expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ expiresAt: GRACE_ENDS });
     expect(effects.revokeAccess).not.toHaveBeenCalled();
     expect(effects.sendEmail).not.toHaveBeenCalled();
@@ -386,7 +394,7 @@ describe('grace period', () => {
     await expect(syncCustomerAccess('ctm_1')).resolves.toEqual({ change: 'ended', licence: null });
 
     expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', githubGranted: false });
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', githubState: 'none', githubInvitedAt: null });
     expect(memory.liveLicences('ctm_1')).toEqual([]);
     expect(emailSubjects()).toEqual(['Your Tenantry Pro subscription has ended']);
   });

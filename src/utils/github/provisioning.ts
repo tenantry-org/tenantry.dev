@@ -9,7 +9,11 @@ import { requireEnv } from '@/utils/config/env';
  * feed. Access is controlled by what that team is wired to (initially: package read only, NOT the
  * private `tenantry-pro` source repo). This code is agnostic to that wiring — it only adds/removes
  * team membership — so source access can be added to the team later without any code change.
- * Revocation is simply removal from the team.
+ * Revocation is removal from the team, and cancelling the org invitation if it was never accepted.
+ *
+ * Adding someone who is not yet an org member sends them an org invitation: their membership is 'pending'
+ * until they accept, and GitHub drops the invitation after 7 days. Callers record the outcome
+ * (`customer_access.github_state`), and reconcile promotes or re-sends invitations (reconcile-customer.ts).
  *
  * Auth is via a GitHub App installed on the org (scoped, auditable, rotatable — preferred over an
  * admin PAT). Configure with these env vars:
@@ -27,7 +31,7 @@ export interface TeamMembershipApi {
     team_slug: string;
     username: string;
     role?: 'member' | 'maintainer';
-  }): Promise<unknown>;
+  }): Promise<{ data: { state: string } }>;
 
   removeMembershipForUserInOrg(params: { org: string; team_slug: string; username: string }): Promise<unknown>;
 
@@ -38,11 +42,26 @@ export interface TeamMembershipApi {
   }): Promise<{ status: number; data: { state: string } }>;
 }
 
+/** The subset of the GitHub orgs API this module uses: pending org invitations. */
+export interface OrgInvitationApi {
+  listPendingInvitations(params: {
+    org: string;
+    per_page?: number;
+    page?: number;
+  }): Promise<{ data: { id: number; login: string | null }[] }>;
+
+  cancelInvitation(params: { org: string; invitation_id: number }): Promise<unknown>;
+}
+
 export interface ProvisioningDeps {
   api: TeamMembershipApi;
+  invitations: OrgInvitationApi;
   org: string;
   team: string;
 }
+
+/** A team membership: 'active', or 'pending' while the org invitation it sent is not yet accepted. */
+export type Membership = 'active' | 'pending';
 
 /** Builds the default deps from env + an App-authenticated Octokit client. */
 export function defaultDeps(): ProvisioningDeps {
@@ -57,25 +76,32 @@ export function defaultDeps(): ProvisioningDeps {
 
   return {
     api: octokit.rest.teams as unknown as TeamMembershipApi,
+    invitations: octokit.rest.orgs as unknown as OrgInvitationApi,
     org: requireEnv('GITHUB_ORG'),
     team: requireEnv('GITHUB_TEAM'),
   };
 }
 
 /**
- * Adds (or re-confirms) a GitHub user in the pro-customers team. Idempotent.
+ * Adds (or re-confirms) a GitHub user in the pro-customers team and returns their membership: 'pending'
+ * when GitHub sent them an org invitation to accept. Idempotent; for someone whose invitation has lapsed it
+ * sends a new one.
  */
-export async function grantAccess(githubLogin: string, deps: ProvisioningDeps = defaultDeps()): Promise<void> {
-  await deps.api.addOrUpdateMembershipForUserInOrg({
+export async function grantAccess(githubLogin: string, deps: ProvisioningDeps = defaultDeps()): Promise<Membership> {
+  const { data } = await deps.api.addOrUpdateMembershipForUserInOrg({
     org: deps.org,
     team_slug: deps.team,
     username: githubLogin,
     role: 'member',
   });
+
+  return data.state === 'active' ? 'active' : 'pending';
 }
 
 /**
- * Removes a GitHub user from the pro-customers team. Idempotent — a 404 (already absent) is ignored.
+ * Removes a GitHub user from the pro-customers team and cancels their org invitation if it is still
+ * pending, so a lapsed customer cannot accept it later. Idempotent: an absent membership or invitation is
+ * ignored.
  */
 export async function revokeAccess(githubLogin: string, deps: ProvisioningDeps = defaultDeps()): Promise<void> {
   try {
@@ -85,15 +111,27 @@ export async function revokeAccess(githubLogin: string, deps: ProvisioningDeps =
       username: githubLogin,
     });
   } catch (error) {
-    if (isNotFound(error)) return; // already removed — nothing to do
-    throw error;
+    if (!isNotFound(error)) throw error; // a 404 means already removed
+  }
+
+  const invitation = await findPendingInvitation(githubLogin, deps);
+  if (invitation === null) return;
+
+  try {
+    await deps.invitations.cancelInvitation({ org: deps.org, invitation_id: invitation });
+  } catch (error) {
+    if (!isNotFound(error)) throw error; // accepted, expired or cancelled meanwhile
   }
 }
 
 /**
- * Returns true when the user is an active member of the pro-customers team.
+ * The user's membership of the pro-customers team: 'active', 'pending' (invited, not yet accepted), or
+ * null when there is none, including once GitHub has dropped an unaccepted invitation.
  */
-export async function hasAccess(githubLogin: string, deps: ProvisioningDeps = defaultDeps()): Promise<boolean> {
+export async function membershipOf(
+  githubLogin: string,
+  deps: ProvisioningDeps = defaultDeps(),
+): Promise<Membership | null> {
   try {
     const result = await deps.api.getMembershipForUserInOrg({
       org: deps.org,
@@ -101,10 +139,23 @@ export async function hasAccess(githubLogin: string, deps: ProvisioningDeps = de
       username: githubLogin,
     });
 
-    return result.status === 200 && result.data.state === 'active';
+    return result.data.state === 'active' ? 'active' : 'pending';
   } catch (error) {
-    if (isNotFound(error)) return false;
+    if (isNotFound(error)) return null;
     throw error;
+  }
+}
+
+// The id of the user's pending org invitation, or null. GitHub logins are case-insensitive.
+async function findPendingInvitation(githubLogin: string, deps: ProvisioningDeps): Promise<number | null> {
+  const login = githubLogin.toLowerCase();
+
+  for (let page = 1; ; page += 1) {
+    const { data } = await deps.invitations.listPendingInvitations({ org: deps.org, per_page: 100, page });
+    const invitation = data.find((candidate) => candidate.login?.toLowerCase() === login);
+
+    if (invitation) return invitation.id;
+    if (data.length < 100) return null;
   }
 }
 

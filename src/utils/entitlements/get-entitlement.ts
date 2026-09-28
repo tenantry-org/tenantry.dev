@@ -1,6 +1,10 @@
 import { createClient } from '@/utils/supabase/server';
 import { getCustomerId } from '@/utils/paddle/get-customer-id';
 import { graceEndsAt } from '@/utils/entitlements/grace';
+import type { GithubState } from '@/utils/entitlements/entitlements-store';
+
+/** GitHub drops an org invitation that is not accepted within 7 days; reconcile then sends a new one. */
+const INVITATION_DAYS = 7;
 
 /**
  * Read model for the customer-facing Pro access page. Uses the user-scoped client, so RLS guarantees
@@ -15,7 +19,9 @@ export interface ProAccess {
    */
   entitlement: {
     status: string;
-    githubGranted: boolean;
+    github: GithubState;
+    /** While `github` is 'invited': when the invitation lapses if not accepted. */
+    invitationExpiresAt: string | null;
     grace: { endsAt: string; ended: boolean } | null;
   } | null;
   licence: { jwt: string; expiresAt: string } | null;
@@ -32,7 +38,11 @@ export async function getProAccess(): Promise<ProAccess> {
   const supabase = await createClient();
 
   const [{ data: entitlement }, { data: licence }, { data: link }, { data: grace }] = await Promise.all([
-    supabase.from('customer_access').select('status,github_granted').eq('customer_id', customerId).maybeSingle(),
+    supabase
+      .from('customer_access')
+      .select('status,github_state,github_invited_at')
+      .eq('customer_id', customerId)
+      .maybeSingle(),
     supabase
       .from('licences')
       .select('jwt,expires_at')
@@ -53,7 +63,13 @@ export async function getProAccess(): Promise<ProAccess> {
     entitlement: entitlement
       ? {
           status: entitlement.status,
-          githubGranted: entitlement.github_granted,
+          github: entitlement.github_state as GithubState,
+          invitationExpiresAt:
+            entitlement.github_state === 'invited' && entitlement.github_invited_at
+              ? new Date(
+                  new Date(entitlement.github_invited_at).getTime() + INVITATION_DAYS * 24 * 60 * 60 * 1000,
+                ).toISOString()
+              : null,
           grace:
             entitlement.status === 'grace' && graceEnd !== null
               ? { endsAt: new Date(graceEnd).toISOString(), ended: graceEnd <= Date.now() }

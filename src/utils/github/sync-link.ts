@@ -1,10 +1,8 @@
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createServiceClient } from '@/utils/supabase/server-internal';
-import { grantAccess } from '@/utils/github/provisioning';
 import { provisioningAllowed } from '@/utils/provisioning-guard';
 import { confirmedEmail } from '@/utils/customers/email';
-import { markGithubGranted } from '@/utils/entitlements/entitlements-store';
-import { isEntitled } from '@/utils/entitlements/customer-access';
+import { grantAndRecord, isEntitled } from '@/utils/entitlements/customer-access';
 
 /**
  * Reconciles the signed-in user's GitHub identity into `github_links` and, if their customer is entitled
@@ -18,7 +16,9 @@ import { isEntitled } from '@/utils/entitlements/customer-access';
  */
 export interface SyncResult {
   linked: boolean;
+  /** Added to the team, or sent an org invitation to accept (`invited`). */
   granted: boolean;
+  invited?: boolean;
   reason?: string;
 }
 
@@ -76,13 +76,8 @@ export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
   // account but leaves the grant to the operator.
   if (!provisioningAllowed(email)) return { linked: true, granted: false, reason: 'provisioning-disabled' };
 
-  try {
-    await grantAccess(login);
-    await markGithubGranted(customerId);
+  const state = await grantAndRecord(customerId, login);
+  if (state === 'failed') return { linked: true, granted: false, reason: 'grant-failed' };
 
-    return { linked: true, granted: true };
-  } catch (error) {
-    console.error('Failed to grant GitHub access during link sync:', error);
-    return { linked: true, granted: false, reason: 'grant-failed' };
-  }
+  return { linked: true, granted: true, invited: state === 'invited' };
 }

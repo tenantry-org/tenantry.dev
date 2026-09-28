@@ -1,14 +1,21 @@
-import { grantAccess, hasAccess, revokeAccess } from '@/utils/github/provisioning';
+import { membershipOf, revokeAccess } from '@/utils/github/provisioning';
 import { provisioningAllowed } from '@/utils/provisioning-guard';
 import {
+  CustomerAccessRecord,
   getCurrentLicence,
   getCustomerAccess,
   getCustomerEmail,
   getGithubLogin,
-  markGithubGranted,
   revokeLicences,
+  setGithubState,
 } from '@/utils/entitlements/entitlements-store';
-import { AccessChange, isEntitled, LicenceOutcome, syncCustomerAccess } from '@/utils/entitlements/customer-access';
+import {
+  AccessChange,
+  grantAndRecord,
+  isEntitled,
+  LicenceOutcome,
+  syncCustomerAccess,
+} from '@/utils/entitlements/customer-access';
 
 /**
  * The inbox event type of a reconcile job (reconcile.ts queues one per customer). The inbox worker runs it
@@ -17,11 +24,22 @@ import { AccessChange, isEntitled, LicenceOutcome, syncCustomerAccess } from '@/
  */
 export const RECONCILE_CUSTOMER_EVENT = 'tenantry.reconcile_customer';
 
+/**
+ * What reconcile did about the customer's GitHub access:
+ *   granted    added to the team (a first grant, or a retry of one that failed)
+ *   invited    an org invitation was sent where none was pending (a first grant, a retry, one GitHub
+ *              dropped after 7 days unaccepted, or a customer removed from the team while entitled)
+ *   accepted   a pending invitation was accepted, so the customer is now recorded as a member
+ *   removed    a customer who is not entitled was removed from the team or had their invitation cancelled
+ *   withheld   a grant was due but automated provisioning is off for this customer
+ *   unchanged  nothing to do
+ */
+export type GithubReconciliation = 'granted' | 'invited' | 'accepted' | 'removed' | 'withheld' | 'unchanged';
+
 export interface CustomerReconciliation {
   access: AccessChange;
   licence: LicenceOutcome | null;
-  githubGranted: boolean;
-  githubRemoved: boolean;
+  github: GithubReconciliation;
   licencesRevoked: boolean;
 }
 
@@ -34,6 +52,8 @@ export interface CustomerReconciliation {
  *     was manual, or its issuance failed (recorded in `licence_failures` and alerted on once),
  *   - a customer who linked GitHub after their access started (grant pending), or a grant or removal
  *     that failed during webhook handling,
+ *   - an org invitation that was accepted (recorded as a member from then on), or that GitHub dropped
+ *     after 7 days unaccepted, or a member removed from the team while still entitled (invited again),
  *   - licences left live after access ended.
  *
  * Every step is idempotent, so a job that throws is retried by the inbox with backoff.
@@ -43,26 +63,12 @@ export async function reconcileCustomer(customerId: string): Promise<CustomerRec
   const access = await getCustomerAccess(customerId);
   const entitled = access !== null && isEntitled(access.status);
   const githubLogin = await getGithubLogin(customerId);
-  const result: CustomerReconciliation = {
-    access: change,
-    licence,
-    githubGranted: false,
-    githubRemoved: false,
-    licencesRevoked: false,
-  };
+  const result: CustomerReconciliation = { access: change, licence, github: 'unchanged', licencesRevoked: false };
 
-  if (entitled && githubLogin && !access.githubGranted) {
-    // Honour the provisioning gate, so reconcile cannot backfill a grant the webhook withheld.
-    if (provisioningAllowed(await getCustomerEmail(customerId))) {
-      await grantAccess(githubLogin);
-      await markGithubGranted(customerId);
-      result.githubGranted = true;
-    }
-  }
-
-  if (!entitled && githubLogin && (await hasAccess(githubLogin))) {
-    await revokeAccess(githubLogin);
-    result.githubRemoved = true;
+  if (githubLogin) {
+    result.github = entitled
+      ? await reconcileGrant(customerId, githubLogin, access)
+      : await reconcileRemoval(githubLogin);
   }
 
   if (!entitled && (await getCurrentLicence(customerId))) {
@@ -71,4 +77,41 @@ export async function reconcileCustomer(customerId: string): Promise<CustomerRec
   }
 
   return result;
+}
+
+// An entitled customer with a linked account should be a member of the team, or hold a pending invitation.
+async function reconcileGrant(
+  customerId: string,
+  githubLogin: string,
+  access: CustomerAccessRecord,
+): Promise<GithubReconciliation> {
+  const recorded = access.githubState;
+
+  if (recorded === 'invited' || recorded === 'active') {
+    const membership = await membershipOf(githubLogin);
+
+    if (membership === 'active') {
+      if (recorded === 'active') return 'unchanged';
+      await setGithubState(customerId, 'active');
+      return 'accepted';
+    }
+    if (membership === 'pending') return 'unchanged'; // still waiting for the customer to accept
+    // No membership: GitHub dropped the invitation unaccepted, or the customer left or was removed.
+  }
+
+  // Honour the provisioning gate, so reconcile cannot backfill a grant the webhook withheld.
+  if (!provisioningAllowed(await getCustomerEmail(customerId))) return 'withheld';
+
+  const state = await grantAndRecord(customerId, githubLogin);
+  if (state === 'failed') throw new Error(`GitHub grant failed for customer ${customerId}`);
+
+  return state === 'active' ? 'granted' : 'invited';
+}
+
+// A customer who is not entitled must not be in the team, or hold an invitation they could still accept.
+async function reconcileRemoval(githubLogin: string): Promise<GithubReconciliation> {
+  if ((await membershipOf(githubLogin)) === null) return 'unchanged';
+
+  await revokeAccess(githubLogin);
+  return 'removed';
 }

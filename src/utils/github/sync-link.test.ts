@@ -70,13 +70,35 @@ describe('syncGithubLinkForCurrentUser', () => {
     expect(github.grantAccess).not.toHaveBeenCalled();
   });
 
-  it('grants access in automated mode', async () => {
+  it('grants access in automated mode, and records an org invitation to accept as invited', async () => {
     process.env.PROVISIONING_MODE = 'auto';
+    github.grantAccess.mockResolvedValueOnce('pending');
 
     const result = await syncGithubLinkForCurrentUser();
 
-    expect(result).toEqual({ linked: true, granted: true });
+    expect(result).toEqual({ linked: true, granted: true, invited: true });
     expect(github.grantAccess).toHaveBeenCalledWith('octocat');
+    expect(state.calls).toContainEqual(
+      expect.objectContaining({
+        table: 'customer_access',
+        method: 'update',
+        args: [expect.objectContaining({ github_state: 'invited' })],
+      }),
+    );
+  });
+
+  it('records an existing org member as active', async () => {
+    process.env.PROVISIONING_MODE = 'auto';
+    github.grantAccess.mockResolvedValueOnce('active');
+
+    await expect(syncGithubLinkForCurrentUser()).resolves.toEqual({ linked: true, granted: true, invited: false });
+    expect(state.calls).toContainEqual(
+      expect.objectContaining({
+        table: 'customer_access',
+        method: 'update',
+        args: [expect.objectContaining({ github_state: 'active', github_invited_at: null })],
+      }),
+    );
   });
 
   it("links but does not grant access when none of the customer's subscriptions entitles them", async () => {

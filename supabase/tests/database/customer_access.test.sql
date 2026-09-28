@@ -4,29 +4,29 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(18);
+select plan(23);
 
 insert into public.customers (customer_id, email) values ('ctm_1', 'buyer@example.com');
 
 select is(public.set_customer_access('ctm_1', 'active'), 'revoked', 'a customer seen for the first time had no access');
 select results_eq(
-  $$select status, github_granted from public.customer_access where customer_id = 'ctm_1'$$,
-  $$values ('active'::text, false)$$,
+  $$select status, github_state, github_invited_at from public.customer_access where customer_id = 'ctm_1'$$,
+  $$values ('active'::text, 'none'::text, null::timestamptz)$$,
   'records the access');
 
-update public.customer_access set github_granted = true where customer_id = 'ctm_1';
+update public.customer_access set github_state = 'invited', github_invited_at = now() where customer_id = 'ctm_1';
 
 select is(public.set_customer_access('ctm_1', 'grace'), 'active', 'returns the status it replaced');
 select results_eq(
-  $$select status, github_granted from public.customer_access where customer_id = 'ctm_1'$$,
-  $$values ('grace'::text, true)$$,
-  'staying entitled keeps the GitHub grant');
+  $$select status, github_state, github_invited_at is not null from public.customer_access where customer_id = 'ctm_1'$$,
+  $$values ('grace'::text, 'invited'::text, true)$$,
+  'staying entitled keeps the GitHub state');
 
 select is(public.set_customer_access('ctm_1', 'revoked'), 'grace', 'ending access returns the entitled status');
 select results_eq(
-  $$select status, github_granted from public.customer_access where customer_id = 'ctm_1'$$,
-  $$values ('revoked'::text, false)$$,
-  'ending access clears the GitHub grant');
+  $$select status, github_state, github_invited_at from public.customer_access where customer_id = 'ctm_1'$$,
+  $$values ('revoked'::text, 'none'::text, null::timestamptz)$$,
+  'ending access resets the GitHub state');
 
 select is(public.set_customer_access('ctm_1', 'revoked'), 'revoked', 'a repeated end is not a change');
 
@@ -57,6 +57,24 @@ select hasnt_column('public', 'entitlements', 'tier', 'entitlements have no tier
 select hasnt_column('public', 'customer_access', 'tier', 'customer access has no tier');
 select hasnt_column('public', 'licences', 'tier', 'licences have no tier');
 select hasnt_function('public', 'set_customer_access', array['text', 'text', 'text'], 'set_customer_access takes no tier');
+
+-- GitHub invitation state (6.7).
+select hasnt_column('public', 'customer_access', 'github_granted', 'github_granted is replaced by github_state');
+select throws_ok(
+  $$update public.customer_access set github_state = 'granted' where customer_id = 'ctm_1'$$,
+  '23514', null,
+  'rejects an unknown GitHub state');
+select throws_ok(
+  $$update public.customer_access set github_state = 'invited', github_invited_at = null where customer_id = 'ctm_1'$$,
+  '23514', null,
+  'an invitation records when it was sent');
+select throws_ok(
+  $$update public.customer_access set github_state = 'active', github_invited_at = now() where customer_id = 'ctm_1'$$,
+  '23514', null,
+  'only an invitation has a sent time');
+select lives_ok(
+  $$update public.customer_access set github_state = 'failed', github_invited_at = null where customer_id = 'ctm_1'$$,
+  'a failed grant is recorded');
 
 select * from finish();
 rollback;

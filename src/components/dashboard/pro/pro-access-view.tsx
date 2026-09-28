@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { connectGithub } from '@/app/dashboard/pro/actions';
 import type { ProAccess } from '@/utils/entitlements/get-entitlement';
+import type { GithubState } from '@/utils/entitlements/entitlements-store';
 import { ProOffer } from '@/constants/pro-offer';
 
 interface Props {
@@ -32,6 +33,52 @@ function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }
       {copied ? 'Copied' : label}
     </Button>
   );
+}
+
+function GithubStatus({
+  state,
+  invitationExpiresAt,
+  githubOrg,
+}: Readonly<{ state: GithubState; invitationExpiresAt: string | null; githubOrg: string }>) {
+  if (state === 'active') {
+    return (
+      <p className={'text-secondary text-sm'}>
+        A member of the {githubOrg} org: you can restore Tenantry Pro packages from the private feed.
+      </p>
+    );
+  }
+
+  if (state === 'invited') {
+    return (
+      <div className={'flex flex-col gap-2 text-sm'}>
+        <p className={'text-secondary'}>
+          GitHub has sent you an invitation to the {githubOrg} org. Accept it to restore Tenantry Pro packages
+          {invitationExpiresAt
+            ? ` (it lapses on ${new Date(invitationExpiresAt).toLocaleDateString()}, and we send a new one if it does)`
+            : ''}
+          .
+        </p>
+        <Link
+          className={'text-primary underline underline-offset-4'}
+          href={`https://github.com/orgs/${githubOrg}/invitation`}
+          target={'_blank'}
+          rel={'noopener noreferrer'}
+        >
+          Accept the invitation on GitHub
+        </Link>
+      </div>
+    );
+  }
+
+  if (state === 'failed') {
+    return (
+      <p className={'text-secondary text-sm'}>
+        Adding you to the {githubOrg} org failed. We retry automatically; you can also refresh below.
+      </p>
+    );
+  }
+
+  return <p className={'text-secondary text-sm'}>Link saved. Access is being provisioned: refresh in a moment.</p>;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -129,11 +176,11 @@ export function ProAccessView({ access, githubOrg }: Props) {
               <p className={'text-secondary'}>
                 Connected as <span className={'text-primary font-medium'}>@{githubLogin}</span>
               </p>
-              <p className={'text-secondary text-sm'}>
-                {entitlement.githubGranted
-                  ? `Added to the ${githubOrg} org — you can restore Tenantry Pro packages from the private feed.`
-                  : 'Link saved. Access is being provisioned — refresh in a moment.'}
-              </p>
+              <GithubStatus
+                state={entitlement.github}
+                invitationExpiresAt={entitlement.invitationExpiresAt}
+                githubOrg={githubOrg}
+              />
               <form action={connectGithub}>
                 <Button type={'submit'} variant={'secondary'} size={'sm'}>
                   <Github className={'mr-2 h-4 w-4'} /> Refresh access

@@ -2,6 +2,8 @@ import type * as EntitlementsStore from '@/utils/entitlements/entitlements-store
 
 type EntitlementRecord = EntitlementsStore.EntitlementRecord;
 type EntitlementStatus = EntitlementsStore.EntitlementStatus;
+type CustomerAccessRecord = EntitlementsStore.CustomerAccessRecord;
+type GithubState = EntitlementsStore.GithubState;
 
 /**
  * In-memory stand-in for entitlements-store.ts, for tests that follow a customer's access through several
@@ -19,7 +21,7 @@ const state = {
   emails: new Map<string, string>(),
   githubLogins: new Map<string, string>(),
   entitlements: new Map<string, EntitlementRecord>(),
-  access: new Map<string, { status: EntitlementStatus; githubGranted: boolean }>(),
+  access: new Map<string, CustomerAccessRecord>(),
   licences: [] as Licence[],
   licenceFailures: new Map<string, { attempts: number; lastError: string }>(),
 };
@@ -72,21 +74,25 @@ export const memory = {
 
     async setCustomerAccess(customerId: string, status: EntitlementStatus) {
       const previous = state.access.get(customerId);
+      const ended = status === 'revoked';
       state.access.set(customerId, {
         status,
-        githubGranted: (previous?.githubGranted ?? false) && status !== 'revoked',
+        githubState: ended ? 'none' : (previous?.githubState ?? 'none'),
+        githubInvitedAt: ended ? null : (previous?.githubInvitedAt ?? null),
       });
       return previous?.status ?? 'revoked';
     },
 
     async getCustomerAccess(customerId: string) {
       const access = state.access.get(customerId);
-      return access ? { status: access.status, githubGranted: access.githubGranted } : null;
+      return access ? { ...access } : null;
     },
 
-    async markGithubGranted(customerId: string) {
+    async setGithubState(customerId: string, githubState: Exclude<GithubState, 'none'>) {
       const access = state.access.get(customerId);
-      if (access && access.status !== 'revoked') access.githubGranted = true;
+      if (!access || access.status === 'revoked') return;
+      access.githubState = githubState;
+      access.githubInvitedAt = githubState === 'invited' ? new Date() : null;
     },
 
     async getCurrentLicence(customerId: string) {

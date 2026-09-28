@@ -23,7 +23,11 @@ vi.mock('@/utils/supabase/server-internal', () => ({
   }),
 }));
 
-const effects = vi.hoisted(() => ({ grantAccess: vi.fn(), revokeAccess: vi.fn(), sendEmail: vi.fn() }));
+const effects = vi.hoisted(() => ({
+  grantAccess: vi.fn().mockResolvedValue('active'),
+  revokeAccess: vi.fn(),
+  sendEmail: vi.fn(),
+}));
 vi.mock('@/utils/github/provisioning', () => ({
   grantAccess: effects.grantAccess,
   revokeAccess: effects.revokeAccess,
@@ -155,7 +159,11 @@ describe('ProcessWebhook', () => {
     await processor.processEvent(delivered(cancelled));
 
     expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
-    expect(memory.state.access.get('ctm_01')).toEqual({ status: 'active', githubGranted: true });
+    expect(memory.state.access.get('ctm_01')).toEqual({
+      status: 'active',
+      githubState: 'active',
+      githubInvitedAt: null,
+    });
     expect(effects.revokeAccess).not.toHaveBeenCalled();
     expect(effects.sendEmail).not.toHaveBeenCalled();
     expect(memory.liveLicences('ctm_01').at(-1)).toMatchObject({ expiresAt: new Date(second.periodEndsAt) });
@@ -174,7 +182,11 @@ describe('ProcessWebhook', () => {
     );
 
     expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_01')).toEqual({ status: 'revoked', githubGranted: false });
+    expect(memory.state.access.get('ctm_01')).toEqual({
+      status: 'revoked',
+      githubState: 'none',
+      githubInvitedAt: null,
+    });
     expect(memory.liveLicences('ctm_01')).toEqual([]);
     expect(emailSubjects()).toEqual([ENDED]);
   });

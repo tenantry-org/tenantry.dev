@@ -1,16 +1,17 @@
 import {
   EntitlementRecord,
   EntitlementStatus,
+  GithubState,
   getCurrentLicence,
   getCustomerEmail,
   getGithubLogin,
   clearLicenceFailure,
   listEntitlements,
-  markGithubGranted,
   recordLicence,
   recordLicenceFailure,
   revokeLicences,
   setCustomerAccess,
+  setGithubState,
 } from '@/utils/entitlements/entitlements-store';
 import { issueLicence } from '@/utils/licensing/licence-issuer';
 import { grantAccess, revokeAccess } from '@/utils/github/provisioning';
@@ -140,24 +141,48 @@ export async function syncCustomerAccess(customerId: string): Promise<AccessSync
 }
 
 async function grantGithubAccess(customerId: string) {
+  let githubLogin: string | null;
   try {
-    const githubLogin = await getGithubLogin(customerId);
+    githubLogin = await getGithubLogin(customerId);
+  } catch (error) {
+    console.error(
+      `Customer access: could not read the GitHub link of customer ${customerId}; reconcile retries:`,
+      error,
+    );
+    return;
+  }
 
-    if (!githubLogin) {
-      console.info(
-        `Customer access: customer ${customerId} has not linked GitHub yet; access is granted when they do.`,
-      );
-      return;
-    }
+  if (!githubLogin) {
+    console.info(`Customer access: customer ${customerId} has not linked GitHub yet; access is granted when they do.`);
+    return;
+  }
 
-    await grantAccess(githubLogin);
-    await markGithubGranted(customerId);
+  await grantAndRecord(customerId, githubLogin);
+}
+
+/**
+ * Adds the customer's GitHub account to the team and records the outcome: 'active', 'invited' (an org
+ * invitation to accept), or 'failed', which reconcile retries. Never throws.
+ */
+export async function grantAndRecord(customerId: string, githubLogin: string): Promise<GithubState> {
+  let state: GithubState;
+  try {
+    state = (await grantAccess(githubLogin)) === 'active' ? 'active' : 'invited';
   } catch (error) {
     console.error(
       `Customer access: failed to grant GitHub access to customer ${customerId}; reconcile retries:`,
       error,
     );
+    state = 'failed';
   }
+
+  try {
+    await setGithubState(customerId, state);
+  } catch (error) {
+    console.error(`Customer access: could not record GitHub state '${state}' for customer ${customerId}:`, error);
+  }
+
+  return state;
 }
 
 export type LicenceOutcome = 'issued' | 'current' | 'failed';
