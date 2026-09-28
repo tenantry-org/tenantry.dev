@@ -15,6 +15,8 @@ interface Props {
   githubOrg: string;
   /** Why connecting GitHub failed (`?error=` from the link flow), if it did. */
   linkError?: string;
+  /** The signed-in account's email, which a purchase must have been made with to appear here. */
+  accountEmail: string | null;
 }
 
 const LINK_ERROR_TEXT: Record<string, string> = {
@@ -125,7 +127,7 @@ function GraceNotice({ grace }: Readonly<{ grace: { endsAt: string; ended: boole
   );
 }
 
-export function ProAccessView({ access, githubOrg, linkError }: Props) {
+export function ProAccessView({ access, githubOrg, linkError, accountEmail }: Props) {
   const { entitlement, licence, githubLogin } = access;
 
   const nugetConfig = `<configuration>
@@ -150,6 +152,14 @@ export function ProAccessView({ access, githubOrg, linkError }: Props) {
           <p className={'text-secondary'}>
             Subscribe to Tenantry Pro to get the private package feed and your licence key.
           </p>
+          {!access.customerId && accountEmail && (
+            <p className={'text-secondary'}>
+              Purchases are matched to accounts by email address, and none was made with{' '}
+              <span className={'text-primary'}>{accountEmail}</span>. If you bought Tenantry Pro with another address,
+              log in with an account for that address, or email{' '}
+              <a href={'mailto:support@tenantry.dev'}>support@tenantry.dev</a>.
+            </p>
+          )}
           <Button asChild className={'w-fit'}>
             <Link href={'/#pricing'}>View pricing</Link>
           </Button>
