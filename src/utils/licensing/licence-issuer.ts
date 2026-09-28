@@ -17,12 +17,8 @@ const ISSUER = 'Tenantry';
 export interface LicenceClaims {
   /** Paddle customer id — becomes the JWT `sub`. */
   customerId: string;
-  /** Entitlement tier (e.g. "pro"). */
-  tier: string;
   /** When the licence expires (`exp`). Track the subscription period end; the 30-day runtime grace covers renewal gaps. */
   expiresAt: Date;
-  /** Optional seat count (`seats`). Omitted from the token when undefined. */
-  seats?: number;
   /** Optional not-before (`nbf`). Defaults to now. */
   notBefore?: Date;
 }
@@ -59,8 +55,6 @@ export function issueLicence(claims: LicenceClaims, signingKey?: KeyObject): str
     JSON.stringify({
       iss: ISSUER,
       sub: claims.customerId,
-      tier: claims.tier,
-      ...(claims.seats != null ? { seats: claims.seats } : {}),
       iat: nowSeconds,
       nbf: Math.floor((claims.notBefore ?? new Date()).getTime() / 1000),
       exp: Math.floor(claims.expiresAt.getTime() / 1000),

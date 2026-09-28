@@ -29,7 +29,7 @@ function environment(paddleEnvironment: 'sandbox' | 'production', overrides: Rec
     GITHUB_APP_ID: '1',
     GITHUB_APP_PRIVATE_KEY: 'app-key',
     GITHUB_APP_INSTALLATION_ID: '2',
-    PADDLE_PRODUCT_TIER_MAP: '{"pro_01": "pro"}',
+    PADDLE_PRO_PRODUCT_ID: 'pro_01',
     LICENCE_SIGNING_PRIVATE_KEY: paddleEnvironment === 'production' ? productionKey.pem : sandboxKey.pem,
     NEXT_PUBLIC_SITE_URL: 'https://tenantry.dev',
     RESEND_API_KEY: 'resend',
@@ -62,7 +62,7 @@ describe('validateServerConfig', () => {
       NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: undefined,
       GITHUB_ORG: undefined,
       GITHUB_TEAM: ' ',
-      PADDLE_PRODUCT_TIER_MAP: undefined,
+      PADDLE_PRO_PRODUCT_ID: undefined,
       LICENCE_SIGNING_PRIVATE_KEY: sandboxKey.pem,
       RESEND_API_KEY: undefined,
     });
@@ -72,7 +72,7 @@ describe('validateServerConfig', () => {
       expect.stringContaining('NEXT_PUBLIC_PADDLE_CLIENT_TOKEN is not set'),
       expect.stringContaining('GITHUB_ORG is not set'),
       expect.stringContaining('GITHUB_TEAM is not set'),
-      expect.stringContaining('PADDLE_PRODUCT_TIER_MAP is not set'),
+      expect.stringContaining('PADDLE_PRO_PRODUCT_ID is not set'),
       expect.stringContaining('is not the production key'),
       expect.stringContaining('RESEND_API_KEY is not set'),
     ]);
@@ -106,9 +106,9 @@ describe('validateServerConfig', () => {
     ]);
   });
 
-  it('rejects an invalid product→tier map and an unknown provisioning mode', () => {
-    expect(problems(environment('sandbox', { PADDLE_PRODUCT_TIER_MAP: '{"pro_01": "enterprise"}' }))).toEqual([
-      expect.stringContaining('which is not a tier'),
+  it('rejects an invalid Pro product id and an unknown provisioning mode', () => {
+    expect(problems(environment('sandbox', { PADDLE_PRO_PRODUCT_ID: 'pri_01' }))).toEqual([
+      expect.stringContaining('must be a Paddle product id'),
     ]);
     expect(problems(environment('sandbox', { PROVISIONING_MODE: 'atuo' }))).toEqual([
       expect.stringContaining('PROVISIONING_MODE must be "manual" or "auto"'),

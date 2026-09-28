@@ -14,12 +14,11 @@ export interface ProAccess {
    * has passed (access is then removed by the next reconcile).
    */
   entitlement: {
-    tier: string | null;
     status: string;
     githubGranted: boolean;
     grace: { endsAt: string; ended: boolean } | null;
   } | null;
-  licence: { jwt: string; tier: string; expiresAt: string } | null;
+  licence: { jwt: string; expiresAt: string } | null;
   githubLogin: string | null;
 }
 
@@ -33,10 +32,10 @@ export async function getProAccess(): Promise<ProAccess> {
   const supabase = await createClient();
 
   const [{ data: entitlement }, { data: licence }, { data: link }, { data: grace }] = await Promise.all([
-    supabase.from('customer_access').select('tier,status,github_granted').eq('customer_id', customerId).maybeSingle(),
+    supabase.from('customer_access').select('status,github_granted').eq('customer_id', customerId).maybeSingle(),
     supabase
       .from('licences')
-      .select('jwt,tier,expires_at')
+      .select('jwt,expires_at')
       .eq('customer_id', customerId)
       .eq('revoked', false)
       .order('issued_at', { ascending: false })
@@ -53,7 +52,6 @@ export async function getProAccess(): Promise<ProAccess> {
     customerId,
     entitlement: entitlement
       ? {
-          tier: entitlement.tier,
           status: entitlement.status,
           githubGranted: entitlement.github_granted,
           grace:
@@ -62,7 +60,7 @@ export async function getProAccess(): Promise<ProAccess> {
               : null,
         }
       : null,
-    licence: licence ? { jwt: licence.jwt, tier: licence.tier, expiresAt: licence.expires_at } : null,
+    licence: licence ? { jwt: licence.jwt, expiresAt: licence.expires_at } : null,
     githubLogin: link?.github_login ?? null,
   };
 }

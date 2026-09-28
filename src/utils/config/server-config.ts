@@ -1,5 +1,5 @@
 import { createPrivateKey, createPublicKey } from 'node:crypto';
-import { parseTierMap } from '@/constants/tier-mapping';
+import { parseProProductId } from '@/constants/pro-product';
 
 /**
  * Tenantry.Pro's embedded licence public key (SubjectPublicKeyInfo, base64). Production licences must be
@@ -24,7 +24,7 @@ type Env = Record<string, string | undefined>;
 /**
  * Validates the server's configuration and fails closed: it throws a `ServerConfigError` listing every
  * problem, so a server with a missing or inconsistent setting stops at startup (src/instrumentation.ts)
- * instead of defaulting to sandbox, mapping purchases to no tier, provisioning into another environment's
+ * instead of defaulting to sandbox, recognising no purchase as Pro, provisioning into another environment's
  * GitHub org, or signing licences with another environment's key.
  */
 export function validateServerConfig(
@@ -62,7 +62,7 @@ export function validateServerConfig(
   }
 
   try {
-    parseTierMap(value('PADDLE_PRODUCT_TIER_MAP'));
+    parseProProductId(value('PADDLE_PRO_PRODUCT_ID'));
   } catch (error) {
     problems.push((error as Error).message);
   }

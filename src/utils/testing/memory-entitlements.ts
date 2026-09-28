@@ -11,7 +11,6 @@ type EntitlementStatus = EntitlementsStore.EntitlementStatus;
 interface Licence {
   customerId: string;
   jwt: string;
-  tier: string;
   expiresAt: Date;
   revoked: boolean;
 }
@@ -20,7 +19,7 @@ const state = {
   emails: new Map<string, string>(),
   githubLogins: new Map<string, string>(),
   entitlements: new Map<string, EntitlementRecord>(),
-  access: new Map<string, { status: EntitlementStatus; tier: string | null; githubGranted: boolean }>(),
+  access: new Map<string, { status: EntitlementStatus; githubGranted: boolean }>(),
   licences: [] as Licence[],
   licenceFailures: new Map<string, { attempts: number; lastError: string }>(),
 };
@@ -71,11 +70,10 @@ export const memory = {
       return [...state.entitlements.values()].filter((entitlement) => entitlement.customerId === customerId);
     },
 
-    async setCustomerAccess(customerId: string, status: EntitlementStatus, tier: string | null) {
+    async setCustomerAccess(customerId: string, status: EntitlementStatus) {
       const previous = state.access.get(customerId);
       state.access.set(customerId, {
         status,
-        tier,
         githubGranted: (previous?.githubGranted ?? false) && status !== 'revoked',
       });
       return previous?.status ?? 'revoked';
@@ -93,10 +91,10 @@ export const memory = {
 
     async getCurrentLicence(customerId: string) {
       const licence = liveLicences(customerId).at(-1);
-      return licence ? { tier: licence.tier, expiresAt: licence.expiresAt } : null;
+      return licence ? { expiresAt: licence.expiresAt } : null;
     },
 
-    async recordLicence(params: { customerId: string; jwt: string; tier: string; expiresAt: Date }) {
+    async recordLicence(params: { customerId: string; jwt: string; expiresAt: Date }) {
       state.licences.push({ ...params, revoked: false });
     },
 

@@ -1,4 +1,4 @@
-import { PricingTier } from '@/constants/pricing-tier';
+import { ProOffer } from '@/constants/pro-offer';
 import { IBillingFrequency } from '@/constants/billing-frequency';
 import { FeaturesList } from '@/components/home/pricing/features-list';
 import { PriceAmount } from '@/components/home/pricing/price-amount';
@@ -16,33 +16,33 @@ interface Props {
 }
 
 export function PriceCards({ loading, frequency, priceMap }: Props) {
+  const offer = ProOffer;
+
   return (
-    <div className="isolate mx-auto grid grid-cols-1 gap-8 lg:mx-0 lg:max-w-none lg:grid-cols-3">
-      {PricingTier.map((tier) => (
-        <div key={tier.id} className={cn('rounded-lg bg-background/70 backdrop-blur-[6px] overflow-hidden')}>
-          <div className={cn('flex gap-5 flex-col rounded-lg rounded-b-none pricing-card-border')}>
-            {tier.featured && <FeaturedCardGradient />}
-            <PriceTitle tier={tier} />
-            <PriceAmount
-              loading={loading}
-              tier={tier}
-              priceMap={priceMap}
-              value={frequency.value}
-              priceSuffix={frequency.priceSuffix}
-            />
-            <div className={'px-8'}>
-              <Separator className={'bg-border'} />
-            </div>
-            <div className={'px-8 text-[16px] leading-[24px]'}>{tier.description}</div>
+    <div className="isolate mx-auto grid max-w-lg grid-cols-1 gap-8">
+      <div className={cn('rounded-lg bg-background/70 backdrop-blur-[6px] overflow-hidden')}>
+        <div className={cn('flex gap-5 flex-col rounded-lg rounded-b-none pricing-card-border')}>
+          <FeaturedCardGradient />
+          <PriceTitle offer={offer} />
+          <PriceAmount
+            loading={loading}
+            offer={offer}
+            priceMap={priceMap}
+            value={frequency.value}
+            priceSuffix={frequency.priceSuffix}
+          />
+          <div className={'px-8'}>
+            <Separator className={'bg-border'} />
           </div>
-          <div className={'px-8 mt-8'}>
-            <Button className={'w-full'} variant={'secondary'} asChild={true}>
-              <Link href={`/checkout/${tier.priceId[frequency.value]}`}>Get started</Link>
-            </Button>
-          </div>
-          <FeaturesList tier={tier} />
+          <div className={'px-8 text-[16px] leading-[24px]'}>{offer.description}</div>
         </div>
-      ))}
+        <div className={'px-8 mt-8'}>
+          <Button className={'w-full'} variant={'secondary'} asChild={true}>
+            <Link href={`/checkout/${offer.priceId[frequency.value]}`}>Get started</Link>
+          </Button>
+        </div>
+        <FeaturesList offer={offer} />
+      </div>
     </div>
   );
 }

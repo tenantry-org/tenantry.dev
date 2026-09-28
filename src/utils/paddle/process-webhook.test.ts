@@ -34,10 +34,9 @@ vi.mock('@/utils/entitlements/entitlements-store', async () => {
 });
 vi.mock('@/utils/email/send', () => ({ sendEmail: effects.sendEmail }));
 vi.mock('@/utils/licensing/licence-issuer', () => ({
-  issueLicence: ({ tier, expiresAt }: { tier: string; expiresAt: Date }) => `${tier}:${expiresAt.toISOString()}`,
+  issueLicence: ({ expiresAt }: { expiresAt: Date }) => `licence:${expiresAt.toISOString()}`,
 }));
 vi.mock('@/utils/provisioning-guard', () => ({ provisioningAllowed: () => true }));
-vi.mock('@/constants/tier-mapping', () => ({ resolveTier: () => 'pro' }));
 
 function delivered(event: PaddleEventJson) {
   return Webhooks.fromJson(event as unknown as Parameters<typeof Webhooks.fromJson>[0]);
@@ -73,6 +72,7 @@ describe('ProcessWebhook', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('PADDLE_PRO_PRODUCT_ID', 'pro_01');
     state.lastEventAt.clear();
     state.rpcError = null;
     memory.reset();
@@ -93,6 +93,29 @@ describe('ProcessWebhook', () => {
     expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
     expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
     expect(memory.liveLicences('ctm_01')).toEqual([]);
+    expect(effects.grantAccess).not.toHaveBeenCalled();
+    expect(effects.sendEmail).not.toHaveBeenCalled();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('records a subscription to another product but entitles its customer to nothing', async () => {
+    await processor.processEvent(
+      delivered(
+        subscriptionEvent({
+          eventId: 'evt_other',
+          occurredAt: '2026-09-28T11:00:00Z',
+          status: 'active',
+          productId: 'pro_02',
+        }),
+      ),
+    );
+
+    expect(state.lastEventAt.get('sub_01')).toBeDefined();
+    expect(memory.state.entitlements.size).toBe(0);
+    expect(memory.state.access.size).toBe(0);
     expect(effects.grantAccess).not.toHaveBeenCalled();
     expect(effects.sendEmail).not.toHaveBeenCalled();
   });
@@ -132,13 +155,10 @@ describe('ProcessWebhook', () => {
     await processor.processEvent(delivered(cancelled));
 
     expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
-    expect(memory.state.access.get('ctm_01')).toEqual({ status: 'active', tier: 'pro', githubGranted: true });
+    expect(memory.state.access.get('ctm_01')).toEqual({ status: 'active', githubGranted: true });
     expect(effects.revokeAccess).not.toHaveBeenCalled();
     expect(effects.sendEmail).not.toHaveBeenCalled();
-    expect(memory.liveLicences('ctm_01').at(-1)).toMatchObject({
-      tier: 'pro',
-      expiresAt: new Date(second.periodEndsAt),
-    });
+    expect(memory.liveLicences('ctm_01').at(-1)).toMatchObject({ expiresAt: new Date(second.periodEndsAt) });
 
     // Access ends with the last subscription.
     await processor.processEvent(
@@ -154,7 +174,7 @@ describe('ProcessWebhook', () => {
     );
 
     expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_01')).toEqual({ status: 'revoked', tier: null, githubGranted: false });
+    expect(memory.state.access.get('ctm_01')).toEqual({ status: 'revoked', githubGranted: false });
     expect(memory.liveLicences('ctm_01')).toEqual([]);
     expect(emailSubjects()).toEqual([ENDED]);
   });

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { connectGithub } from '@/app/dashboard/pro/actions';
 import type { ProAccess } from '@/utils/entitlements/get-entitlement';
+import { ProOffer } from '@/constants/pro-offer';
 
 interface Props {
   access: ProAccess;
@@ -111,7 +112,7 @@ export function ProAccessView({ access, githubOrg }: Props) {
         </CardHeader>
         <CardContent className={'p-0 pt-4 flex flex-col gap-3'}>
           <p className={'text-secondary'}>
-            Tier: <span className={'text-primary font-medium capitalize'}>{entitlement.tier}</span>
+            Plan: <span className={'text-primary font-medium'}>{ProOffer.name}</span>
           </p>
           {entitlement.status === 'grace' && <GraceNotice grace={entitlement.grace} />}
         </CardContent>

@@ -21,19 +21,19 @@ vi.mock('@/utils/entitlements/entitlements-store', async () => {
 vi.mock('@/utils/email/send', () => ({ sendEmail: effects.sendEmail }));
 vi.mock('@/utils/licensing/licence-issuer', () => ({ issueLicence: effects.issueLicence }));
 
-function signLicence({ tier, expiresAt }: { tier: string; expiresAt: Date }) {
-  return `${tier}:${expiresAt.toISOString()}`;
+function signLicence({ expiresAt }: { expiresAt: Date }) {
+  return `licence:${expiresAt.toISOString()}`;
 }
 vi.mock('@/utils/provisioning-guard', () => ({ provisioningAllowed: effects.provisioningAllowed }));
 
 const OCTOBER = new Date('2026-10-01T00:00:00Z');
 const NOVEMBER = new Date('2026-11-01T00:00:00Z');
+const DECEMBER = new Date('2026-12-01T00:00:00Z');
 
 function entitlement(overrides: Partial<EntitlementRecord> = {}): EntitlementRecord {
   return {
     customerId: 'ctm_1',
     subscriptionId: 'sub_1',
-    tier: 'pro',
     status: 'active',
     currentPeriodEndsAt: OCTOBER,
     graceStartedAt: null,
@@ -58,7 +58,7 @@ function emailSubjects(): string[] {
 
 describe('aggregateAccess', () => {
   it('is revoked when no subscription entitles the customer', () => {
-    expect(aggregateAccess([])).toEqual({ status: 'revoked', tier: null, licenceExpiresAt: null });
+    expect(aggregateAccess([])).toEqual({ status: 'revoked', licenceExpiresAt: null });
     expect(aggregateAccess([entitlement({ status: 'revoked' })]).status).toBe('revoked');
   });
 
@@ -71,14 +71,14 @@ describe('aggregateAccess', () => {
     );
   });
 
-  it('takes the highest tier and latest billing period among the entitled subscriptions only', () => {
+  it('takes the latest billing period among the entitled subscriptions only', () => {
     const access = aggregateAccess([
-      entitlement({ tier: 'starter', currentPeriodEndsAt: OCTOBER }),
-      entitlement({ tier: 'advanced', status: 'revoked', currentPeriodEndsAt: new Date('2027-01-01T00:00:00Z') }),
-      entitlement({ tier: 'pro', status: 'grace', currentPeriodEndsAt: NOVEMBER }),
+      entitlement({ currentPeriodEndsAt: OCTOBER }),
+      entitlement({ status: 'revoked', currentPeriodEndsAt: new Date('2027-01-01T00:00:00Z') }),
+      entitlement({ status: 'grace', currentPeriodEndsAt: NOVEMBER }),
     ]);
 
-    expect(access).toEqual({ status: 'active', tier: 'pro', licenceExpiresAt: NOVEMBER });
+    expect(access).toEqual({ status: 'active', licenceExpiresAt: NOVEMBER });
   });
 
   it('has no licence expiry when Paddle gave no billing period', () => {
@@ -100,12 +100,12 @@ describe('syncCustomerAccess', () => {
     await expect(entitle()).resolves.toBe('started');
 
     expect(effects.grantAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'active', tier: 'pro', githubGranted: true });
-    expect(memory.liveLicences('ctm_1')).toMatchObject([{ tier: 'pro', expiresAt: OCTOBER }]);
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'active', githubGranted: true });
+    expect(memory.liveLicences('ctm_1')).toMatchObject([{ expiresAt: OCTOBER }]);
     expect(emailSubjects()).toEqual(['Welcome to Tenantry Pro — connect GitHub to get access']);
   });
 
-  it('changes nothing for a repeated event, and re-issues the licence only when its tier or expiry changes', async () => {
+  it('changes nothing for a repeated event, and re-issues the licence only when its expiry changes', async () => {
     await entitle();
     vi.clearAllMocks();
 
@@ -114,21 +114,22 @@ describe('syncCustomerAccess', () => {
 
     // Renewal: the billing period moves on.
     await entitle({ currentPeriodEndsAt: NOVEMBER });
-    // Upgrade through a second subscription. The licence runs only as long as that subscription.
-    await entitle({ subscriptionId: 'sub_2', tier: 'advanced', currentPeriodEndsAt: OCTOBER });
+    // A second subscription ending sooner changes nothing; one ending later extends the licence.
+    await entitle({ subscriptionId: 'sub_2', currentPeriodEndsAt: OCTOBER });
+    await entitle({ subscriptionId: 'sub_3', currentPeriodEndsAt: DECEMBER });
 
     expect(memory.liveLicences('ctm_1').map((licence) => licence.jwt)).toEqual([
-      'pro:2026-10-01T00:00:00.000Z',
-      'pro:2026-11-01T00:00:00.000Z',
-      'advanced:2026-10-01T00:00:00.000Z',
+      'licence:2026-10-01T00:00:00.000Z',
+      'licence:2026-11-01T00:00:00.000Z',
+      'licence:2026-12-01T00:00:00.000Z',
     ]);
     expect(effects.grantAccess).not.toHaveBeenCalled();
     expect(effects.sendEmail).not.toHaveBeenCalled();
 
-    // Cancelling the upgrade keeps access, at the remaining tier.
-    await expect(entitle({ subscriptionId: 'sub_2', tier: 'advanced', status: 'revoked' })).resolves.toBe('unchanged');
-    expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'active', tier: 'pro' });
-    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ tier: 'pro', expiresAt: NOVEMBER });
+    // Cancelling the longest subscription keeps access, licensed to the longest one left.
+    await expect(entitle({ subscriptionId: 'sub_3', status: 'revoked' })).resolves.toBe('unchanged');
+    expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'active' });
+    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ expiresAt: NOVEMBER });
     expect(effects.revokeAccess).not.toHaveBeenCalled();
     expect(effects.sendEmail).not.toHaveBeenCalled();
   });
@@ -145,7 +146,7 @@ describe('syncCustomerAccess', () => {
 
     await expect(entitle({ status: 'revoked' })).resolves.toBe('ended');
     expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', tier: null, githubGranted: false });
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', githubGranted: false });
     expect(memory.liveLicences('ctm_1')).toEqual([]);
     expect(emailSubjects()).toEqual(['Your Tenantry Pro subscription has ended']);
   });
@@ -161,7 +162,7 @@ describe('syncCustomerAccess', () => {
     effects.provisioningAllowed.mockReturnValue(false);
 
     await expect(entitle()).resolves.toBe('started');
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'active', tier: 'pro', githubGranted: false });
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'active', githubGranted: false });
     expect(effects.grantAccess).not.toHaveBeenCalled();
     expect(memory.liveLicences('ctm_1')).toEqual([]);
     expect(effects.sendEmail).not.toHaveBeenCalled();
@@ -249,7 +250,7 @@ describe('licence issuance failures', () => {
     // The key is repaired; the next reconcile issues the licence, with no new purchase or event.
     effects.issueLicence.mockImplementation(signLicence);
     await expect(reconcileLicence()).resolves.toBe('issued');
-    expect(memory.liveLicences('ctm_1')).toMatchObject([{ tier: 'pro', expiresAt: OCTOBER }]);
+    expect(memory.liveLicences('ctm_1')).toMatchObject([{ expiresAt: OCTOBER }]);
     expect(memory.state.licenceFailures.has('ctm_1')).toBe(false);
 
     await expect(reconcileLicence()).resolves.toBe('current');
@@ -348,7 +349,6 @@ describe('grace period', () => {
 
     expect(aggregateAccess([grace], new Date('2026-10-30T23:59:59Z'))).toEqual({
       status: 'grace',
-      tier: 'pro',
       licenceExpiresAt: GRACE_ENDS,
     });
     expect(aggregateAccess([grace], GRACE_ENDS).status).toBe('revoked');
@@ -365,8 +365,8 @@ describe('grace period', () => {
 
     await expect(entitle(pastDue)).resolves.toBe('unchanged');
 
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'grace', tier: 'pro', githubGranted: true });
-    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ tier: 'pro', expiresAt: GRACE_ENDS });
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'grace', githubGranted: true });
+    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ expiresAt: GRACE_ENDS });
     expect(effects.revokeAccess).not.toHaveBeenCalled();
     expect(effects.sendEmail).not.toHaveBeenCalled();
 
@@ -386,7 +386,7 @@ describe('grace period', () => {
     await expect(syncCustomerAccess('ctm_1')).resolves.toEqual({ change: 'ended', licence: null });
 
     expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', tier: null, githubGranted: false });
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', githubGranted: false });
     expect(memory.liveLicences('ctm_1')).toEqual([]);
     expect(emailSubjects()).toEqual(['Your Tenantry Pro subscription has ended']);
   });
@@ -425,19 +425,19 @@ describe('grace period', () => {
     expect(effects.sendEmail).not.toHaveBeenCalled();
   });
 
-  it('does not let a higher tier in grace borrow a longer lower-tier subscription for its licence', async () => {
-    const annualStarterEnds = new Date('2027-06-01T00:00:00Z');
-    await entitle({ subscriptionId: 'sub_starter', tier: 'starter', currentPeriodEndsAt: annualStarterEnds });
-    await entitle({ subscriptionId: 'sub_advanced', tier: 'advanced', currentPeriodEndsAt: OCTOBER });
+  it('licenses to the longest cover when a subscription in grace sits beside a longer paid one', async () => {
+    const annualEnds = new Date('2027-06-01T00:00:00Z');
+    await entitle({ subscriptionId: 'sub_annual', currentPeriodEndsAt: annualEnds });
+    await entitle({ subscriptionId: 'sub_monthly', currentPeriodEndsAt: OCTOBER });
     vi.setSystemTime(PAST_DUE);
-    await entitle({ subscriptionId: 'sub_advanced', tier: 'advanced', ...pastDue });
+    await entitle({ subscriptionId: 'sub_monthly', ...pastDue });
 
-    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ tier: 'advanced', expiresAt: GRACE_ENDS });
+    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ expiresAt: annualEnds });
 
-    // Grace ends: access continues on the Starter subscription, licensed to its own period.
+    // Grace ends on the monthly subscription: the annual one still covers the licence as issued.
     vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
-    await expect(syncCustomerAccess('ctm_1')).resolves.toEqual({ change: 'unchanged', licence: 'issued' });
-    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ tier: 'starter', expiresAt: annualStarterEnds });
+    await expect(syncCustomerAccess('ctm_1')).resolves.toEqual({ change: 'unchanged', licence: 'current' });
+    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ expiresAt: annualEnds });
   });
 
   it('starts access again when a payment is recovered after grace ended', async () => {

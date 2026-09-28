@@ -1,4 +1,3 @@
-import { PricingTier } from '@/constants/pricing-tier';
 import {
   EntitlementRecord,
   EntitlementStatus,
@@ -37,15 +36,11 @@ import { graceEndsAt } from '@/utils/entitlements/grace';
 // Licence lifetime when Paddle gives no billing period (the validator's own grace covers renewal gaps).
 const FALLBACK_LICENCE_DAYS = 30;
 
-const TIER_ORDER: string[] = PricingTier.map((tier) => tier.id);
-
 export interface CustomerAccess {
   status: EntitlementStatus;
-  /** The highest tier among the entitled subscriptions, or null when none is entitled. */
-  tier: string | null;
   /**
-   * The latest point an entitled subscription at that tier covers: its billing period end, or for one in
-   * grace the end of grace. Null if Paddle gave no billing period.
+   * The latest point an entitled subscription covers: its billing period end, or for one in grace the end
+   * of grace. Null if Paddle gave no billing period.
    */
   licenceExpiresAt: Date | null;
 }
@@ -69,21 +64,12 @@ export function isEntitled(status: EntitlementStatus): boolean {
 export function aggregateAccess(entitlements: EntitlementRecord[], now: Date = new Date()): CustomerAccess {
   const entitled = entitlements.filter((entitlement) => entitles(entitlement, now));
 
-  if (entitled.length === 0) return { status: 'revoked', tier: null, licenceExpiresAt: null };
+  if (entitled.length === 0) return { status: 'revoked', licenceExpiresAt: null };
 
-  const tier = entitled.reduce(
-    (best, entitlement) => (TIER_ORDER.indexOf(entitlement.tier) > TIER_ORDER.indexOf(best) ? entitlement.tier : best),
-    entitled[0].tier,
-  );
-  // Only subscriptions at the licence's tier set how long it runs: a higher tier in grace, or cancelled,
-  // must not borrow a longer lower-tier subscription's period.
-  const covered = entitled
-    .filter((entitlement) => entitlement.tier === tier)
-    .flatMap((entitlement) => coveredUntil(entitlement)?.getTime() ?? []);
+  const covered = entitled.flatMap((entitlement) => coveredUntil(entitlement)?.getTime() ?? []);
 
   return {
     status: entitled.some((entitlement) => entitlement.status === 'active') ? 'active' : 'grace',
-    tier,
     licenceExpiresAt: covered.length > 0 ? new Date(Math.max(...covered)) : null,
   };
 }
@@ -105,8 +91,7 @@ function coveredUntil(entitlement: EntitlementRecord): Date | null {
 /**
  * Brings the customer's access in line with their entitlements. Grants GitHub access and sends the
  * welcome email only when access starts; revokes it, revokes the licences and sends the revocation email
- * only when it ends. While the customer stays entitled it only re-issues the licence if its tier or expiry
- * changed.
+ * only when it ends. While the customer stays entitled it only re-issues the licence if its expiry changed.
  *
  * Called by the webhook worker after one of the customer's entitlements changed (one customer's events
  * at a time), and by reconcile for every entitled customer, which ends access whose grace period is over
@@ -119,7 +104,7 @@ export async function syncCustomerAccess(customerId: string): Promise<AccessSync
   const access = aggregateAccess(await listEntitlements(customerId));
   const email = await getCustomerEmail(customerId);
 
-  const wasEntitled = isEntitled(await setCustomerAccess(customerId, access.status, access.tier));
+  const wasEntitled = isEntitled(await setCustomerAccess(customerId, access.status));
 
   if (!isEntitled(access.status)) {
     if (!wasEntitled) return { change: 'unchanged', licence: null };
@@ -177,24 +162,19 @@ async function grantGithubAccess(customerId: string) {
 
 export type LicenceOutcome = 'issued' | 'current' | 'failed';
 
-// Issues a licence for the customer's current tier, running to the latest point their entitled
-// subscriptions cover, unless the current one
-// already matches. A failure is recorded (alerting the operator when it starts a run of failures) and
+// Issues a licence running to the latest point the customer's entitled subscriptions cover, unless the
+// current one already does. A failure is recorded (alerting the operator when it starts a run of failures) and
 // reconcile retries it; success clears the record.
 async function ensureLicence(customerId: string, access: CustomerAccess): Promise<LicenceOutcome> {
   let outcome: LicenceOutcome = 'current';
 
   try {
-    const tier = access.tier as string;
     const current = await getCurrentLicence(customerId);
 
-    if (
-      current?.tier !== tier ||
-      (access.licenceExpiresAt && current.expiresAt.getTime() !== access.licenceExpiresAt.getTime())
-    ) {
+    if (!current || (access.licenceExpiresAt && current.expiresAt.getTime() !== access.licenceExpiresAt.getTime())) {
       const expiresAt = access.licenceExpiresAt ?? new Date(Date.now() + FALLBACK_LICENCE_DAYS * 24 * 60 * 60 * 1000);
-      const jwt = issueLicence({ customerId, tier, expiresAt });
-      await recordLicence({ customerId, jwt, tier, expiresAt });
+      const jwt = issueLicence({ customerId, expiresAt });
+      await recordLicence({ customerId, jwt, expiresAt });
       outcome = 'issued';
     }
   } catch (error) {

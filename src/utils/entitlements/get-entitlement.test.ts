@@ -14,7 +14,7 @@ describe('getProAccess', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-20T00:00:00Z'));
     state.tables = {
-      customer_access: { single: { tier: 'pro', status: 'grace', github_granted: true } },
+      customer_access: { single: { status: 'grace', github_granted: true } },
       // Two past-due subscriptions: access lasts until the later one's grace ends.
       entitlements: {
         list: [{ grace_started_at: '2026-10-01T00:00:00Z' }, { grace_started_at: '2026-10-05T00:00:00Z' }],
@@ -39,7 +39,7 @@ describe('getProAccess', () => {
   });
 
   it('has no grace for an active customer', async () => {
-    state.tables.customer_access = { single: { tier: 'pro', status: 'active', github_granted: true } };
+    state.tables.customer_access = { single: { status: 'active', github_granted: true } };
 
     await expect(getProAccess()).resolves.toMatchObject({ entitlement: { status: 'active', grace: null } });
   });

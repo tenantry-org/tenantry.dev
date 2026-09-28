@@ -12,7 +12,6 @@ export type EntitlementStatus = 'active' | 'grace' | 'revoked';
 export interface EntitlementRecord {
   customerId: string;
   subscriptionId: string;
-  tier: string;
   status: EntitlementStatus;
   currentPeriodEndsAt: Date | null;
   /** When the subscription became past due; set exactly while the status is 'grace' (see grace.ts). */
@@ -20,7 +19,6 @@ export interface EntitlementRecord {
 }
 
 export interface CurrentLicence {
-  tier: string;
   expiresAt: Date;
 }
 
@@ -57,7 +55,6 @@ export async function upsertEntitlement(record: EntitlementRecord): Promise<void
     {
       customer_id: record.customerId,
       subscription_id: record.subscriptionId,
-      tier: record.tier,
       status: record.status,
       current_period_ends_at: record.currentPeriodEndsAt?.toISOString() ?? null,
       grace_started_at: record.graceStartedAt?.toISOString() ?? null,
@@ -70,7 +67,7 @@ export async function upsertEntitlement(record: EntitlementRecord): Promise<void
   if (error) throw error;
 }
 
-const ENTITLEMENT_COLUMNS = 'customer_id,subscription_id,tier,status,current_period_ends_at,grace_started_at';
+const ENTITLEMENT_COLUMNS = 'customer_id,subscription_id,status,current_period_ends_at,grace_started_at';
 
 /** Returns all of a customer's entitlements, one per subscription. */
 export async function listEntitlements(customerId: string): Promise<EntitlementRecord[]> {
@@ -102,7 +99,6 @@ function toEntitlement(row: Record<string, string | null>): EntitlementRecord {
   return {
     customerId: row.customer_id as string,
     subscriptionId: row.subscription_id as string,
-    tier: row.tier as string,
     status: row.status as EntitlementStatus,
     currentPeriodEndsAt: date(row.current_period_ends_at),
     graceStartedAt: date(row.grace_started_at),
@@ -113,16 +109,11 @@ function toEntitlement(row: Record<string, string | null>): EntitlementRecord {
  * Records the customer's access (derived from all their entitlements) and returns the status it replaced,
  * 'revoked' for a customer seen for the first time. Ending access also clears `github_granted`.
  */
-export async function setCustomerAccess(
-  customerId: string,
-  status: EntitlementStatus,
-  tier: string | null,
-): Promise<EntitlementStatus> {
+export async function setCustomerAccess(customerId: string, status: EntitlementStatus): Promise<EntitlementStatus> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc('set_customer_access', {
     p_customer_id: customerId,
     p_status: status,
-    p_tier: tier,
   });
 
   if (error) throw error;
@@ -163,7 +154,7 @@ export async function getCurrentLicence(customerId: string): Promise<CurrentLice
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('licences')
-    .select('tier,expires_at')
+    .select('expires_at')
     .eq('customer_id', customerId)
     .eq('revoked', false)
     .order('issued_at', { ascending: false })
@@ -172,22 +163,16 @@ export async function getCurrentLicence(customerId: string): Promise<CurrentLice
 
   if (error) throw error;
 
-  return data ? { tier: data.tier as string, expiresAt: new Date(data.expires_at as string) } : null;
+  return data ? { expiresAt: new Date(data.expires_at as string) } : null;
 }
 
 /** Records a freshly issued licence token for a customer. */
-export async function recordLicence(params: {
-  customerId: string;
-  jwt: string;
-  tier: string;
-  expiresAt: Date;
-}): Promise<void> {
+export async function recordLicence(params: { customerId: string; jwt: string; expiresAt: Date }): Promise<void> {
   const supabase = await createClient();
 
   const { error } = await supabase.from('licences').insert({
     customer_id: params.customerId,
     jwt: params.jwt,
-    tier: params.tier,
     expires_at: params.expiresAt.toISOString(),
   });
 

@@ -13,12 +13,12 @@ insert into public.subscriptions (subscription_id, subscription_status, customer
 select has_column('public', 'entitlements', 'grace_started_at', 'entitlements record when grace started');
 
 select lives_ok(
-  $$insert into public.entitlements (customer_id, subscription_id, tier, status, grace_started_at)
-    values ('ctm_1', 'sub_1', 'pro', 'grace', now())$$,
+  $$insert into public.entitlements (customer_id, subscription_id, status, grace_started_at)
+    values ('ctm_1', 'sub_1', 'grace', now())$$,
   'a past-due entitlement in grace with its start');
 select lives_ok(
-  $$insert into public.entitlements (customer_id, subscription_id, tier, status)
-    values ('ctm_1', 'sub_2', 'pro', 'active')$$,
+  $$insert into public.entitlements (customer_id, subscription_id, status)
+    values ('ctm_1', 'sub_2', 'active')$$,
   'an active entitlement without one');
 select throws_ok(
   $$update public.entitlements set grace_started_at = null where subscription_id = 'sub_1'$$,

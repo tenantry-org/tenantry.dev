@@ -37,7 +37,7 @@ interface LicenceContract {
   note: string;
   publicKeySpki: string;
   issuedAt: string;
-  claims: { customerId: string; tier: string; seats: number; notBefore: string; expiresAt: string };
+  claims: { customerId: string; notBefore: string; expiresAt: string };
   token: string;
 }
 
@@ -66,8 +66,6 @@ function contractTestKey() {
 function toLicenceClaims(claims: LicenceContract['claims']): LicenceClaims {
   return {
     customerId: claims.customerId,
-    tier: claims.tier,
-    seats: claims.seats,
     notBefore: new Date(claims.notBefore),
     expiresAt: new Date(claims.expiresAt),
   };
@@ -103,8 +101,6 @@ describe('licence format contract with Tenantry.Pro', () => {
       const issuedAt = '2026-09-27T00:00:00.000Z';
       const claims = {
         customerId: 'ctm_contract',
-        tier: 'pro',
-        seats: 3,
         notBefore: issuedAt,
         expiresAt: '2099-01-01T00:00:00.000Z',
       };
@@ -155,7 +151,7 @@ describe('licence format contract with Tenantry.Pro', () => {
       currentDate: new Date(contract.issuedAt),
     });
 
-    expect(payload).toMatchObject({ sub: contract.claims.customerId, tier: contract.claims.tier, seats: 3 });
+    expect(payload).toMatchObject({ sub: contract.claims.customerId });
   });
 
   it('does not produce a DER-encoded signature, which a JWT library and Pro reject', async () => {

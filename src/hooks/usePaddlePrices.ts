@@ -1,12 +1,11 @@
 import { Paddle, PricePreviewParams, PricePreviewResponse } from '@paddle/paddle-js';
 import { useEffect, useState } from 'react';
-import { PricingTier } from '@/constants/pricing-tier';
+import { ProOffer } from '@/constants/pro-offer';
 
 export type PaddlePrices = Record<string, string>;
 
 function getLineItems(): PricePreviewParams['items'] {
-  const priceId = PricingTier.map((tier) => [tier.priceId.month, tier.priceId.year]);
-  return priceId.flat().map((priceId) => ({ priceId, quantity: 1 }));
+  return Object.values(ProOffer.priceId).map((priceId) => ({ priceId, quantity: 1 }));
 }
 
 function getPriceAmounts(prices: PricePreviewResponse) {

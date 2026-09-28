@@ -19,13 +19,13 @@ insert into public.customers (customer_id, email) values
   ('ctm_mixed', '  Mixed@Example.COM ');
 insert into public.subscriptions (subscription_id, subscription_status, customer_id) values
   ('sub_buyer', 'active', 'ctm_buyer');
-insert into public.entitlements (customer_id, subscription_id, tier, status) values
-  ('ctm_buyer', 'sub_buyer', 'pro', 'active');
-insert into public.customer_access (customer_id, status, tier) values
-  ('ctm_buyer', 'active', 'pro');
-insert into public.licences (customer_id, jwt, tier, expires_at) values
-  ('ctm_buyer', 'buyer-licence', 'pro', now() + interval '1 year'),
-  ('ctm_mixed', 'mixed-licence', 'pro', now() + interval '1 year');
+insert into public.entitlements (customer_id, subscription_id, status) values
+  ('ctm_buyer', 'sub_buyer', 'active');
+insert into public.customer_access (customer_id, status) values
+  ('ctm_buyer', 'active');
+insert into public.licences (customer_id, jwt, expires_at) values
+  ('ctm_buyer', 'buyer-licence', now() + interval '1 year'),
+  ('ctm_mixed', 'mixed-licence', now() + interval '1 year');
 insert into public.github_links (customer_id, github_login, github_id) values
   ('ctm_buyer', 'octocat', 42);
 

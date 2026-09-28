@@ -6,7 +6,7 @@ import {
   SubscriptionStatus,
 } from '@paddle/paddle-node-sdk';
 import { createClient } from '@/utils/supabase/server-internal';
-import { resolveTier } from '@/constants/tier-mapping';
+import { isProProduct } from '@/constants/pro-product';
 import { getEntitlement, upsertEntitlement } from '@/utils/entitlements/entitlements-store';
 import { entitlementFor } from '@/utils/entitlements/grace';
 import { syncCustomerAccess } from '@/utils/entitlements/customer-access';
@@ -56,12 +56,10 @@ export class ProcessWebhook {
       return;
     }
 
-    const tier = resolveTier(data.items[0]?.price?.productId);
-
-    if (!tier) {
+    if (!isProProduct(data.items[0]?.price?.productId)) {
       console.warn(
-        `Paddle webhook: subscription ${data.id} product is not mapped to a tier (see PADDLE_PRODUCT_TIER_MAP); ` +
-          'skipping entitlement provisioning.',
+        `Paddle webhook: subscription ${data.id} is not for the Tenantry Pro product (PADDLE_PRO_PRODUCT_ID); ` +
+          'it entitles to nothing.',
       );
       return;
     }
@@ -73,7 +71,6 @@ export class ProcessWebhook {
     await upsertEntitlement({
       customerId: data.customerId,
       subscriptionId: data.id,
-      tier,
       status: entitlement.status,
       currentPeriodEndsAt: data.currentBillingPeriod?.endsAt ? new Date(data.currentBillingPeriod.endsAt) : null,
       graceStartedAt: entitlement.graceStartedAt,

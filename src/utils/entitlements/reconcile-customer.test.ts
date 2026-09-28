@@ -22,7 +22,7 @@ vi.mock('@/utils/entitlements/entitlements-store', async () => {
 });
 vi.mock('@/utils/email/send', () => ({ sendEmail: effects.sendEmail }));
 vi.mock('@/utils/licensing/licence-issuer', () => ({
-  issueLicence: ({ tier, expiresAt }: { tier: string; expiresAt: Date }) => `${tier}:${expiresAt.toISOString()}`,
+  issueLicence: ({ expiresAt }: { expiresAt: Date }) => `licence:${expiresAt.toISOString()}`,
 }));
 vi.mock('@/utils/provisioning-guard', () => ({ provisioningAllowed: effects.provisioningAllowed }));
 
@@ -33,7 +33,6 @@ async function record(overrides: Partial<EntitlementRecord> = {}) {
   await memory.store.upsertEntitlement({
     customerId: 'ctm_1',
     subscriptionId: 'sub_1',
-    tier: 'pro',
     status: 'active',
     currentPeriodEndsAt: NOVEMBER,
     graceStartedAt: null,
@@ -110,7 +109,7 @@ describe('reconcileCustomer', () => {
     effects.provisioningAllowed.mockReturnValue(false);
     await record({ status: 'revoked' });
     await syncCustomerAccess('ctm_1');
-    await memory.store.recordLicence({ customerId: 'ctm_1', jwt: 'left-over', tier: 'pro', expiresAt: NOVEMBER });
+    await memory.store.recordLicence({ customerId: 'ctm_1', jwt: 'left-over', expiresAt: NOVEMBER });
     effects.hasAccess.mockResolvedValue(true);
 
     await expect(reconcileCustomer('ctm_1')).resolves.toMatchObject({ githubRemoved: true, licencesRevoked: true });
@@ -120,7 +119,7 @@ describe('reconcileCustomer', () => {
 
   it('restores access recorded as ended while a subscription still entitles the customer', async () => {
     await record();
-    memory.state.access.set('ctm_1', { status: 'revoked', tier: null, githubGranted: false });
+    memory.state.access.set('ctm_1', { status: 'revoked', githubGranted: false });
 
     await expect(reconcileCustomer('ctm_1')).resolves.toMatchObject({ access: 'started', licence: 'issued' });
     expect(effects.grantAccess).toHaveBeenCalledWith('octocat');
@@ -130,7 +129,7 @@ describe('reconcileCustomer', () => {
   it('throws when a step fails, so the inbox retries the job', async () => {
     await record();
     await syncCustomerAccess('ctm_1');
-    memory.state.access.set('ctm_1', { status: 'active', tier: 'pro', githubGranted: false });
+    memory.state.access.set('ctm_1', { status: 'active', githubGranted: false });
     effects.grantAccess.mockRejectedValue(new Error('GitHub unavailable'));
 
     await expect(reconcileCustomer('ctm_1')).rejects.toThrow('GitHub unavailable');

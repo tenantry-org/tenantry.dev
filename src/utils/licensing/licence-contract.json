@@ -4,10 +4,8 @@
   "issuedAt": "2026-09-27T00:00:00.000Z",
   "claims": {
     "customerId": "ctm_contract",
-    "tier": "pro",
-    "seats": 3,
     "notBefore": "2026-09-27T00:00:00.000Z",
     "expiresAt": "2099-01-01T00:00:00.000Z"
   },
-  "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJUZW5hbnRyeSIsInN1YiI6ImN0bV9jb250cmFjdCIsInRpZXIiOiJwcm8iLCJzZWF0cyI6MywiaWF0IjoxNzkwNDY3MjAwLCJuYmYiOjE3OTA0NjcyMDAsImV4cCI6NDA3MDkwODgwMH0.0-UY48eOzaevLr8YCz5ieWFuO0n_mXvTr5im1WFlbOAWzHqMq01-0Re5JyHNVBShZJzCCjUYRYsATs4GPq-9jw"
+  "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJUZW5hbnRyeSIsInN1YiI6ImN0bV9jb250cmFjdCIsImlhdCI6MTc5MDQ2NzIwMCwibmJmIjoxNzkwNDY3MjAwLCJleHAiOjQwNzA5MDg4MDB9.03eF3JNkBAIDOEZuDWf5Fj7Jp9Y-UbsYZuGandw24-aHqTShd1O89Bq9EjOvnTb7x205aXuRs2gWZ8R-jF7hjA"
 }

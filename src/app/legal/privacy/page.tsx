@@ -24,7 +24,8 @@ export default function PrivacyPage() {
           and customer identifiers, not full payment-card details.
         </li>
         <li>
-          <strong>Entitlement records:</strong> tier, status, and issued licence tokens associated with your account.
+          <strong>Entitlement records:</strong> subscription status and issued licence tokens associated with your
+          account.
         </li>
       </ul>
 
