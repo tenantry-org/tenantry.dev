@@ -104,3 +104,42 @@ export function customerEvent(options: {
     },
   } as PaddleEventJson;
 }
+
+/** An adjustment notification (a refund, credit or chargeback on a transaction). */
+export function adjustmentEvent(options: {
+  eventId: string;
+  eventType?: 'adjustment.created' | 'adjustment.updated';
+  occurredAt?: string;
+  action: 'refund' | 'credit' | 'chargeback' | 'chargeback_warning' | 'chargeback_reverse';
+  type?: 'full' | 'partial';
+  status: 'pending_approval' | 'approved' | 'rejected' | 'reversed';
+  subscriptionId?: string | null;
+  customerId?: string;
+}): PaddleEventJson {
+  const occurredAt = options.occurredAt ?? '2026-09-10T00:00:00Z';
+  const totals = { subtotal: '3900', tax: '0', total: '3900', fee: '0', earnings: '3900', currency_code: 'GBP' };
+
+  return {
+    event_id: options.eventId,
+    event_type: options.eventType ?? 'adjustment.updated',
+    occurred_at: occurredAt,
+    notification_id: `ntf_${options.eventId}`,
+    data: {
+      id: `adj_${options.eventId}`,
+      action: options.action,
+      type: options.type ?? 'full',
+      transaction_id: 'txn_01',
+      subscription_id: options.subscriptionId === undefined ? 'sub_01' : options.subscriptionId,
+      customer_id: options.customerId ?? 'ctm_01',
+      reason: 'requested by customer',
+      credit_applied_to_balance: false,
+      currency_code: 'GBP',
+      status: options.status,
+      items: [{ item_id: 'txnitm_01', type: options.type ?? 'full', amount: '3900', proration: null, totals }],
+      totals,
+      payout_totals: null,
+      created_at: occurredAt,
+      updated_at: occurredAt,
+    },
+  } as unknown as PaddleEventJson;
+}

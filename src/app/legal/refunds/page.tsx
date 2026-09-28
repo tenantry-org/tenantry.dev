@@ -4,7 +4,7 @@ export const metadata = { title: 'Refund Policy — Tenantry' };
 
 export default function RefundsPage() {
   return (
-    <LegalPage title="Refund Policy" lastUpdated="2026-06-28">
+    <LegalPage title="Refund Policy" lastUpdated="2026-09-29">
       <p>
         Tenantry Pro is sold through our merchant of record, Paddle.com. Refunds are handled in accordance with this
         policy and Paddle&apos;s buyer terms.
@@ -30,7 +30,9 @@ export default function RefundsPage() {
 
       <h2>4. Effect on access</h2>
       <p>
-        On a refund, your subscription is cancelled and access to the private repository and package feed is revoked.
+        When a full refund is approved, or a payment is charged back, your subscription is cancelled immediately and
+        your access ends: you are removed from the Tenantry GitHub organisation, which gives access to the private
+        package feed, and your licence key is revoked. A partial refund does not change your subscription or access.
       </p>
 
       <p className="text-sm text-muted-foreground">

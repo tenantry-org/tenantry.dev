@@ -1,4 +1,7 @@
 import {
+  AdjustmentAction,
+  AdjustmentActionType,
+  AdjustmentStatus,
   CustomerCreatedEvent,
   CustomerUpdatedEvent,
   EventEntity,
@@ -11,6 +14,8 @@ import { getEntitlement, upsertEntitlement } from '@/utils/entitlements/entitlem
 import { entitlementFor } from '@/utils/entitlements/grace';
 import { syncCustomerAccess } from '@/utils/entitlements/customer-access';
 import { normaliseEmail } from '@/utils/customers/email';
+import { cancelSubscriptionNow } from '@/utils/paddle/cancel-subscription';
+import { alertOperator } from '@/utils/email/alerts';
 
 // Structural view of the bits of SubscriptionNotification this handler needs.
 interface SubscriptionEventData {
@@ -20,6 +25,17 @@ interface SubscriptionEventData {
   items: { price?: { id?: string | null; productId?: string | null } | null }[];
   currentBillingPeriod: { endsAt: string } | null;
   scheduledChange: { effectiveAt?: string } | null;
+}
+
+// Structural view of the bits of AdjustmentNotification this handler needs.
+interface AdjustmentEventData {
+  id: string;
+  action: AdjustmentAction;
+  type: AdjustmentActionType;
+  status: AdjustmentStatus;
+  transactionId: string;
+  subscriptionId: string | null;
+  customerId: string;
 }
 
 export class ProcessWebhook {
@@ -43,6 +59,10 @@ export class ProcessWebhook {
       case EventName.CustomerCreated:
       case EventName.CustomerUpdated:
         await this.updateCustomerData(eventData);
+        break;
+      case EventName.AdjustmentCreated:
+      case EventName.AdjustmentUpdated:
+        await this.handleAdjustment(eventData.data as unknown as AdjustmentEventData);
         break;
     }
   }
@@ -77,6 +97,47 @@ export class ProcessWebhook {
     });
 
     await syncCustomerAccess(data.customerId);
+  }
+
+  /**
+   * Refunds and chargebacks (Paddle adjustments). Paddle does not cancel a subscription whose payment is
+   * refunded, so an approved full refund, or an approved chargeback, cancels it at once: the
+   * subscription.canceled event that follows ends access as any cancellation does. A partial refund, and a
+   * chargeback warning (which can still be reversed), change nothing but tell the operator. Credits and
+   * reversals are ignored. Throwing (Paddle unavailable) makes the worker retry.
+   */
+  private async handleAdjustment(data: AdjustmentEventData) {
+    const endsAccess =
+      data.status === 'approved' &&
+      ((data.action === 'refund' && data.type === 'full') || data.action === 'chargeback');
+
+    if (!endsAccess) {
+      if (data.status === 'approved' && ['refund', 'chargeback_warning'].includes(data.action)) {
+        await alertOperator(
+          `Paddle ${data.action.replace('_', ' ')} for customer ${data.customerId}`,
+          `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId}` +
+            `${data.subscriptionId ? `, subscription ${data.subscriptionId}` : ''}. Access is unchanged; ` +
+            'cancel the subscription in Paddle if it should end.',
+        );
+      }
+      return;
+    }
+
+    if (!data.subscriptionId) {
+      await alertOperator(
+        `Paddle ${data.action} without a subscription for customer ${data.customerId}`,
+        `Adjustment ${data.id} on transaction ${data.transactionId} names no subscription, so no access was changed.`,
+      );
+      return;
+    }
+
+    if (await cancelSubscriptionNow(data.subscriptionId)) {
+      await alertOperator(
+        `Subscription ${data.subscriptionId} cancelled after a ${data.action}`,
+        `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId} for customer ` +
+          `${data.customerId}. The subscription was cancelled immediately; its access ends when Paddle confirms.`,
+      );
+    }
   }
 
   // Returns false if a newer event for this subscription has already been applied. Throws a foreign-key

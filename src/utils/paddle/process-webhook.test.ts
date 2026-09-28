@@ -1,7 +1,7 @@
 import { Webhooks } from '@paddle/paddle-node-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaddleEventJson } from '@/utils/webhooks/inbox';
-import { subscriptionEvent } from '@/utils/testing/paddle-events';
+import { adjustmentEvent, subscriptionEvent } from '@/utils/testing/paddle-events';
 import { memory } from '@/utils/testing/memory-entitlements';
 import { ProcessWebhook } from './process-webhook';
 
@@ -27,7 +27,11 @@ const effects = vi.hoisted(() => ({
   grantAccess: vi.fn().mockResolvedValue('active'),
   revokeAccess: vi.fn(),
   sendEmail: vi.fn(),
+  cancelSubscriptionNow: vi.fn(),
+  alertOperator: vi.fn(),
 }));
+vi.mock('@/utils/paddle/cancel-subscription', () => ({ cancelSubscriptionNow: effects.cancelSubscriptionNow }));
+vi.mock('@/utils/email/alerts', () => ({ alertOperator: effects.alertOperator }));
 vi.mock('@/utils/github/provisioning', () => ({
   grantAccess: effects.grantAccess,
   revokeAccess: effects.revokeAccess,
@@ -273,6 +277,93 @@ describe('ProcessWebhook', () => {
 
       expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
       expect(effects.revokeAccess).toHaveBeenCalledWith('octocat');
+    });
+  });
+
+  describe('refunds and chargebacks', () => {
+    beforeEach(() => {
+      effects.cancelSubscriptionNow.mockResolvedValue(true);
+    });
+
+    const adjusted = (options: Parameters<typeof adjustmentEvent>[0]) =>
+      processor.processEvent(delivered(adjustmentEvent(options)));
+
+    it('cancels the subscription at once when a full refund is approved, and tells the operator', async () => {
+      await adjusted({ eventId: 'evt_refund', action: 'refund', status: 'approved' });
+
+      expect(effects.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
+      expect(effects.alertOperator).toHaveBeenCalledWith(
+        'Subscription sub_01 cancelled after a refund',
+        expect.stringContaining('full refund'),
+      );
+    });
+
+    it('waits for approval: a refund pending approval or rejected changes nothing', async () => {
+      await adjusted({
+        eventId: 'evt_pending',
+        eventType: 'adjustment.created',
+        action: 'refund',
+        status: 'pending_approval',
+      });
+      await adjusted({ eventId: 'evt_rejected', action: 'refund', status: 'rejected' });
+
+      expect(effects.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(effects.alertOperator).not.toHaveBeenCalled();
+    });
+
+    it('cancels on an approved chargeback, but only alerts on a chargeback warning', async () => {
+      await adjusted({ eventId: 'evt_warning', action: 'chargeback_warning', status: 'approved' });
+      expect(effects.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(effects.alertOperator).toHaveBeenCalledWith(
+        'Paddle chargeback warning for customer ctm_01',
+        expect.any(String),
+      );
+
+      await adjusted({ eventId: 'evt_chargeback', action: 'chargeback', status: 'approved' });
+      expect(effects.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
+    });
+
+    it('leaves access alone on a partial refund, telling the operator', async () => {
+      await adjusted({ eventId: 'evt_partial', action: 'refund', type: 'partial', status: 'approved' });
+
+      expect(effects.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(effects.alertOperator).toHaveBeenCalledWith(
+        'Paddle refund for customer ctm_01',
+        expect.stringContaining('Access is unchanged'),
+      );
+    });
+
+    it('ignores credits and reversals', async () => {
+      await adjusted({ eventId: 'evt_credit', action: 'credit', status: 'approved' });
+      await adjusted({ eventId: 'evt_reverse', action: 'chargeback_reverse', status: 'approved' });
+
+      expect(effects.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(effects.alertOperator).not.toHaveBeenCalled();
+    });
+
+    it('tells the operator about a refund with no subscription, changing nothing', async () => {
+      await adjusted({ eventId: 'evt_orphan', action: 'refund', status: 'approved', subscriptionId: null });
+
+      expect(effects.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(effects.alertOperator).toHaveBeenCalledWith(
+        'Paddle refund without a subscription for customer ctm_01',
+        expect.any(String),
+      );
+    });
+
+    it('does nothing more for a subscription already cancelled (a repeated or second refund)', async () => {
+      effects.cancelSubscriptionNow.mockResolvedValue(false);
+
+      await adjusted({ eventId: 'evt_again', action: 'refund', status: 'approved' });
+      expect(effects.alertOperator).not.toHaveBeenCalled();
+    });
+
+    it('fails the event when Paddle cannot be reached, so the worker retries it', async () => {
+      effects.cancelSubscriptionNow.mockRejectedValue(new Error('Paddle unavailable'));
+
+      await expect(adjusted({ eventId: 'evt_down', action: 'refund', status: 'approved' })).rejects.toThrow(
+        'Paddle unavailable',
+      );
     });
   });
 });
