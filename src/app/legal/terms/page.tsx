@@ -59,7 +59,7 @@ export default function TermsPage() {
       </p>
 
       <h2>8. Governing law</h2>
-      <p>These Terms are governed by the laws of [JURISDICTION], excluding its conflict-of-law rules.</p>
+      <p>These Terms are governed by the laws of England and Wales, excluding its conflict-of-law rules.</p>
 
       <h2>9. Contact</h2>
       <p>
