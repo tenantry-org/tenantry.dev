@@ -15,6 +15,8 @@ export interface EntitlementRecord {
   tier: string;
   status: EntitlementStatus;
   currentPeriodEndsAt: Date | null;
+  /** When the subscription became past due; set exactly while the status is 'grace' (see grace.ts). */
+  graceStartedAt: Date | null;
 }
 
 export interface CurrentLicence {
@@ -58,6 +60,7 @@ export async function upsertEntitlement(record: EntitlementRecord): Promise<void
       tier: record.tier,
       status: record.status,
       current_period_ends_at: record.currentPeriodEndsAt?.toISOString() ?? null,
+      grace_started_at: record.graceStartedAt?.toISOString() ?? null,
       revoked_at: record.status === 'revoked' ? now : null,
       updated_at: now,
     },
@@ -67,23 +70,43 @@ export async function upsertEntitlement(record: EntitlementRecord): Promise<void
   if (error) throw error;
 }
 
+const ENTITLEMENT_COLUMNS = 'customer_id,subscription_id,tier,status,current_period_ends_at,grace_started_at';
+
 /** Returns all of a customer's entitlements, one per subscription. */
 export async function listEntitlements(customerId: string): Promise<EntitlementRecord[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('entitlements')
-    .select('subscription_id,tier,status,current_period_ends_at')
-    .eq('customer_id', customerId);
+  const { data, error } = await supabase.from('entitlements').select(ENTITLEMENT_COLUMNS).eq('customer_id', customerId);
 
   if (error) throw error;
 
-  return ((data ?? []) as Record<string, string | null>[]).map((row) => ({
-    customerId,
+  return ((data ?? []) as Record<string, string | null>[]).map(toEntitlement);
+}
+
+/** Returns a subscription's entitlement, or null if none is recorded. */
+export async function getEntitlement(subscriptionId: string): Promise<EntitlementRecord | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('entitlements')
+    .select(ENTITLEMENT_COLUMNS)
+    .eq('subscription_id', subscriptionId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data ? toEntitlement(data as Record<string, string | null>) : null;
+}
+
+function toEntitlement(row: Record<string, string | null>): EntitlementRecord {
+  const date = (value: string | null) => (value ? new Date(value) : null);
+
+  return {
+    customerId: row.customer_id as string,
     subscriptionId: row.subscription_id as string,
     tier: row.tier as string,
     status: row.status as EntitlementStatus,
-    currentPeriodEndsAt: row.current_period_ends_at ? new Date(row.current_period_ends_at) : null,
-  }));
+    currentPeriodEndsAt: date(row.current_period_ends_at),
+    graceStartedAt: date(row.grace_started_at),
+  };
 }
 
 /**
@@ -105,6 +128,22 @@ export async function setCustomerAccess(
   if (error) throw error;
 
   return data as EntitlementStatus;
+}
+
+/** The customer's recorded access, or null for a customer never seen by syncCustomerAccess. */
+export async function getCustomerAccess(
+  customerId: string,
+): Promise<{ status: EntitlementStatus; githubGranted: boolean } | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('customer_access')
+    .select('status,github_granted')
+    .eq('customer_id', customerId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data ? { status: data.status as EntitlementStatus, githubGranted: data.github_granted as boolean } : null;
 }
 
 /** Records that the customer's GitHub account was added to the team, unless their access has since ended. */

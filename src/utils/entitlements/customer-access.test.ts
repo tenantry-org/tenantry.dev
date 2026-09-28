@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EntitlementRecord } from '@/utils/entitlements/entitlements-store';
 import { memory } from '@/utils/testing/memory-entitlements';
-import { aggregateAccess, reconcileLicence, syncCustomerAccess } from './customer-access';
+import { aggregateAccess, syncCustomerAccess } from './customer-access';
 
 const effects = vi.hoisted(() => ({
   grantAccess: vi.fn(),
@@ -36,13 +36,20 @@ function entitlement(overrides: Partial<EntitlementRecord> = {}): EntitlementRec
     tier: 'pro',
     status: 'active',
     currentPeriodEndsAt: OCTOBER,
+    graceStartedAt: null,
     ...overrides,
   };
 }
 
+/** Records an entitlement change and syncs the customer, as the webhook worker does; returns the change. */
 async function entitle(overrides: Partial<EntitlementRecord> = {}) {
   await memory.store.upsertEntitlement(entitlement(overrides));
-  return syncCustomerAccess('ctm_1');
+  return (await syncCustomerAccess('ctm_1')).change;
+}
+
+/** Syncs the customer with no new event, as reconcile does; returns what happened to the licence. */
+async function reconcileLicence() {
+  return (await syncCustomerAccess('ctm_1')).licence;
 }
 
 function emailSubjects(): string[] {
@@ -107,13 +114,13 @@ describe('syncCustomerAccess', () => {
 
     // Renewal: the billing period moves on.
     await entitle({ currentPeriodEndsAt: NOVEMBER });
-    // Upgrade through a second subscription.
+    // Upgrade through a second subscription. The licence runs only as long as that subscription.
     await entitle({ subscriptionId: 'sub_2', tier: 'advanced', currentPeriodEndsAt: OCTOBER });
 
     expect(memory.liveLicences('ctm_1').map((licence) => licence.jwt)).toEqual([
       'pro:2026-10-01T00:00:00.000Z',
       'pro:2026-11-01T00:00:00.000Z',
-      'advanced:2026-11-01T00:00:00.000Z',
+      'advanced:2026-10-01T00:00:00.000Z',
     ]);
     expect(effects.grantAccess).not.toHaveBeenCalled();
     expect(effects.sendEmail).not.toHaveBeenCalled();
@@ -131,7 +138,7 @@ describe('syncCustomerAccess', () => {
     await entitle({ subscriptionId: 'sub_2' });
     vi.clearAllMocks();
 
-    await expect(entitle({ status: 'grace' })).resolves.toBe('unchanged');
+    await expect(entitle({ status: 'grace', graceStartedAt: new Date() })).resolves.toBe('unchanged');
     await expect(entitle({ subscriptionId: 'sub_2', status: 'revoked' })).resolves.toBe('unchanged');
     expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'grace', githubGranted: true });
     expect(effects.revokeAccess).not.toHaveBeenCalled();
@@ -192,7 +199,7 @@ describe('syncCustomerAccess', () => {
     await expect(entitle()).rejects.toThrow('database unavailable');
     expect(memory.state.access.size).toBe(0);
 
-    await expect(syncCustomerAccess('ctm_1')).resolves.toBe('started');
+    await expect(syncCustomerAccess('ctm_1')).resolves.toMatchObject({ change: 'started' });
     expect(effects.grantAccess).toHaveBeenCalledOnce();
     listEntitlements.mockRestore();
   });
@@ -235,17 +242,17 @@ describe('licence issuance failures', () => {
     ]);
 
     // Reconcile retries while the key is still broken: recorded, but no second alert.
-    await expect(reconcileLicence('ctm_1')).resolves.toBe('failed');
+    await expect(reconcileLicence()).resolves.toBe('failed');
     expect(memory.state.licenceFailures.get('ctm_1')?.attempts).toBe(2);
     expect(alerts()).toHaveLength(1);
 
     // The key is repaired; the next reconcile issues the licence, with no new purchase or event.
     effects.issueLicence.mockImplementation(signLicence);
-    await expect(reconcileLicence('ctm_1')).resolves.toBe('issued');
+    await expect(reconcileLicence()).resolves.toBe('issued');
     expect(memory.liveLicences('ctm_1')).toMatchObject([{ tier: 'pro', expiresAt: OCTOBER }]);
     expect(memory.state.licenceFailures.has('ctm_1')).toBe(false);
 
-    await expect(reconcileLicence('ctm_1')).resolves.toBe('current');
+    await expect(reconcileLicence()).resolves.toBe('current');
     expect(memory.liveLicences('ctm_1')).toHaveLength(1);
     expect(alerts()).toHaveLength(1);
   });
@@ -261,7 +268,7 @@ describe('licence issuance failures', () => {
     expect(alerts()[0].html).toContain('licence storage unavailable');
     expect(alerts()).toHaveLength(1);
 
-    await expect(reconcileLicence('ctm_1')).resolves.toBe('issued');
+    await expect(reconcileLicence()).resolves.toBe('issued');
     expect(memory.state.licenceFailures.size).toBe(0);
     recordLicence.mockRestore();
   });
@@ -273,11 +280,11 @@ describe('licence issuance failures', () => {
     });
 
     await entitle({ currentPeriodEndsAt: NOVEMBER }); // renewal
-    await reconcileLicence('ctm_1');
+    await reconcileLicence();
 
     expect(alerts()).toHaveLength(1);
     effects.issueLicence.mockImplementation(signLicence);
-    await reconcileLicence('ctm_1');
+    await reconcileLicence();
     effects.issueLicence.mockImplementation(() => {
       throw new Error('signing failed');
     });
@@ -295,7 +302,7 @@ describe('licence issuance failures', () => {
       .mockRejectedValue(new Error('database unavailable'));
 
     await entitle();
-    await reconcileLicence('ctm_1');
+    await reconcileLicence();
 
     expect(alerts()).toHaveLength(2);
     recordFailure.mockRestore();
@@ -310,6 +317,142 @@ describe('licence issuance failures', () => {
     await entitle({ status: 'revoked' });
 
     expect(memory.state.licenceFailures.size).toBe(0);
-    await expect(reconcileLicence('ctm_1')).resolves.toBeNull();
+    await expect(reconcileLicence()).resolves.toBeNull();
+  });
+});
+
+describe('grace period', () => {
+  const PAST_DUE = new Date('2026-10-01T00:00:00Z');
+  const GRACE_ENDS = new Date('2026-10-31T00:00:00Z'); // 30 days later
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
+    effects.provisioningAllowed.mockReturnValue(true);
+    effects.issueLicence.mockImplementation(signLicence);
+    memory.reset();
+    memory.state.emails.set('ctm_1', 'buyer@example.com');
+    memory.state.githubLogins.set('ctm_1', 'octocat');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // The renewal on 1 October fails: Paddle moves the subscription into its next billing period, unpaid.
+  const pastDue = { status: 'grace' as const, graceStartedAt: PAST_DUE, currentPeriodEndsAt: NOVEMBER };
+
+  it('counts a subscription in grace until its grace period ends, and licenses it only that far', () => {
+    const grace = entitlement(pastDue);
+
+    expect(aggregateAccess([grace], new Date('2026-10-30T23:59:59Z'))).toEqual({
+      status: 'grace',
+      tier: 'pro',
+      licenceExpiresAt: GRACE_ENDS,
+    });
+    expect(aggregateAccess([grace], GRACE_ENDS).status).toBe('revoked');
+    expect(aggregateAccess([grace, entitlement({ subscriptionId: 'sub_2' })], GRACE_ENDS)).toMatchObject({
+      status: 'active',
+      licenceExpiresAt: OCTOBER,
+    });
+  });
+
+  it('keeps access within grace, with a licence that runs only to the end of grace', async () => {
+    await entitle();
+    vi.clearAllMocks();
+    vi.setSystemTime(PAST_DUE);
+
+    await expect(entitle(pastDue)).resolves.toBe('unchanged');
+
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'grace', tier: 'pro', githubGranted: true });
+    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ tier: 'pro', expiresAt: GRACE_ENDS });
+    expect(effects.revokeAccess).not.toHaveBeenCalled();
+    expect(effects.sendEmail).not.toHaveBeenCalled();
+
+    // Reconcile during grace changes nothing.
+    vi.setSystemTime(new Date('2026-10-20T00:00:00Z'));
+    await expect(syncCustomerAccess('ctm_1')).resolves.toEqual({ change: 'unchanged', licence: 'current' });
+  });
+
+  it('ends access when grace is over, with no event from Paddle', async () => {
+    await entitle();
+    vi.setSystemTime(PAST_DUE);
+    await entitle(pastDue);
+    vi.clearAllMocks();
+
+    // The daily reconcile after grace has ended.
+    vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
+    await expect(syncCustomerAccess('ctm_1')).resolves.toEqual({ change: 'ended', licence: null });
+
+    expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', tier: null, githubGranted: false });
+    expect(memory.liveLicences('ctm_1')).toEqual([]);
+    expect(emailSubjects()).toEqual(['Your Tenantry Pro subscription has ended']);
+  });
+
+  it('restores active access and a full-period licence when the payment is recovered within grace', async () => {
+    await entitle();
+    vi.setSystemTime(PAST_DUE);
+    await entitle(pastDue);
+    vi.clearAllMocks();
+
+    vi.setSystemTime(new Date('2026-10-10T00:00:00Z'));
+    await expect(entitle({ status: 'active', currentPeriodEndsAt: NOVEMBER })).resolves.toBe('unchanged');
+
+    expect(memory.state.access.get('ctm_1')?.status).toBe('active');
+    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ expiresAt: NOVEMBER });
+    expect(effects.revokeAccess).not.toHaveBeenCalled();
+    expect(effects.sendEmail).not.toHaveBeenCalled();
+
+    // Grace no longer applies: the recovered subscription stays entitled after the old grace end.
+    vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
+    await expect(syncCustomerAccess('ctm_1')).resolves.toMatchObject({ change: 'unchanged' });
+  });
+
+  it("keeps access through another subscription when one subscription's grace ends", async () => {
+    await entitle();
+    await entitle({ subscriptionId: 'sub_2', currentPeriodEndsAt: NOVEMBER });
+    vi.setSystemTime(PAST_DUE);
+    await entitle(pastDue);
+    vi.clearAllMocks();
+
+    vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
+    await expect(syncCustomerAccess('ctm_1')).resolves.toMatchObject({ change: 'unchanged' });
+
+    expect(memory.state.access.get('ctm_1')?.status).toBe('active');
+    expect(effects.revokeAccess).not.toHaveBeenCalled();
+    expect(effects.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('does not let a higher tier in grace borrow a longer lower-tier subscription for its licence', async () => {
+    const annualStarterEnds = new Date('2027-06-01T00:00:00Z');
+    await entitle({ subscriptionId: 'sub_starter', tier: 'starter', currentPeriodEndsAt: annualStarterEnds });
+    await entitle({ subscriptionId: 'sub_advanced', tier: 'advanced', currentPeriodEndsAt: OCTOBER });
+    vi.setSystemTime(PAST_DUE);
+    await entitle({ subscriptionId: 'sub_advanced', tier: 'advanced', ...pastDue });
+
+    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ tier: 'advanced', expiresAt: GRACE_ENDS });
+
+    // Grace ends: access continues on the Starter subscription, licensed to its own period.
+    vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
+    await expect(syncCustomerAccess('ctm_1')).resolves.toEqual({ change: 'unchanged', licence: 'issued' });
+    expect(memory.liveLicences('ctm_1').at(-1)).toMatchObject({ tier: 'starter', expiresAt: annualStarterEnds });
+  });
+
+  it('starts access again when a payment is recovered after grace ended', async () => {
+    await entitle();
+    vi.setSystemTime(PAST_DUE);
+    await entitle(pastDue);
+    vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
+    await syncCustomerAccess('ctm_1');
+    vi.clearAllMocks();
+
+    vi.setSystemTime(new Date('2026-11-02T00:00:00Z'));
+    await expect(entitle({ status: 'active', currentPeriodEndsAt: new Date('2026-12-01T00:00:00Z') })).resolves.toBe(
+      'started',
+    );
+    expect(effects.grantAccess).toHaveBeenCalledWith('octocat');
+    expect(memory.liveLicences('ctm_1')).toHaveLength(1);
   });
 });

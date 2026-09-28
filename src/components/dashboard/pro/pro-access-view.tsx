@@ -46,6 +46,26 @@ function StatusBadge({ status }: { status: string }) {
 
 const cardClass = 'bg-background/50 backdrop-blur-[24px] border-border p-6';
 
+function GraceNotice({ grace }: { grace: { endsAt: string; ended: boolean } | null }) {
+  const updatePaymentMethod = <Link href={'/dashboard/subscriptions'}>Update your payment method</Link>;
+  const ends = grace ? new Date(grace.endsAt).toLocaleDateString() : null;
+
+  if (grace?.ended) {
+    return (
+      <p className={'text-secondary text-sm'}>
+        Your last payment failed, and the 30-day grace period ended on {ends}. {updatePaymentMethod} to restore access.
+      </p>
+    );
+  }
+
+  return (
+    <p className={'text-secondary text-sm'}>
+      Your last payment failed. Your access and licence continue{ends ? ` until ${ends}` : ''} while Paddle retries it.{' '}
+      {updatePaymentMethod} to keep them.
+    </p>
+  );
+}
+
 export function ProAccessView({ access, githubOrg }: Props) {
   const { entitlement, licence, githubLogin } = access;
 
@@ -89,10 +109,11 @@ export function ProAccessView({ access, githubOrg }: Props) {
             <StatusBadge status={entitlement.status} />
           </CardTitle>
         </CardHeader>
-        <CardContent className={'p-0 pt-4'}>
+        <CardContent className={'p-0 pt-4 flex flex-col gap-3'}>
           <p className={'text-secondary'}>
             Tier: <span className={'text-primary font-medium capitalize'}>{entitlement.tier}</span>
           </p>
+          {entitlement.status === 'grace' && <GraceNotice grace={entitlement.grace} />}
         </CardContent>
       </Card>
 

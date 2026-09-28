@@ -51,7 +51,16 @@ export const memory = {
     },
 
     async upsertEntitlement(record: EntitlementRecord) {
+      // As entitlements_grace_started_check does: grace exactly when grace_started_at is set.
+      if ((record.status === 'grace') !== (record.graceStartedAt !== null)) {
+        throw { code: '23514', message: 'violates check constraint "entitlements_grace_started_check"' };
+      }
       state.entitlements.set(record.subscriptionId, { ...record });
+    },
+
+    async getEntitlement(subscriptionId: string) {
+      const entitlement = state.entitlements.get(subscriptionId);
+      return entitlement ? { ...entitlement } : null;
     },
 
     async listEntitlements(customerId: string) {
@@ -66,6 +75,11 @@ export const memory = {
         githubGranted: (previous?.githubGranted ?? false) && status !== 'revoked',
       });
       return previous?.status ?? 'revoked';
+    },
+
+    async getCustomerAccess(customerId: string) {
+      const access = state.access.get(customerId);
+      return access ? { status: access.status, githubGranted: access.githubGranted } : null;
     },
 
     async markGithubGranted(customerId: string) {

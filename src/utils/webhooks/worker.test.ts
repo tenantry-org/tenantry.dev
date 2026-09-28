@@ -76,4 +76,31 @@ describe('drainInbox', () => {
     expect(result.processed).toBe(2);
     expect(inbox.claimEvents).toHaveBeenCalledTimes(2);
   });
+
+  it('runs a reconcile job in the inbox with the reconciler instead of the Paddle processor', async () => {
+    const reconciler = vi.fn().mockResolvedValue({ access: 'ended' });
+    const job: InboxEvent = {
+      eventId: 'reconcile_ctm_1_2026-10-31T04:00:00.000Z',
+      eventType: 'tenantry.reconcile_customer',
+      customerId: 'ctm_1',
+      attempts: 1,
+      payload: {
+        event_id: 'reconcile_ctm_1_2026-10-31T04:00:00.000Z',
+        event_type: 'tenantry.reconcile_customer',
+        occurred_at: '2026-10-31T04:00:00.000Z',
+        data: { customer_id: 'ctm_1' },
+      },
+    };
+    inbox.claimEvents.mockResolvedValueOnce([job]).mockResolvedValueOnce([]);
+
+    await expect(drainInbox({ processor, reconciler })).resolves.toEqual({ processed: 1, retrying: 0, failed: 0 });
+    expect(reconciler).toHaveBeenCalledWith('ctm_1');
+    expect(processor.processEvent).not.toHaveBeenCalled();
+    expect(inbox.completeEvent).toHaveBeenCalledWith(job.eventId);
+
+    // A failing job is retried like any event.
+    reconciler.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    inbox.claimEvents.mockResolvedValueOnce([job]).mockResolvedValueOnce([]);
+    await expect(drainInbox({ processor, reconciler })).resolves.toEqual({ processed: 0, retrying: 1, failed: 0 });
+  });
 });

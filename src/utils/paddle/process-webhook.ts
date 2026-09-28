@@ -7,7 +7,8 @@ import {
 } from '@paddle/paddle-node-sdk';
 import { createClient } from '@/utils/supabase/server-internal';
 import { resolveTier } from '@/constants/tier-mapping';
-import { EntitlementStatus, upsertEntitlement } from '@/utils/entitlements/entitlements-store';
+import { getEntitlement, upsertEntitlement } from '@/utils/entitlements/entitlements-store';
+import { entitlementFor } from '@/utils/entitlements/grace';
 import { syncCustomerAccess } from '@/utils/entitlements/customer-access';
 import { normaliseEmail } from '@/utils/customers/email';
 
@@ -33,6 +34,7 @@ export class ProcessWebhook {
       case EventName.SubscriptionUpdated:
       case EventName.SubscriptionActivated:
       case EventName.SubscriptionCanceled:
+      case EventName.SubscriptionPastDue:
       case EventName.SubscriptionPaused:
       case EventName.SubscriptionResumed:
       case EventName.SubscriptionTrialing:
@@ -64,12 +66,17 @@ export class ProcessWebhook {
       return;
     }
 
+    // A past-due subscription is in grace from its first past-due event (grace.ts).
+    const previous = await getEntitlement(data.id);
+    const entitlement = entitlementFor(data.status, previous?.graceStartedAt ?? null, new Date(occurredAt));
+
     await upsertEntitlement({
       customerId: data.customerId,
       subscriptionId: data.id,
       tier,
-      status: mapStatus(data.status),
+      status: entitlement.status,
       currentPeriodEndsAt: data.currentBillingPeriod?.endsAt ? new Date(data.currentBillingPeriod.endsAt) : null,
+      graceStartedAt: entitlement.graceStartedAt,
     });
 
     await syncCustomerAccess(data.customerId);
@@ -106,21 +113,5 @@ export class ProcessWebhook {
       .select();
 
     if (error) throw error;
-  }
-}
-
-// active/trialing keep full access; past_due is a dunning state we treat as grace (access continues,
-// the runtime grace period covers it); paused/canceled revoke.
-function mapStatus(status: SubscriptionStatus): EntitlementStatus {
-  switch (status) {
-    case 'active':
-    case 'trialing':
-      return 'active';
-    case 'past_due':
-      return 'grace';
-    case 'paused':
-    case 'canceled':
-    default:
-      return 'revoked';
   }
 }

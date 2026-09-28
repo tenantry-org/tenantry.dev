@@ -1,55 +1,62 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall, FakeTable } from '@/utils/testing/fake-supabase';
 import { reconcileEntitlements } from './reconcile';
 
-const github = vi.hoisted(() => ({ grantAccess: vi.fn(), hasAccess: vi.fn(), revokeAccess: vi.fn() }));
-vi.mock('@/utils/github/provisioning', () => github);
-
-const licences = vi.hoisted(() => ({ reconcileLicence: vi.fn() }));
-vi.mock('@/utils/entitlements/customer-access', async (original) => ({
-  ...(await original<object>()),
-  reconcileLicence: licences.reconcileLicence,
-}));
+const worker = vi.hoisted(() => ({ drainInbox: vi.fn() }));
+vi.mock('@/utils/webhooks/worker', () => worker);
 
 const state = vi.hoisted(() => ({ tables: {} as Record<string, FakeTable>, calls: [] as FakeCall[] }));
-
 vi.mock('@/utils/supabase/server-internal', async () => {
   const { fakeSupabase } = await import('@/utils/testing/fake-supabase');
   return { createClient: async () => fakeSupabase(state.tables, state.calls) };
 });
 
+const NOW = new Date('2026-10-31T04:00:00Z');
+
 describe('reconcileEntitlements', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.calls.length = 0;
-    // An entitled customer with a linked GitHub account whose grant is still pending.
+    worker.drainInbox.mockResolvedValue({ processed: 3, retrying: 0, failed: 0 });
     state.tables = {
-      customer_access: { list: [{ customer_id: 'ctm_1' }], single: { status: 'active' } },
-      github_links: { single: { github_login: 'octocat' }, list: [] },
-      customers: { single: { email: 'buyer@example.com' } },
-      licences: { list: [] },
+      customer_access: { list: [{ customer_id: 'ctm_entitled' }] },
+      entitlements: { list: [{ customer_id: 'ctm_entitled' }, { customer_id: 'ctm_revoked_by_mistake' }] },
+      github_links: { list: [{ customer_id: 'ctm_linked' }] },
+      licences: { list: [{ customer_id: 'ctm_linked' }] },
     };
-    licences.reconcileLicence.mockResolvedValue('current');
   });
 
-  afterEach(() => {
-    delete process.env.PROVISIONING_MODE;
+  it('queues one reconcile job per customer who is entitled, linked or licensed, then drains the inbox', async () => {
+    await expect(reconcileEntitlements({ now: NOW, budgetMs: 45_000 })).resolves.toEqual({
+      customers: 3,
+      inbox: { processed: 3, retrying: 0, failed: 0 },
+    });
+
+    const queued = state.calls.find((call) => call.table === 'webhook_inbox' && call.method === 'upsert');
+    const [rows, options] = queued!.args as [Record<string, unknown>[], unknown];
+    expect(rows.map((row) => row.customer_id)).toEqual(['ctm_entitled', 'ctm_linked', 'ctm_revoked_by_mistake']);
+    expect(rows[0]).toEqual({
+      event_id: 'reconcile_ctm_entitled_2026-10-31T04:00:00.000Z',
+      event_type: 'tenantry.reconcile_customer',
+      occurred_at: '2026-10-31T04:00:00.000Z',
+      customer_id: 'ctm_entitled',
+      subscription_id: null,
+      payload: {
+        event_id: 'reconcile_ctm_entitled_2026-10-31T04:00:00.000Z',
+        event_type: 'tenantry.reconcile_customer',
+        occurred_at: '2026-10-31T04:00:00.000Z',
+        data: { customer_id: 'ctm_entitled' },
+      },
+    });
+    expect(options).toEqual({ onConflict: 'event_id', ignoreDuplicates: true });
+    expect(worker.drainInbox).toHaveBeenCalledWith({ budgetMs: 45_000 });
   });
 
-  it('does not grant pending access when PROVISIONING_MODE is unset', async () => {
-    const result = await reconcileEntitlements();
+  it('finds customers by their live licences and entitled subscriptions, not only their recorded access', async () => {
+    await reconcileEntitlements({ now: NOW });
 
-    expect(github.grantAccess).not.toHaveBeenCalled();
-    expect(result.granted).toEqual([]);
-  });
-
-  it('grants pending access in automated mode, and records it only while the customer is entitled', async () => {
-    process.env.PROVISIONING_MODE = 'auto';
-
-    const result = await reconcileEntitlements();
-
-    expect(github.grantAccess).toHaveBeenCalledWith('octocat');
-    expect(result.granted).toEqual(['ctm_1']);
+    expect(state.calls).toContainEqual({ table: 'licences', method: 'eq', args: ['revoked', false] });
+    expect(state.calls).toContainEqual({ table: 'entitlements', method: 'in', args: ['status', ['active', 'grace']] });
     expect(state.calls).toContainEqual({
       table: 'customer_access',
       method: 'in',
@@ -57,74 +64,11 @@ describe('reconcileEntitlements', () => {
     });
   });
 
-  it('removes a linked customer whose access has ended but who is still in the team', async () => {
-    state.tables.customer_access = { list: [], single: { status: 'revoked' } };
-    state.tables.github_links.list = [{ customer_id: 'ctm_1', github_login: 'octocat' }];
-    github.hasAccess.mockResolvedValue(true);
+  it('queues nothing when there is no one to reconcile, and still drains the inbox', async () => {
+    state.tables = {};
 
-    const result = await reconcileEntitlements();
-
-    expect(github.revokeAccess).toHaveBeenCalledWith('octocat');
-    expect(result.revoked).toEqual(['ctm_1']);
-  });
-
-  it('leaves a linked customer in the team while any of their subscriptions entitles them', async () => {
-    state.tables.customer_access = { list: [], single: { status: 'grace' } };
-    state.tables.github_links.list = [{ customer_id: 'ctm_1', github_login: 'octocat' }];
-    github.hasAccess.mockResolvedValue(true);
-
-    const result = await reconcileEntitlements();
-
-    expect(github.revokeAccess).not.toHaveBeenCalled();
-    expect(result.revoked).toEqual([]);
-  });
-
-  it('issues missing or out-of-date licences to entitled customers, only in automated mode', async () => {
-    licences.reconcileLicence.mockResolvedValue('issued');
-
-    expect((await reconcileEntitlements()).licencesIssued).toEqual([]);
-    expect(licences.reconcileLicence).not.toHaveBeenCalled();
-
-    process.env.PROVISIONING_MODE = 'auto';
-    const result = await reconcileEntitlements();
-
-    expect(licences.reconcileLicence).toHaveBeenCalledWith('ctm_1');
-    expect(result.licencesIssued).toEqual(['ctm_1']);
-  });
-
-  it('reports database errors by their message', async () => {
-    process.env.PROVISIONING_MODE = 'auto';
-    licences.reconcileLicence.mockRejectedValue({ code: '08006', message: 'connection failure' });
-
-    expect((await reconcileEntitlements()).errors).toContain('licence ctm_1: connection failure');
-  });
-
-  it('reports a licence that still cannot be issued', async () => {
-    process.env.PROVISIONING_MODE = 'auto';
-    licences.reconcileLicence.mockResolvedValue('failed');
-
-    const result = await reconcileEntitlements();
-
-    expect(result.licencesIssued).toEqual([]);
-    expect(result.errors).toContain('licence ctm_1: issuance failed (see licence_failures)');
-  });
-
-  it('revokes live licences of a customer who is not entitled, whatever the provisioning mode', async () => {
-    state.tables.customer_access = { list: [], single: { status: 'revoked' } };
-    state.tables.licences = { list: [{ customer_id: 'ctm_1' }, { customer_id: 'ctm_1' }] };
-
-    const result = await reconcileEntitlements();
-
-    expect(result.licencesRevoked).toEqual(['ctm_1']);
-    expect(state.calls).toContainEqual({ table: 'licences', method: 'update', args: [{ revoked: true }] });
-  });
-
-  it('keeps the licences of an entitled customer', async () => {
-    state.tables.licences = { list: [{ customer_id: 'ctm_1' }] };
-
-    const result = await reconcileEntitlements();
-
-    expect(result.licencesRevoked).toEqual([]);
-    expect(state.calls).not.toContainEqual(expect.objectContaining({ table: 'licences', method: 'update' }));
+    await expect(reconcileEntitlements({ now: NOW })).resolves.toMatchObject({ customers: 0 });
+    expect(state.calls).not.toContainEqual(expect.objectContaining({ table: 'webhook_inbox' }));
+    expect(worker.drainInbox).toHaveBeenCalledOnce();
   });
 });

@@ -20,6 +20,7 @@ import { accessRevokedEmail, welcomeProEmail } from '@/utils/email/templates';
 import { provisioningAllowed } from '@/utils/provisioning-guard';
 import { alertOperator } from '@/utils/email/alerts';
 import { errorMessage } from '@/utils/errors';
+import { graceEndsAt } from '@/utils/entitlements/grace';
 
 /**
  * Customer-level access. A customer can hold several subscriptions, each with its own entitlement, but
@@ -27,6 +28,10 @@ import { errorMessage } from '@/utils/errors';
  * aggregate of all the customer's entitlements (`customer_access`): access starts when the first
  * entitlement becomes active or grace, and ends only when none is left. Cancelling one of two
  * subscriptions therefore leaves the customer in the team, with a licence and no revocation email.
+ *
+ * A past-due subscription ('grace') entitles the customer only until its grace period ends (grace.ts),
+ * and its licence runs only to that point. This is decided when the access is computed, so the daily
+ * reconcile ends access once grace is over, with no event from Paddle.
  */
 
 // Licence lifetime when Paddle gives no billing period (the validator's own grace covers renewal gaps).
@@ -38,19 +43,31 @@ export interface CustomerAccess {
   status: EntitlementStatus;
   /** The highest tier among the entitled subscriptions, or null when none is entitled. */
   tier: string | null;
-  /** The latest end of an entitled subscription's billing period, or null if Paddle gave none. */
+  /**
+   * The latest point an entitled subscription at that tier covers: its billing period end, or for one in
+   * grace the end of grace. Null if Paddle gave no billing period.
+   */
   licenceExpiresAt: Date | null;
 }
 
 export type AccessChange = 'started' | 'ended' | 'unchanged';
 
+export interface AccessSync {
+  change: AccessChange;
+  /** What happened to the licence, or null when none was due (not entitled, or provisioning is manual). */
+  licence: LicenceOutcome | null;
+}
+
 export function isEntitled(status: EntitlementStatus): boolean {
   return status === 'active' || status === 'grace';
 }
 
-/** Active if any subscription is active, grace if any is in grace, otherwise revoked. */
-export function aggregateAccess(entitlements: EntitlementRecord[]): CustomerAccess {
-  const entitled = entitlements.filter((entitlement) => isEntitled(entitlement.status));
+/**
+ * Active if any subscription is active, grace if any is in grace (and its grace period has not ended by
+ * `now`), otherwise revoked.
+ */
+export function aggregateAccess(entitlements: EntitlementRecord[], now: Date = new Date()): CustomerAccess {
+  const entitled = entitlements.filter((entitlement) => entitles(entitlement, now));
 
   if (entitled.length === 0) return { status: 'revoked', tier: null, licenceExpiresAt: null };
 
@@ -58,37 +75,57 @@ export function aggregateAccess(entitlements: EntitlementRecord[]): CustomerAcce
     (best, entitlement) => (TIER_ORDER.indexOf(entitlement.tier) > TIER_ORDER.indexOf(best) ? entitlement.tier : best),
     entitled[0].tier,
   );
-  const periodEnds = entitled.flatMap((entitlement) => entitlement.currentPeriodEndsAt?.getTime() ?? []);
+  // Only subscriptions at the licence's tier set how long it runs: a higher tier in grace, or cancelled,
+  // must not borrow a longer lower-tier subscription's period.
+  const covered = entitled
+    .filter((entitlement) => entitlement.tier === tier)
+    .flatMap((entitlement) => coveredUntil(entitlement)?.getTime() ?? []);
 
   return {
     status: entitled.some((entitlement) => entitlement.status === 'active') ? 'active' : 'grace',
     tier,
-    licenceExpiresAt: periodEnds.length > 0 ? new Date(Math.max(...periodEnds)) : null,
+    licenceExpiresAt: covered.length > 0 ? new Date(Math.max(...covered)) : null,
   };
 }
 
+function entitles(entitlement: EntitlementRecord, now: Date): boolean {
+  if (entitlement.status === 'grace') {
+    return !entitlement.graceStartedAt || graceEndsAt(entitlement.graceStartedAt) > now;
+  }
+
+  return entitlement.status === 'active';
+}
+
+function coveredUntil(entitlement: EntitlementRecord): Date | null {
+  if (entitlement.status === 'grace' && entitlement.graceStartedAt) return graceEndsAt(entitlement.graceStartedAt);
+
+  return entitlement.currentPeriodEndsAt;
+}
+
 /**
- * Brings the customer's access in line with their entitlements, after one of them changed. Grants GitHub
- * access and sends the welcome email only when access starts; revokes it, revokes the licences and sends
- * the revocation email only when it ends. While the customer stays entitled it only re-issues the
- * licence if its tier or expiry changed.
+ * Brings the customer's access in line with their entitlements. Grants GitHub access and sends the
+ * welcome email only when access starts; revokes it, revokes the licences and sends the revocation email
+ * only when it ends. While the customer stays entitled it only re-issues the licence if its tier or expiry
+ * changed.
  *
- * Called by the webhook worker, which handles one customer's events at a time. Everything that can
- * throw runs before the change is recorded, so a failure is retried as a whole; after that, each side
- * effect is attempted once and a failure is logged: reconcile retries GitHub grants and removals, licence
- * issuance and revocation, and an email is not resent.
+ * Called by the webhook worker after one of the customer's entitlements changed (one customer's events
+ * at a time), and by reconcile for every entitled customer, which ends access whose grace period is over
+ * and retries licences. `set_customer_access` makes concurrent calls see each change once. Everything
+ * that can throw runs before the change is recorded, so a failure is retried as a whole; after that, each
+ * side effect is attempted once and a failure is logged: reconcile retries GitHub grants and removals,
+ * licence issuance and revocation, and an email is not resent.
  */
-export async function syncCustomerAccess(customerId: string): Promise<AccessChange> {
+export async function syncCustomerAccess(customerId: string): Promise<AccessSync> {
   const access = aggregateAccess(await listEntitlements(customerId));
   const email = await getCustomerEmail(customerId);
 
   const wasEntitled = isEntitled(await setCustomerAccess(customerId, access.status, access.tier));
 
   if (!isEntitled(access.status)) {
-    if (!wasEntitled) return 'unchanged';
+    if (!wasEntitled) return { change: 'unchanged', licence: null };
 
     await endAccess(customerId, email);
-    return 'ended';
+    return { change: 'ended', licence: null };
   }
 
   // Provisioning gate: in manual mode (PROVISIONING_MODE not 'auto') or for a customer outside the
@@ -98,16 +135,15 @@ export async function syncCustomerAccess(customerId: string): Promise<AccessChan
       `Customer access: automated provisioning is off for ${email ?? customerId} ` +
         '(PROVISIONING_MODE/PROVISION_ALLOWLIST); recording access but withholding GitHub access and licence.',
     );
-    return wasEntitled ? 'unchanged' : 'started';
+    return { change: wasEntitled ? 'unchanged' : 'started', licence: null };
   }
 
   if (wasEntitled) {
-    await ensureLicence(customerId, access);
-    return 'unchanged';
+    return { change: 'unchanged', licence: await ensureLicence(customerId, access) };
   }
 
   await grantGithubAccess(customerId);
-  await ensureLicence(customerId, access);
+  const licence = await ensureLicence(customerId, access);
 
   if (email) {
     await sendEmail(welcomeProEmail(email)); // sendEmail never throws
@@ -115,7 +151,7 @@ export async function syncCustomerAccess(customerId: string): Promise<AccessChan
     console.info(`Customer access: no email on file for customer ${customerId}; skipping the welcome email.`);
   }
 
-  return 'started';
+  return { change: 'started', licence };
 }
 
 async function grantGithubAccess(customerId: string) {
@@ -141,18 +177,8 @@ async function grantGithubAccess(customerId: string) {
 
 export type LicenceOutcome = 'issued' | 'current' | 'failed';
 
-/**
- * Makes sure an entitled customer has a licence for their access, for reconcile to retry what failed or
- * was never done (e.g. access that started while provisioning was manual). Returns null for a customer
- * who is not entitled. The caller applies the provisioning gate.
- */
-export async function reconcileLicence(customerId: string): Promise<LicenceOutcome | null> {
-  const access = aggregateAccess(await listEntitlements(customerId));
-
-  return isEntitled(access.status) ? ensureLicence(customerId, access) : null;
-}
-
-// Issues a licence for the customer's current tier and latest billing period, unless the current one
+// Issues a licence for the customer's current tier, running to the latest point their entitled
+// subscriptions cover, unless the current one
 // already matches. A failure is recorded (alerting the operator when it starts a run of failures) and
 // reconcile retries it; success clears the record.
 async function ensureLicence(customerId: string, access: CustomerAccess): Promise<LicenceOutcome> {

@@ -1,5 +1,5 @@
 import { Webhooks } from '@paddle/paddle-node-sdk';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaddleEventJson } from '@/utils/webhooks/inbox';
 import { subscriptionEvent } from '@/utils/testing/paddle-events';
 import { memory } from '@/utils/testing/memory-entitlements';
@@ -168,5 +168,79 @@ describe('ProcessWebhook', () => {
     await expect(processor.processEvent(delivered(earlierUpdate))).rejects.toMatchObject({ code: '23503' });
     expect(memory.state.entitlements.size).toBe(0);
     expect(effects.grantAccess).not.toHaveBeenCalled();
+  });
+
+  describe('payment failure', () => {
+    const renewalFailed = subscriptionEvent({
+      eventId: 'evt_past_due',
+      eventType: 'subscription.past_due',
+      occurredAt: '2026-10-01T00:05:00Z',
+      status: 'past_due',
+      periodEndsAt: '2026-11-01T00:00:00Z',
+    });
+    const retryFailed = subscriptionEvent({
+      eventId: 'evt_past_due_again',
+      occurredAt: '2026-10-08T00:05:00Z',
+      status: 'past_due',
+      periodEndsAt: '2026-11-01T00:00:00Z',
+    });
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-01T00:10:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('starts grace at the first past-due event, keeps that start, and clears it when the payment recovers', async () => {
+      await processor.processEvent(delivered(created));
+      await processor.processEvent(delivered(renewalFailed));
+
+      expect(memory.state.entitlements.get('sub_01')).toMatchObject({
+        status: 'grace',
+        graceStartedAt: new Date('2026-10-01T00:05:00Z'),
+      });
+      expect(memory.liveLicences('ctm_01').at(-1)?.expiresAt).toEqual(new Date('2026-10-31T00:05:00Z'));
+
+      vi.setSystemTime(new Date('2026-10-08T00:10:00Z'));
+      await processor.processEvent(delivered(retryFailed));
+      expect(memory.state.entitlements.get('sub_01')?.graceStartedAt).toEqual(new Date('2026-10-01T00:05:00Z'));
+
+      await processor.processEvent(
+        delivered(
+          subscriptionEvent({
+            eventId: 'evt_recovered',
+            occurredAt: '2026-10-08T12:00:00Z',
+            status: 'active',
+            periodEndsAt: '2026-11-01T00:00:00Z',
+          }),
+        ),
+      );
+      expect(memory.state.entitlements.get('sub_01')).toMatchObject({ status: 'active', graceStartedAt: null });
+      expect(memory.state.access.get('ctm_01')?.status).toBe('active');
+      expect(effects.revokeAccess).not.toHaveBeenCalled();
+    });
+
+    it('does not restore access for a past-due event processed after grace has ended', async () => {
+      await processor.processEvent(delivered(created));
+      await processor.processEvent(delivered(renewalFailed));
+
+      vi.setSystemTime(new Date('2026-11-02T00:00:00Z'));
+      await processor.processEvent(
+        delivered(
+          subscriptionEvent({
+            eventId: 'evt_past_due_late',
+            occurredAt: '2026-11-01T00:05:00Z',
+            status: 'past_due',
+            periodEndsAt: '2026-11-01T00:00:00Z',
+          }),
+        ),
+      );
+
+      expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
+      expect(effects.revokeAccess).toHaveBeenCalledWith('octocat');
+    });
   });
 });

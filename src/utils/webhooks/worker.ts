@@ -1,6 +1,7 @@
 import { Webhooks } from '@paddle/paddle-node-sdk';
 import { ProcessWebhook } from '@/utils/paddle/process-webhook';
 import { claimEvents, completeEvent, releaseWaitingEvents, retryEvent } from '@/utils/webhooks/inbox';
+import { RECONCILE_CUSTOMER_EVENT, reconcileCustomer } from '@/utils/entitlements/reconcile-customer';
 
 /** How long a claimed event stays locked: longer than processing one event can take. */
 const LOCK_SECONDS = 120;
@@ -16,14 +17,17 @@ export interface DrainResult {
  * Processes due inbox events until none are left or the time budget is spent. Runs after each webhook
  * response and from the reconcile cron, so a failed event is retried even if no further notification
  * arrives. Several drains can run at once: the claim hands each customer's events to one of them, in order.
+ * Besides Paddle's notifications the inbox holds reconcile jobs (reconcile.ts), which run in the same order.
  */
 export async function drainInbox({
   budgetMs = 30_000,
   processor = new ProcessWebhook(),
+  reconciler = reconcileCustomer,
   now = () => Date.now(),
 }: {
   budgetMs?: number;
   processor?: Pick<ProcessWebhook, 'processEvent'>;
+  reconciler?: (customerId: string) => Promise<unknown>;
   now?: () => number;
 } = {}): Promise<DrainResult> {
   const result: DrainResult = { processed: 0, retrying: 0, failed: 0 };
@@ -35,9 +39,13 @@ export async function drainInbox({
 
     for (const event of events) {
       try {
-        await processor.processEvent(
-          Webhooks.fromJson(event.payload as unknown as Parameters<typeof Webhooks.fromJson>[0]),
-        );
+        if (event.eventType === RECONCILE_CUSTOMER_EVENT) {
+          console.info(`Reconcile ${event.customerId}:`, JSON.stringify(await reconciler(event.customerId as string)));
+        } else {
+          await processor.processEvent(
+            Webhooks.fromJson(event.payload as unknown as Parameters<typeof Webhooks.fromJson>[0]),
+          );
+        }
         await completeEvent(event.eventId);
         result.processed++;
 
@@ -50,7 +58,7 @@ export async function drainInbox({
         result[outcome]++;
         const log = outcome === 'failed' ? console.error : console.warn;
         log(
-          `Paddle event ${event.eventId} (${event.eventType}) ${outcome === 'failed' ? 'failed for good' : 'will be retried'}:`,
+          `Inbox event ${event.eventId} (${event.eventType}) ${outcome === 'failed' ? 'failed for good' : 'will be retried'}:`,
           error,
         );
       }

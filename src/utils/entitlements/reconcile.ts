@@ -1,130 +1,72 @@
 import { createClient } from '@/utils/supabase/server-internal';
-import { grantAccess, hasAccess, revokeAccess } from '@/utils/github/provisioning';
-import { provisioningAllowed } from '@/utils/provisioning-guard';
-import {
-  getCustomerEmail,
-  getGithubLogin,
-  markGithubGranted,
-  revokeLicences,
-} from '@/utils/entitlements/entitlements-store';
-import { isEntitled, reconcileLicence } from '@/utils/entitlements/customer-access';
-import { errorMessage } from '@/utils/errors';
+import { RECONCILE_CUSTOMER_EVENT } from '@/utils/entitlements/reconcile-customer';
+import { DrainResult, drainInbox } from '@/utils/webhooks/worker';
 
 /**
- * Brings GitHub access and licences in line with each customer's recorded access (`customer_access`, see
- * customer-access.ts). Catches what a single webhook can miss:
- *   - a customer who linked GitHub after their access started (grant pending),
- *   - a grant or removal that failed transiently during webhook handling,
- *   - a licence that could not be issued (the failure is recorded in `licence_failures` and alerted on
- *     once), or was never issued because the customer's access started while provisioning was manual,
- *   - licences left live after access ended.
- *
- * It never starts or ends a customer's access, and sends no customer email. Idempotent and safe to run on
- * a schedule (e.g. Vercel Cron hitting /api/reconcile).
+ * The reconcile run (the daily cron, /api/reconcile): queues a reconcile job in the webhook inbox for every
+ * customer who is entitled, has a GitHub link or has a live licence, then drains the inbox. The worker runs
+ * each job (reconcile-customer.ts) in order with that customer's Paddle events and never alongside one, so
+ * reconciling cannot race a webhook: a job sees the customer's entitlements as the events before it left
+ * them. Jobs the drain does not reach, or that fail and back off, are picked up by later drains.
  */
 export interface ReconcileResult {
-  granted: string[];
-  revoked: string[];
-  licencesIssued: string[];
-  licencesRevoked: string[];
-  errors: string[];
+  customers: number;
+  inbox: DrainResult;
 }
 
-export async function reconcileEntitlements(): Promise<ReconcileResult> {
+export async function reconcileEntitlements({
+  now = new Date(),
+  budgetMs,
+}: { now?: Date; budgetMs?: number } = {}): Promise<ReconcileResult> {
+  const customerIds = await customersToReconcile();
+  await queueReconcileJobs(customerIds, now);
+
+  return { customers: customerIds.length, inbox: await drainInbox({ budgetMs }) };
+}
+
+// Everyone whose access, GitHub membership or licences might need correcting.
+async function customersToReconcile(): Promise<string[]> {
   const supabase = await createClient();
-  const result: ReconcileResult = { granted: [], revoked: [], licencesIssued: [], licencesRevoked: [], errors: [] };
+  const lookups = await Promise.all([
+    supabase.from('customer_access').select('customer_id').in('status', ['active', 'grace']),
+    supabase.from('entitlements').select('customer_id').in('status', ['active', 'grace']),
+    supabase.from('github_links').select('customer_id'),
+    supabase.from('licences').select('customer_id').eq('revoked', false),
+  ]);
 
-  // 1. Entitled (active/grace) but not yet granted, and GitHub is linked → grant.
-  const { data: pending, error: pendingError } = await supabase
-    .from('customer_access')
-    .select('customer_id')
-    .in('status', ['active', 'grace'])
-    .eq('github_granted', false);
-  if (pendingError) throw pendingError;
-
-  for (const { customer_id: customerId } of pending ?? []) {
-    try {
-      const login = await getGithubLogin(customerId);
-      if (!login) continue;
-
-      // Honour the provisioning gate (PROVISIONING_MODE + allowlist) so reconcile can't backfill a grant
-      // the webhook withheld.
-      if (!provisioningAllowed(await getCustomerEmail(customerId))) continue;
-
-      await grantAccess(login);
-      await markGithubGranted(customerId);
-      result.granted.push(customerId);
-    } catch (error) {
-      result.errors.push(`grant ${customerId}: ${errorMessage(error)}`);
-    }
+  const customerIds = new Set<string>();
+  for (const { data, error } of lookups) {
+    if (error) throw error;
+    for (const row of (data ?? []) as { customer_id: string }[]) customerIds.add(row.customer_id);
   }
 
-  // 2. Linked customers who are not entitled but are still in the team → remove them.
-  const { data: links, error: linksError } = await supabase.from('github_links').select('customer_id, github_login');
-  if (linksError) throw linksError;
+  return [...customerIds].sort();
+}
 
-  for (const link of links ?? []) {
-    try {
-      const { data: access, error } = await supabase
-        .from('customer_access')
-        .select('status')
-        .eq('customer_id', link.customer_id)
-        .maybeSingle();
-      if (error) throw error;
-      if (access && isEntitled(access.status)) continue; // still entitled
+async function queueReconcileJobs(customerIds: string[], now: Date) {
+  if (customerIds.length === 0) return;
 
-      if (await hasAccess(link.github_login)) {
-        await revokeAccess(link.github_login);
-        result.revoked.push(link.customer_id);
-      }
-    } catch (error) {
-      result.errors.push(`revoke ${link.customer_id}: ${errorMessage(error)}`);
-    }
-  }
+  const occurredAt = now.toISOString();
+  const supabase = await createClient();
+  const { error } = await supabase.from('webhook_inbox').upsert(
+    customerIds.map((customerId) => {
+      const eventId = `reconcile_${customerId}_${occurredAt}`;
+      return {
+        event_id: eventId,
+        event_type: RECONCILE_CUSTOMER_EVENT,
+        occurred_at: occurredAt,
+        customer_id: customerId,
+        subscription_id: null,
+        payload: {
+          event_id: eventId,
+          event_type: RECONCILE_CUSTOMER_EVENT,
+          occurred_at: occurredAt,
+          data: { customer_id: customerId },
+        },
+      };
+    }),
+    { onConflict: 'event_id', ignoreDuplicates: true },
+  );
 
-  // 3. Entitled customers whose licence is missing or out of date (tier or billing period) → issue it.
-  const { data: entitled, error: entitledError } = await supabase
-    .from('customer_access')
-    .select('customer_id')
-    .in('status', ['active', 'grace']);
-  if (entitledError) throw entitledError;
-
-  for (const { customer_id: customerId } of entitled ?? []) {
-    try {
-      if (!provisioningAllowed(await getCustomerEmail(customerId))) continue;
-
-      const outcome = await reconcileLicence(customerId);
-      if (outcome === 'issued') result.licencesIssued.push(customerId);
-      if (outcome === 'failed') result.errors.push(`licence ${customerId}: issuance failed (see licence_failures)`);
-    } catch (error) {
-      result.errors.push(`licence ${customerId}: ${errorMessage(error)}`);
-    }
-  }
-
-  // 4. Live licences of customers who are not entitled (a revocation that failed, or a licence issued
-  //    while their access was ending) → revoke them.
-  const { data: licensed, error: licensedError } = await supabase
-    .from('licences')
-    .select('customer_id')
-    .eq('revoked', false);
-  if (licensedError) throw licensedError;
-
-  for (const customerId of new Set((licensed ?? []).map((licence) => licence.customer_id as string))) {
-    try {
-      const { data: access, error } = await supabase
-        .from('customer_access')
-        .select('status')
-        .eq('customer_id', customerId)
-        .maybeSingle();
-      if (error) throw error;
-      if (access && isEntitled(access.status)) continue;
-
-      await revokeLicences(customerId);
-      result.licencesRevoked.push(customerId);
-    } catch (error) {
-      result.errors.push(`licence revocation ${customerId}: ${errorMessage(error)}`);
-    }
-  }
-
-  return result;
+  if (error) throw error;
 }
