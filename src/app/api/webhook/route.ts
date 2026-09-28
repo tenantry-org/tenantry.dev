@@ -1,42 +1,49 @@
-import { NextRequest } from 'next/server';
-import { ProcessWebhook } from '@/utils/paddle/process-webhook';
+import { NextRequest, after } from 'next/server';
 import { getPaddleInstance } from '@/utils/paddle/get-paddle-instance';
-import { hasProcessed, markProcessed } from '@/utils/webhooks/idempotency';
+import { enqueueEvent, PaddleEventJson } from '@/utils/webhooks/inbox';
+import { drainInbox } from '@/utils/webhooks/worker';
 import { requireEnv } from '@/utils/config/env';
 
-const webhookProcessor = new ProcessWebhook();
+// Processing runs after the response (see `after` below), within this function's time limit.
+export const maxDuration = 60;
 
-// Paddle delivers notifications here. The signature is verified with the destination secret before
-// any processing; unmarshal() rejects tampered/replayed payloads. Already-seen event ids are skipped
-// (Paddle retries at least once); successful events are recorded so duplicates are no-ops.
+// Paddle delivers notifications here and expects an answer within 5 seconds. The signature is verified
+// with the destination secret, the event is stored in the webhook inbox (a duplicate delivery changes
+// nothing), and the response goes out. The inbox is then drained after the response; the reconcile cron
+// drains it too, so an event that fails is retried even if Paddle sends nothing more.
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('paddle-signature') || '';
   const rawRequestBody = await request.text();
   // No fallback: without the secret no notification can be verified, so the request fails and Paddle retries.
-  const privateKey = requireEnv('PADDLE_NOTIFICATION_WEBHOOK_SECRET');
+  const secret = requireEnv('PADDLE_NOTIFICATION_WEBHOOK_SECRET');
+
+  if (!signature || !rawRequestBody) {
+    return Response.json({ error: 'Missing signature from header' }, { status: 400 });
+  }
 
   try {
-    if (!signature || !rawRequestBody) {
-      return Response.json({ error: 'Missing signature from header' }, { status: 400 });
-    }
+    await getPaddleInstance().webhooks.unmarshal(rawRequestBody, secret, signature);
+  } catch (error) {
+    console.warn('Paddle webhook: signature verification failed:', error);
+    return Response.json({ error: 'Invalid signature' }, { status: 400 });
+  }
 
-    const paddle = getPaddleInstance();
-    const eventData = await paddle.webhooks.unmarshal(rawRequestBody, privateKey, signature);
-    const eventName = eventData?.eventType ?? 'Unknown event';
+  try {
+    const event = JSON.parse(rawRequestBody) as PaddleEventJson;
+    const stored = await enqueueEvent(event);
 
-    if (eventData) {
-      if (await hasProcessed(eventData.eventId)) {
-        return Response.json({ status: 200, eventName, deduped: true });
+    after(async () => {
+      try {
+        await drainInbox();
+      } catch (error) {
+        console.error('Paddle webhook: draining the inbox failed; the reconcile cron will retry:', error);
       }
+    });
 
-      await webhookProcessor.processEvent(eventData);
-      await markProcessed(eventData.eventId, eventData.eventType);
-    }
-
-    return Response.json({ status: 200, eventName });
-  } catch (e) {
-    // 500 → Paddle retries. The event id is recorded only on success, so a retry reprocesses cleanly.
-    console.error('Paddle webhook processing failed:', e);
+    return Response.json({ status: 200, eventName: event.event_type, deduped: !stored });
+  } catch (error) {
+    // Not stored: a 500 makes Paddle deliver it again.
+    console.error('Paddle webhook: storing the event failed:', error);
     return Response.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

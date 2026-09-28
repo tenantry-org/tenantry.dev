@@ -1,9 +1,10 @@
 import { reconcileEntitlements } from '@/utils/entitlements/reconcile';
+import { drainInbox } from '@/utils/webhooks/worker';
 
 // Reconciliation endpoint, wired for Vercel Cron (see vercel.json). Vercel invokes scheduled jobs with
 // a GET request and an `Authorization: Bearer <CRON_SECRET>` header it injects automatically when the
 // CRON_SECRET env var is set — so this works out of the box. Manual/external triggers can POST with the
-// same bearer secret.
+// same bearer secret. It first drains the webhook inbox, which retries any event whose processing failed.
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // reconcile makes per-customer GitHub API calls; give it headroom
 
@@ -18,8 +19,9 @@ async function handle(request: Request) {
   }
 
   try {
+    const inbox = await drainInbox();
     const result = await reconcileEntitlements();
-    return Response.json({ status: 'ok', ...result });
+    return Response.json({ status: 'ok', inbox, ...result });
   } catch (error) {
     console.error('Reconcile failed:', error);
     return Response.json({ error: 'Reconcile failed' }, { status: 500 });

@@ -1,0 +1,108 @@
+import { Webhooks } from '@paddle/paddle-node-sdk';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PaddleEventJson } from '@/utils/webhooks/inbox';
+import { subscriptionEvent } from '@/utils/testing/paddle-events';
+import { ProcessWebhook } from './process-webhook';
+
+const state = vi.hoisted(() => ({
+  lastEventAt: new Map<string, string>(),
+  rpcError: null as { code: string; message: string } | null,
+}));
+
+// Stands in for record_subscription_event: applies an event unless a newer one was applied already.
+vi.mock('@/utils/supabase/server-internal', () => ({
+  createClient: async () => ({
+    rpc: async (_name: string, args: Record<string, string>) => {
+      if (state.rpcError) return { data: null, error: state.rpcError };
+      const last = state.lastEventAt.get(args.p_subscription_id);
+      if (last && new Date(last) > new Date(args.p_occurred_at)) return { data: false, error: null };
+      state.lastEventAt.set(args.p_subscription_id, args.p_occurred_at);
+      return { data: true, error: null };
+    },
+  }),
+}));
+
+const effects = vi.hoisted(() => ({
+  grantAccess: vi.fn(),
+  revokeAccess: vi.fn(),
+  upsertEntitlement: vi.fn(),
+  recordLicence: vi.fn(),
+  revokeLicences: vi.fn(),
+  sendEmail: vi.fn(),
+}));
+vi.mock('@/utils/github/provisioning', () => ({
+  grantAccess: effects.grantAccess,
+  revokeAccess: effects.revokeAccess,
+}));
+vi.mock('@/utils/entitlements/entitlements-store', () => ({
+  getCustomerEmail: async () => 'buyer@example.com',
+  getGithubLogin: async () => 'octocat',
+  upsertEntitlement: effects.upsertEntitlement,
+  recordLicence: effects.recordLicence,
+  revokeLicences: effects.revokeLicences,
+}));
+vi.mock('@/utils/email/send', () => ({ sendEmail: effects.sendEmail }));
+vi.mock('@/utils/licensing/licence-issuer', () => ({ issueLicence: () => 'licence-jwt' }));
+vi.mock('@/utils/provisioning-guard', () => ({ provisioningAllowed: () => true }));
+vi.mock('@/constants/tier-mapping', () => ({ resolveTier: () => 'pro' }));
+
+function delivered(event: PaddleEventJson) {
+  return Webhooks.fromJson(event as unknown as Parameters<typeof Webhooks.fromJson>[0]);
+}
+
+const cancelled = subscriptionEvent({
+  eventId: 'evt_cancel',
+  eventType: 'subscription.canceled',
+  occurredAt: '2026-09-28T12:00:00Z',
+  status: 'canceled',
+});
+const earlierUpdate = subscriptionEvent({
+  eventId: 'evt_update',
+  occurredAt: '2026-09-28T11:30:00Z',
+  status: 'active',
+});
+
+describe('ProcessWebhook', () => {
+  const processor = new ProcessWebhook();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    state.lastEventAt.clear();
+    state.rpcError = null;
+  });
+
+  it('keeps a cancelled subscription revoked when an older update is delivered after the cancellation', async () => {
+    await processor.processEvent(delivered(cancelled));
+
+    expect(effects.revokeAccess).toHaveBeenCalledWith('octocat');
+    expect(effects.upsertEntitlement).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'revoked' }));
+    vi.clearAllMocks();
+
+    await processor.processEvent(delivered(earlierUpdate));
+
+    expect(effects.grantAccess).not.toHaveBeenCalled();
+    expect(effects.upsertEntitlement).not.toHaveBeenCalled();
+    expect(effects.recordLicence).not.toHaveBeenCalled();
+    expect(effects.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('applies the same events in order: access granted, then revoked', async () => {
+    await processor.processEvent(delivered(earlierUpdate));
+    expect(effects.grantAccess).toHaveBeenCalledWith('octocat');
+    expect(effects.recordLicence).toHaveBeenCalledOnce();
+
+    await processor.processEvent(delivered(cancelled));
+    expect(effects.revokeAccess).toHaveBeenCalledWith('octocat');
+    expect(effects.upsertEntitlement).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'revoked' }));
+  });
+
+  it('fails a subscription event whose customer is not recorded yet, so the worker retries it', async () => {
+    state.rpcError = {
+      code: '23503',
+      message: 'violates foreign key constraint "public_subscriptions_customer_id_fkey"',
+    };
+
+    await expect(processor.processEvent(delivered(earlierUpdate))).rejects.toMatchObject({ code: '23503' });
+    expect(effects.grantAccess).not.toHaveBeenCalled();
+  });
+});

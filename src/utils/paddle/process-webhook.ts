@@ -37,6 +37,11 @@ interface SubscriptionEventData {
 }
 
 export class ProcessWebhook {
+  /**
+   * Applies one notification. Called by the inbox worker, one customer's events at a time and oldest
+   * first; a subscription event older than the last one applied to its subscription changes nothing.
+   * Throwing makes the worker retry the event later.
+   */
   async processEvent(eventData: EventEntity) {
     switch (eventData.eventType) {
       case EventName.SubscriptionCreated:
@@ -45,15 +50,14 @@ export class ProcessWebhook {
       case EventName.SubscriptionCanceled:
       case EventName.SubscriptionPaused:
       case EventName.SubscriptionResumed:
-      case EventName.SubscriptionTrialing:
-        await this.handleSubscription(eventData.data as unknown as SubscriptionEventData);
-        // Lifecycle emails fire once per transition (these events fire once; the webhook also dedupes
-        // by event id), so they don't spam on every subscription.updated.
-        await this.sendLifecycleEmail(
-          eventData.eventType,
-          (eventData.data as unknown as SubscriptionEventData).customerId,
-        );
+      case EventName.SubscriptionTrialing: {
+        const data = eventData.data as unknown as SubscriptionEventData;
+        if (!(await this.handleSubscription(data, eventData.occurredAt))) break;
+        // Lifecycle emails fire once per transition (these events fire once and the inbox stores each
+        // event once), so they don't spam on every subscription.updated.
+        await this.sendLifecycleEmail(eventData.eventType, data.customerId);
         break;
+      }
       case EventName.CustomerCreated:
       case EventName.CustomerUpdated:
         await this.updateCustomerData(eventData);
@@ -83,9 +87,13 @@ export class ProcessWebhook {
   }
 
   // Records the subscription, then reconciles the customer's entitlement, licence, and GitHub access
-  // to match the subscription's current status.
-  private async handleSubscription(data: SubscriptionEventData) {
-    await this.updateSubscriptionData(data);
+  // to match the subscription's current status. Returns false, having changed nothing, if a newer event
+  // for this subscription has already been applied (Paddle does not guarantee delivery order).
+  private async handleSubscription(data: SubscriptionEventData, occurredAt: string): Promise<boolean> {
+    if (!(await this.recordSubscriptionEvent(data, occurredAt))) {
+      console.info(`Paddle webhook: ignoring a ${data.status} event for ${data.id} older than the last one applied.`);
+      return false;
+    }
 
     const tier = resolveTier(data.items[0]?.price?.productId);
 
@@ -94,14 +102,14 @@ export class ProcessWebhook {
         `Paddle webhook: subscription ${data.id} product is not mapped to a tier (see PADDLE_PRODUCT_TIER_MAP); ` +
           'skipping entitlement provisioning.',
       );
-      return;
+      return true;
     }
 
     const status = mapStatus(data.status);
 
     if (status === 'revoked') {
       await this.revokeEntitlement(data, tier);
-      return;
+      return true;
     }
 
     // Provisioning gate: in manual mode (PROVISIONING_MODE not 'auto') or for a non-allowlisted customer,
@@ -119,10 +127,11 @@ export class ProcessWebhook {
         status,
         githubGranted: false,
       });
-      return;
+      return true;
     }
 
     await this.grantEntitlement(data, tier, status);
+    return true;
   }
 
   private async grantEntitlement(data: SubscriptionEventData, tier: string, status: EntitlementStatus) {
@@ -189,21 +198,23 @@ export class ProcessWebhook {
     }
   }
 
-  private async updateSubscriptionData(data: SubscriptionEventData) {
+  // Returns false if a newer event for this subscription has already been applied. Throws a foreign-key
+  // error if the customer has not been recorded yet, so the worker retries once customer.created arrives.
+  private async recordSubscriptionEvent(data: SubscriptionEventData, occurredAt: string): Promise<boolean> {
     const supabase = await createClient();
-    const { error } = await supabase
-      .from('subscriptions')
-      .upsert({
-        subscription_id: data.id,
-        subscription_status: data.status,
-        price_id: data.items[0]?.price?.id ?? '',
-        product_id: data.items[0]?.price?.productId ?? '',
-        scheduled_change: data.scheduledChange?.effectiveAt,
-        customer_id: data.customerId,
-      })
-      .select();
+    const { data: applied, error } = await supabase.rpc('record_subscription_event', {
+      p_subscription_id: data.id,
+      p_customer_id: data.customerId,
+      p_status: data.status,
+      p_price_id: data.items[0]?.price?.id ?? '',
+      p_product_id: data.items[0]?.price?.productId ?? '',
+      p_scheduled_change: data.scheduledChange?.effectiveAt ?? null,
+      p_occurred_at: occurredAt,
+    });
 
     if (error) throw error;
+
+    return applied === true;
   }
 
   private async updateCustomerData(eventData: CustomerCreatedEvent | CustomerUpdatedEvent) {
