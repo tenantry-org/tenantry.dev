@@ -8,6 +8,7 @@ import {
 } from 'crypto';
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { jwtVerify } from 'jose';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { issueLicence, type LicenceClaims } from './licence-issuer';
 
@@ -17,7 +18,9 @@ import { issueLicence, type LicenceClaims } from './licence-issuer';
  * `licence-contract.json` holds a token signed by `issueLicence` with a TEST key, the claims it was signed
  * with, and the test public key. An identical copy lives in the Pro repo
  * (tests/Tenantry.Pro.Tests/Licensing/Fixtures/licence-contract.json), where the real LicenseValidator must
- * accept the token and reject a P1363 re-signature. So a format change on either side breaks a test:
+ * accept the token and reject the same signature DER-encoded. The token is a standard ES256 JWT (the
+ * signature is r‖s, as RFC 7518 §3.4 requires), which a JWT library verifies here. So a format change on
+ * either side breaks a test:
  *   - here, if `issueLicence` changes its header, claims, serialisation or signature encoding;
  *   - in Pro, if the validator stops accepting what the site signs.
  *
@@ -137,21 +140,33 @@ describe('licence format contract with Tenantry.Pro', () => {
     expect(payload).toBe(contractPayload);
   });
 
-  it('signs with a DER-encoded ES256 signature, which is what Pro verifies', () => {
+  it('signs with the JWS-standard r‖s (IEEE P1363) ES256 signature, which is what Pro verifies', () => {
     const token = issueAt(contract.issuedAt, contract.claims);
 
-    expect(verifies(token, 'der')).toBe(true);
-    expect(verifies(contract.token, 'der')).toBe(true);
+    expect(verifies(token, 'ieee-p1363')).toBe(true);
+    expect(verifies(contract.token, 'ieee-p1363')).toBe(true);
   });
 
-  it('does not produce the JOSE-standard P1363 signature, which Pro rejects', () => {
-    const [header, payload] = contract.token.split('.');
-    const p1363 = cryptoSign('sha256', Buffer.from(`${header}.${payload}`, 'ascii'), {
-      key: contractTestKey().privateKey,
-      dsaEncoding: 'ieee-p1363',
+  it('is a standard JWT: a JWT library verifies the contract token', async () => {
+    const { payload } = await jwtVerify(contract.token, contractTestKey().publicKey, {
+      algorithms: ['ES256'],
+      issuer: 'Tenantry',
+      currentDate: new Date(contract.issuedAt),
     });
 
-    expect(verifies(contract.token, 'ieee-p1363')).toBe(false);
-    expect(verifies(`${header}.${payload}.${base64Url(p1363)}`, 'der')).toBe(false);
+    expect(payload).toMatchObject({ sub: contract.claims.customerId, tier: contract.claims.tier, seats: 3 });
+  });
+
+  it('does not produce a DER-encoded signature, which a JWT library and Pro reject', async () => {
+    const [header, payload] = contract.token.split('.');
+    const der = cryptoSign('sha256', Buffer.from(`${header}.${payload}`, 'ascii'), {
+      key: contractTestKey().privateKey,
+      dsaEncoding: 'der',
+    });
+    const derToken = `${header}.${payload}.${base64Url(der)}`;
+
+    expect(verifies(contract.token, 'der')).toBe(false);
+    expect(verifies(derToken, 'ieee-p1363')).toBe(false);
+    await expect(jwtVerify(derToken, contractTestKey().publicKey, { algorithms: ['ES256'] })).rejects.toThrow();
   });
 });

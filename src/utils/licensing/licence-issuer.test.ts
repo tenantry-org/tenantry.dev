@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { generateKeyPairSync, verify as cryptoVerify } from 'crypto';
+import { generateKeyPairSync } from 'crypto';
+import { jwtVerify } from 'jose';
 import { issueLicence } from './licence-issuer';
 
 function base64UrlDecode(segment: string): Buffer {
@@ -11,23 +12,21 @@ function base64UrlDecode(segment: string): Buffer {
 const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 
 describe('issueLicence', () => {
-  it('produces a DER-signed ES256 JWT that verifies against the matching public key', () => {
+  it('produces a standard ES256 JWT that a JWT library verifies against the matching public key', async () => {
     const token = issueLicence(
       { customerId: 'ctm_123', tier: 'pro', seats: 5, expiresAt: new Date(Date.now() + 3_600_000) },
       privateKey,
     );
 
-    const [header, payload, signature] = token.split('.');
+    const { payload, protectedHeader } = await jwtVerify(token, publicKey, {
+      algorithms: ['ES256'],
+      issuer: 'Tenantry',
+    });
 
-    // Verify with dsaEncoding 'der' — the exact format Tenantry.Pro's validator expects.
-    const ok = cryptoVerify(
-      'sha256',
-      Buffer.from(`${header}.${payload}`, 'ascii'),
-      { key: publicKey, dsaEncoding: 'der' },
-      base64UrlDecode(signature),
-    );
-
-    expect(ok).toBe(true);
+    expect(protectedHeader).toEqual({ alg: 'ES256', typ: 'JWT' });
+    expect(payload.sub).toBe('ctm_123');
+    // RFC 7518 §3.4: an ES256 signature is r‖s, two 32-byte integers.
+    expect(base64UrlDecode(token.split('.')[2])).toHaveLength(64);
   });
 
   it('writes the expected claims', () => {

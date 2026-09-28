@@ -3,11 +3,10 @@ import { createPrivateKey, KeyObject, sign as cryptoSign } from 'crypto';
 /**
  * Mints Tenantry.Pro licence keys.
  *
- * IMPORTANT — non-standard signature format. Tenantry.Pro's `LicenseValidator` verifies the ES256
- * signature as a DER sequence (`DSASignatureFormat.Rfc3279DerSequence`), NOT the JOSE-standard raw
- * r‖s (P1363) that libraries like `jose` emit. We therefore sign with Node's crypto using
- * `dsaEncoding: 'der'` and must NOT swap in a generic JWT library. The keypair and this exact format
- * were verified end-to-end against the validator's crypto path before launch.
+ * A licence is a standard JWS/JWT signed with ES256 (RFC 7518 §3.4): the signature is the 64-byte r‖s
+ * concatenation (IEEE P1363), which Node's crypto produces with `dsaEncoding: 'ieee-p1363'` and which any
+ * JWT library verifies. Tenantry.Pro's `LicenseValidator` verifies exactly this encoding, and
+ * `licence-contract.json` pins it between the two repos.
  *
  * The private key lives ONLY in the portal's secret store as `LICENCE_SIGNING_PRIVATE_KEY`
  * (PKCS#8 PEM). The matching public half is embedded in the published `Tenantry.Pro` package.
@@ -46,7 +45,7 @@ function loadSigningKey(): KeyObject {
 }
 
 /**
- * Signs a Tenantry.Pro licence (ES256 / DER) and returns the compact JWT string.
+ * Signs a Tenantry.Pro licence (ES256) and returns the compact JWT string.
  *
  * @param claims The licence claims.
  * @param signingKey Optional pre-loaded key (used in tests). Defaults to `LICENCE_SIGNING_PRIVATE_KEY`.
@@ -69,8 +68,8 @@ export function issueLicence(claims: LicenceClaims, signingKey?: KeyObject): str
   );
 
   const signingInput = `${header}.${payload}`;
-  // dsaEncoding: 'der' is REQUIRED to match Tenantry.Pro's validator (see file header).
-  const signature = cryptoSign('sha256', Buffer.from(signingInput, 'ascii'), { key, dsaEncoding: 'der' });
+  // JWS ES256 signatures are r‖s (IEEE P1363), not Node's default DER encoding.
+  const signature = cryptoSign('sha256', Buffer.from(signingInput, 'ascii'), { key, dsaEncoding: 'ieee-p1363' });
 
   return `${signingInput}.${base64Url(signature)}`;
 }
