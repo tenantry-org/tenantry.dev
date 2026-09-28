@@ -5,15 +5,11 @@ import { BillingFrequency, IBillingFrequency } from '@/constants/billing-frequen
 import { Environments, initializePaddle, Paddle } from '@paddle/paddle-js';
 import { usePaddlePrices } from '@/hooks/usePaddlePrices';
 
-interface Props {
-  country: string;
-}
-
-export function Pricing({ country }: Props) {
+export function Pricing() {
   const [frequency, setFrequency] = useState<IBillingFrequency>(BillingFrequency[0]);
   const [paddle, setPaddle] = useState<Paddle | undefined>(undefined);
 
-  const { prices, loading } = usePaddlePrices(paddle, country);
+  const { prices, loading } = usePaddlePrices(paddle);
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN && process.env.NEXT_PUBLIC_PADDLE_ENV) {

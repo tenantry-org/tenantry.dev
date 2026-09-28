@@ -15,25 +15,19 @@ function getPriceAmounts(prices: PricePreviewResponse) {
   }, {} as PaddlePrices);
 }
 
-export function usePaddlePrices(
-  paddle: Paddle | undefined,
-  country: string,
-): { prices: PaddlePrices; loading: boolean } {
+/**
+ * The Pro offer's prices for the visitor. No address is passed, so Paddle localises them (currency and
+ * tax) from the visitor's IP address, as the checkout does.
+ */
+export function usePaddlePrices(paddle: Paddle | undefined): { prices: PaddlePrices; loading: boolean } {
   const [prices, setPrices] = useState<PaddlePrices>({});
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const paddlePricePreviewRequest: Partial<PricePreviewParams> = {
-      items: getLineItems(),
-      ...(country !== 'OTHERS' && { address: { countryCode: country } }),
-    };
-
-    setLoading(true);
-
-    paddle?.PricePreview(paddlePricePreviewRequest as PricePreviewParams).then((prices) => {
-      setPrices((prevState) => ({ ...prevState, ...getPriceAmounts(prices) }));
+    paddle?.PricePreview({ items: getLineItems() } as PricePreviewParams).then((prices) => {
+      setPrices(getPriceAmounts(prices));
       setLoading(false);
     });
-  }, [country, paddle]);
+  }, [paddle]);
   return { prices, loading };
 }

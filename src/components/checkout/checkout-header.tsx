@@ -1,7 +1,7 @@
+import { Wordmark } from '@/components/shared/wordmark';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 
 export function CheckoutHeader() {
   return (
@@ -11,7 +11,7 @@ export function CheckoutHeader() {
           <ChevronLeft />
         </Button>
       </Link>
-      <Image src={'/logo.svg'} alt={'AeroEdit'} width={131} height={28} />
+      <Wordmark />
     </div>
   );
 }
