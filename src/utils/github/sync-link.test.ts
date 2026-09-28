@@ -2,13 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall } from '@/utils/testing/fake-supabase';
 import { syncGithubLinkForCurrentUser } from './sync-link';
 
-const github = vi.hoisted(() => ({ grantAccess: vi.fn() }));
+const github = vi.hoisted(() => ({ grantAccess: vi.fn(), revokeAccess: vi.fn() }));
 vi.mock('@/utils/github/provisioning', () => github);
 
 const state = vi.hoisted(() => ({
   user: null as Record<string, unknown> | null,
   accessStatus: 'active',
   calls: [] as FakeCall[],
+  /** The customer's current link, and the customer (if any) already holding the signing-in GitHub id. */
+  previousLink: null as { github_login: string; github_id: number } | null,
+  holder: null as { customer_id: string } | null,
+  linkWriteError: undefined as { code: string; message: string } | undefined,
+  failLookup: false,
 }));
 
 function signedInUser(overrides: Record<string, unknown> = {}) {
@@ -34,6 +39,13 @@ vi.mock('@/utils/supabase/server-internal', async () => {
         {
           customers: { single: { customer_id: 'ctm_1' } },
           customer_access: { single: { status: state.accessStatus } },
+          github_links: {
+            single: (filters: Record<string, unknown>) => {
+              if (state.failLookup) throw new Error('database unavailable');
+              return 'github_id' in filters ? state.holder : state.previousLink;
+            },
+            writeError: state.linkWriteError,
+          },
         },
         state.calls,
       ),
@@ -46,6 +58,10 @@ describe('syncGithubLinkForCurrentUser', () => {
     state.user = signedInUser();
     state.accessStatus = 'active';
     state.calls.length = 0;
+    state.previousLink = null;
+    state.holder = null;
+    state.linkWriteError = undefined;
+    state.failLookup = false;
   });
 
   afterEach(() => {
@@ -133,6 +149,91 @@ describe('syncGithubLinkForCurrentUser', () => {
       table: 'github_links',
       method: 'upsert',
       args: [{ customer_id: 'ctm_1', github_login: 'octocat', github_id: 42 }, { onConflict: 'customer_id' }],
+    });
+  });
+
+  describe('account linking', () => {
+    beforeEach(() => {
+      process.env.PROVISIONING_MODE = 'auto';
+      github.grantAccess.mockResolvedValue('active');
+    });
+
+    const linkWrites = () => state.calls.filter((call) => call.table === 'github_links' && call.method === 'upsert');
+
+    it('removes the previous GitHub account from the team before linking a different one', async () => {
+      state.previousLink = { github_login: 'old-account', github_id: 7 };
+
+      await expect(syncGithubLinkForCurrentUser()).resolves.toMatchObject({ linked: true, granted: true });
+
+      expect(github.revokeAccess).toHaveBeenCalledExactlyOnceWith('old-account');
+      expect(github.revokeAccess.mock.invocationCallOrder[0]).toBeLessThan(
+        github.grantAccess.mock.invocationCallOrder[0],
+      );
+      expect(state.calls).toContainEqual(
+        expect.objectContaining({
+          table: 'customer_access',
+          method: 'update',
+          args: [expect.objectContaining({ github_state: 'none', github_invited_at: null })],
+        }),
+      );
+      expect(linkWrites()).toHaveLength(1);
+    });
+
+    it('keeps access for a renamed account: same GitHub id, new login', async () => {
+      state.previousLink = { github_login: 'octocat-old-name', github_id: 42 };
+
+      await expect(syncGithubLinkForCurrentUser()).resolves.toMatchObject({ linked: true, granted: true });
+      expect(github.revokeAccess).not.toHaveBeenCalled();
+      expect(linkWrites()[0].args[0]).toMatchObject({ github_login: 'octocat', github_id: 42 });
+    });
+
+    it('keeps the old link when the previous account cannot be removed, so the user can retry', async () => {
+      state.previousLink = { github_login: 'old-account', github_id: 7 };
+      github.revokeAccess.mockRejectedValueOnce(new Error('GitHub unavailable'));
+
+      await expect(syncGithubLinkForCurrentUser()).resolves.toEqual({
+        linked: false,
+        granted: false,
+        reason: 'relink-failed',
+      });
+      expect(linkWrites()).toEqual([]);
+      expect(github.grantAccess).not.toHaveBeenCalled();
+    });
+
+    it('refuses a GitHub account that is linked to another customer, and grants nothing', async () => {
+      state.holder = { customer_id: 'ctm_other' };
+
+      await expect(syncGithubLinkForCurrentUser()).resolves.toEqual({
+        linked: false,
+        granted: false,
+        reason: 'github-account-linked-elsewhere',
+      });
+      expect(linkWrites()).toEqual([]);
+      expect(github.revokeAccess).not.toHaveBeenCalled();
+      expect(github.grantAccess).not.toHaveBeenCalled();
+    });
+
+    it('refuses the account when another customer links it at the same moment (unique github_id)', async () => {
+      state.linkWriteError = { code: '23505', message: 'duplicate key value violates unique constraint' };
+
+      await expect(syncGithubLinkForCurrentUser()).resolves.toMatchObject({
+        linked: false,
+        reason: 'github-account-linked-elsewhere',
+      });
+      expect(github.grantAccess).not.toHaveBeenCalled();
+    });
+
+    it('returns a failure instead of throwing when something unexpected fails', async () => {
+      state.failLookup = true;
+      const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await expect(syncGithubLinkForCurrentUser()).resolves.toEqual({
+        linked: false,
+        granted: false,
+        reason: 'sync-failed',
+      });
+      expect(log).toHaveBeenCalled();
+      log.mockRestore();
     });
   });
 });

@@ -118,6 +118,18 @@ describe('validateServerConfig', () => {
     ]);
   });
 
+  it("keeps a sandbox server off production's GitHub org and database", () => {
+    expect(problems(environment('sandbox', { GITHUB_ORG: 'Tenantry-Org' }))).toEqual([
+      expect.stringContaining("GITHUB_ORG is production's org"),
+    ]);
+    expect(
+      problems(environment('sandbox', { NEXT_PUBLIC_SUPABASE_URL: 'https://xoqqgenzhqefyeyzahim.supabase.co/' })),
+    ).toEqual([expect.stringContaining("NEXT_PUBLIC_SUPABASE_URL is production's database")]);
+    expect(
+      problems(environment('production', { NEXT_PUBLIC_SUPABASE_URL: 'https://xoqqgenzhqefyeyzahim.supabase.co' })),
+    ).toEqual([]);
+  });
+
   it('needs both Pro prices, as distinct Paddle price ids', () => {
     expect(problems(environment('sandbox', { NEXT_PUBLIC_PADDLE_PRICE_YEARLY: undefined }))).toEqual([
       expect.stringContaining('NEXT_PUBLIC_PADDLE_PRICE_YEARLY is not set'),

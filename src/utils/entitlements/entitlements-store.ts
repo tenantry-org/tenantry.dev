@@ -153,6 +153,17 @@ export async function getCustomerAccess(customerId: string): Promise<CustomerAcc
     : null;
 }
 
+/** Forgets the customer's GitHub state, when their access moves to another GitHub account (relink). */
+export async function resetGithubState(customerId: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('customer_access')
+    .update({ github_state: 'none', github_invited_at: null, updated_at: new Date().toISOString() })
+    .eq('customer_id', customerId);
+
+  if (error) throw error;
+}
+
 /**
  * Records the outcome of a GitHub grant or membership check, unless the customer's access has since ended
  * (ending it resets the state, and the grant is then removed). 'invited' starts the invitation's clock.

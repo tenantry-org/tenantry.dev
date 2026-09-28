@@ -9,6 +9,14 @@ import { parseProProductId } from '@/constants/pro-product';
 export const PRODUCTION_LICENCE_PUBLIC_KEY =
   'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdSVQSNqR05D60p4aCn6RzJnyGHMz0S2iwuT9Ekf6Z0/q92jpkcoCZRUKQjZ6Od7zCSazkaD5FXJz8YxAKKc/jA==';
 
+/**
+ * Production's GitHub org and Supabase project. A sandbox server must use neither, so a sandbox purchase
+ * (free, with test cards) can never add anyone to the real customer team or write to real customers'
+ * records. Each environment has its own services (D6); this makes a misconfiguration fail at startup.
+ */
+export const PRODUCTION_GITHUB_ORG = 'tenantry-org';
+export const PRODUCTION_SUPABASE_URL = 'https://xoqqgenzhqefyeyzahim.supabase.co';
+
 export type PaddleEnvironment = 'sandbox' | 'production';
 
 export class ServerConfigError extends Error {
@@ -82,6 +90,19 @@ export function validateServerConfig(
   }
 
   checkSigningKey(value('LICENCE_SIGNING_PRIVATE_KEY'), paddleEnvironment, productionLicencePublicKey, problems);
+
+  if (paddleEnvironment === 'sandbox') {
+    if (value('GITHUB_ORG')?.toLowerCase() === PRODUCTION_GITHUB_ORG) {
+      problems.push(
+        `GITHUB_ORG is production's org (${PRODUCTION_GITHUB_ORG}): a sandbox purchase would grant real access`,
+      );
+    }
+    if (value('NEXT_PUBLIC_SUPABASE_URL')?.replace(/\/+$/, '') === PRODUCTION_SUPABASE_URL) {
+      problems.push(
+        "NEXT_PUBLIC_SUPABASE_URL is production's database: sandbox events would write real customers' records",
+      );
+    }
+  }
 
   if (paddleEnvironment === 'production') {
     required('NEXT_PUBLIC_SITE_URL', 'redirects and emails need the public site URL');

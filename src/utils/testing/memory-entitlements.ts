@@ -88,6 +88,13 @@ export const memory = {
       return access ? { ...access } : null;
     },
 
+    async resetGithubState(customerId: string) {
+      const access = state.access.get(customerId);
+      if (!access) return;
+      access.githubState = 'none';
+      access.githubInvitedAt = null;
+    },
+
     async setGithubState(customerId: string, githubState: Exclude<GithubState, 'none'>) {
       const access = state.access.get(customerId);
       if (!access || access.status === 'revoked') return;

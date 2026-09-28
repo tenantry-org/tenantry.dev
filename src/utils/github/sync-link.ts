@@ -3,6 +3,8 @@ import { createClient as createServiceClient } from '@/utils/supabase/server-int
 import { provisioningAllowed } from '@/utils/provisioning-guard';
 import { confirmedEmail } from '@/utils/customers/email';
 import { grantAndRecord, isEntitled } from '@/utils/entitlements/customer-access';
+import { resetGithubState } from '@/utils/entitlements/entitlements-store';
+import { revokeAccess } from '@/utils/github/provisioning';
 
 /**
  * Reconciles the signed-in user's GitHub identity into `github_links` and, if their customer is entitled
@@ -13,7 +15,19 @@ import { grantAndRecord, isEntitled } from '@/utils/entitlements/customer-access
  * Reads identity with the user-scoped client; writes with the service-role client (RLS has no
  * INSERT/UPDATE policy for authenticated users). The user is matched to a customer by their confirmed
  * email only: anyone can sign up with a purchaser's address, but only the purchaser can confirm it.
+ *
+ * One GitHub account belongs to at most one customer, so an account already linked to another customer is
+ * refused. Linking a different account than before first removes the previous one from the team (and
+ * cancels its invitation), so a relink cannot leave two accounts with access. Never throws: failures are
+ * logged and returned as a reason, which the portal shows.
  */
+/** Link outcomes the portal explains to the customer (`/dashboard/pro?error=<reason>`). */
+export const LINK_ERRORS = ['github-account-linked-elsewhere', 'relink-failed', 'sync-failed'] as const;
+
+export function isLinkError(reason: string | undefined): reason is (typeof LINK_ERRORS)[number] {
+  return (LINK_ERRORS as readonly string[]).includes(reason ?? '');
+}
+
 export interface SyncResult {
   linked: boolean;
   /** Added to the team, or sent an org invitation to accept (`invited`). */
@@ -23,6 +37,15 @@ export interface SyncResult {
 }
 
 export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
+  try {
+    return await syncGithubLink();
+  } catch (error) {
+    console.error('GitHub link sync failed:', error);
+    return { linked: false, granted: false, reason: 'sync-failed' };
+  }
+}
+
+async function syncGithubLink(): Promise<SyncResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -56,10 +79,35 @@ export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
 
   if (!customerId) return { linked: false, granted: false, reason: 'no-customer' };
 
+  const [{ data: previous, error: previousError }, { data: holder, error: holderError }] = await Promise.all([
+    service.from('github_links').select('github_login,github_id').eq('customer_id', customerId).maybeSingle(),
+    service.from('github_links').select('customer_id').eq('github_id', githubId).maybeSingle(),
+  ]);
+
+  if (previousError) throw previousError;
+  if (holderError) throw holderError;
+  if (holder && holder.customer_id !== customerId) {
+    return { linked: false, granted: false, reason: 'github-account-linked-elsewhere' };
+  }
+
+  // A different GitHub account than before (not a renamed one: the id is stable across renames). Remove
+  // the previous account first; if that fails, keep the old link so the user can retry.
+  if (previous && Number(previous.github_id) !== githubId) {
+    try {
+      await revokeAccess(previous.github_login as string);
+      await resetGithubState(customerId);
+    } catch (error) {
+      console.error(`Could not remove the previous GitHub account of customer ${customerId}:`, error);
+      return { linked: false, granted: false, reason: 'relink-failed' };
+    }
+  }
+
   const { error: linkError } = await service
     .from('github_links')
     .upsert({ customer_id: customerId, github_login: login, github_id: githubId }, { onConflict: 'customer_id' });
 
+  // A concurrent link of the same account to another customer loses the race on github_id's unique index.
+  if (linkError?.code === '23505') return { linked: false, granted: false, reason: 'github-account-linked-elsewhere' };
   if (linkError) throw linkError;
 
   // Grant immediately if the customer is entitled (by any of their subscriptions).

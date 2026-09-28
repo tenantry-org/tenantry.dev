@@ -5,7 +5,10 @@
  */
 export interface FakeTable {
   list?: unknown[];
+  /** The row `maybeSingle()` gives, or a function of the chain's `eq` filters (column → value). */
   single?: unknown;
+  /** The error a write (update, upsert, insert, delete) on this table resolves with. */
+  writeError?: { code: string; message: string };
 }
 
 /** A builder call, recorded when `fakeSupabase` is given a `calls` array. */
@@ -15,7 +18,9 @@ export interface FakeCall {
   args: unknown[];
 }
 
-type Result = { data: unknown; error: null };
+type Result = { data: unknown; error: unknown };
+
+const WRITES = new Set(['update', 'upsert', 'insert', 'delete']);
 
 export function fakeSupabase(
   tables: Record<string, FakeTable>,
@@ -28,16 +33,31 @@ export function fakeSupabase(
       return { data: rpcs[name]?.(args) ?? null, error: null };
     },
     from(table: string) {
-      // A settled promise carrying the builder's methods, so awaiting the chain gives the table's list.
-      const listed: Promise<Result> = Promise.resolve({ data: tables[table]?.list ?? [], error: null });
-      const chain = listed as Promise<Result> & Record<string, unknown>;
+      const filters: Record<string, unknown> = {};
+      let wrote = false;
+      // A thenable carrying the builder's methods, so awaiting the chain gives the table's list (or, after
+      // a write, the table's write error).
+      const chain: Record<string, unknown> = {
+        then(resolve: (result: Result) => unknown, reject?: (reason: unknown) => unknown) {
+          const writeError = wrote ? (tables[table]?.writeError ?? null) : null;
+          const result: Result = writeError
+            ? { data: null, error: writeError }
+            : { data: tables[table]?.list ?? [], error: null };
+          return Promise.resolve(result).then(resolve, reject);
+        },
+      };
       for (const method of ['select', 'eq', 'gt', 'in', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
         chain[method] = (...args: unknown[]) => {
           calls?.push({ table, method, args });
+          if (method === 'eq') filters[args[0] as string] = args[1];
+          if (WRITES.has(method)) wrote = true;
           return chain;
         };
       }
-      chain.maybeSingle = async (): Promise<Result> => ({ data: tables[table]?.single ?? null, error: null });
+      chain.maybeSingle = async (): Promise<Result> => {
+        const single = tables[table]?.single;
+        return { data: (typeof single === 'function' ? single(filters) : single) ?? null, error: null };
+      };
       return chain;
     },
   };

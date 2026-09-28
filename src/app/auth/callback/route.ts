@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { syncGithubLinkForCurrentUser } from '@/utils/github/sync-link';
+import { isLinkError, syncGithubLinkForCurrentUser } from '@/utils/github/sync-link';
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -13,12 +13,9 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       // If this OAuth round-trip carried a GitHub identity, record the link and grant access when
-      // entitled. Best-effort: a failure here must not block sign-in.
-      try {
-        await syncGithubLinkForCurrentUser();
-      } catch (syncError) {
-        console.error('GitHub link sync failed after OAuth callback:', syncError);
-      }
+      // entitled. It never throws, so it cannot block sign-in; a link the portal must explain goes there.
+      const { reason } = await syncGithubLinkForCurrentUser();
+      if (isLinkError(reason)) return NextResponse.redirect(`${origin}/dashboard/pro?error=${reason}`);
 
       return NextResponse.redirect(`${origin}${next}`);
     }

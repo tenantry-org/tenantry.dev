@@ -13,7 +13,18 @@ import { ProOffer } from '@/constants/pro-offer';
 interface Props {
   access: ProAccess;
   githubOrg: string;
+  /** Why connecting GitHub failed (`?error=` from the link flow), if it did. */
+  linkError?: string;
 }
+
+const LINK_ERROR_TEXT: Record<string, string> = {
+  'github-account-linked-elsewhere':
+    'That GitHub account is already connected to another Tenantry customer. Connect a different account, or contact support@tenantry.dev.',
+  'relink-failed':
+    'We could not remove your previous GitHub account from the Tenantry org, so the new one was not connected. Try again in a moment.',
+  'sync-failed': 'Connecting GitHub failed. Try again in a moment; if it keeps failing, contact support@tenantry.dev.',
+  'github-link': 'GitHub did not complete the connection. Try again in a moment.',
+};
 
 function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -114,7 +125,7 @@ function GraceNotice({ grace }: Readonly<{ grace: { endsAt: string; ended: boole
   );
 }
 
-export function ProAccessView({ access, githubOrg }: Props) {
+export function ProAccessView({ access, githubOrg, linkError }: Props) {
   const { entitlement, licence, githubLogin } = access;
 
   const nugetConfig = `<configuration>
@@ -171,6 +182,11 @@ export function ProAccessView({ access, githubOrg }: Props) {
           <CardTitle>GitHub access</CardTitle>
         </CardHeader>
         <CardContent className={'p-0 pt-4 flex flex-col gap-3'}>
+          {linkError && LINK_ERROR_TEXT[linkError] && (
+            <p role={'alert'} className={'text-sm text-red-400'}>
+              {LINK_ERROR_TEXT[linkError]}
+            </p>
+          )}
           {githubLogin ? (
             <>
               <p className={'text-secondary'}>

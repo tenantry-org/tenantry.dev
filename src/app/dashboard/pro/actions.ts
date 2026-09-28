@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
-import { syncGithubLinkForCurrentUser } from '@/utils/github/sync-link';
+import { isLinkError, syncGithubLinkForCurrentUser } from '@/utils/github/sync-link';
 
 async function siteOrigin(): Promise<string> {
   if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
@@ -31,7 +31,8 @@ export async function connectGithub() {
   const alreadyHasGithub = user?.identities?.some((identity) => identity.provider === 'github');
 
   if (alreadyHasGithub) {
-    await syncGithubLinkForCurrentUser();
+    const { reason } = await syncGithubLinkForCurrentUser();
+    if (isLinkError(reason)) redirect(`/dashboard/pro?error=${reason}`);
     revalidatePath('/dashboard/pro');
     return;
   }
