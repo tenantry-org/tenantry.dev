@@ -21,6 +21,7 @@ function environment(paddleEnvironment: 'sandbox' | 'production', overrides: Rec
     NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon',
     SUPABASE_SERVICE_ROLE_KEY: 'service',
     PADDLE_API_KEY: 'paddle',
+    NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: 'test_client_token',
     PADDLE_NOTIFICATION_WEBHOOK_SECRET: 'webhook',
     CRON_SECRET: 'cron',
     GITHUB_ORG: paddleEnvironment === 'production' ? 'tenantry-org' : 'tenantry-sandbox',
@@ -58,6 +59,7 @@ describe('validateServerConfig', () => {
 
   it('throws for a misconfigured production environment, listing every problem', () => {
     const env = environment('production', {
+      NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: undefined,
       GITHUB_ORG: undefined,
       GITHUB_TEAM: ' ',
       PADDLE_PRODUCT_TIER_MAP: undefined,
@@ -67,6 +69,7 @@ describe('validateServerConfig', () => {
 
     expect(() => validateServerConfig(env, productionKey.spki)).toThrow(ServerConfigError);
     expect(problems(env)).toEqual([
+      expect.stringContaining('NEXT_PUBLIC_PADDLE_CLIENT_TOKEN is not set'),
       expect.stringContaining('GITHUB_ORG is not set'),
       expect.stringContaining('GITHUB_TEAM is not set'),
       expect.stringContaining('PADDLE_PRODUCT_TIER_MAP is not set'),

@@ -48,6 +48,7 @@ export function validateServerConfig(
   required('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'the site cannot reach its database');
   required('SUPABASE_SERVICE_ROLE_KEY', 'webhooks and provisioning cannot write');
   required('PADDLE_API_KEY', 'the Paddle API cannot be called');
+  required('NEXT_PUBLIC_PADDLE_CLIENT_TOKEN', 'Paddle checkout cannot load, so nothing can be bought');
   required('PADDLE_NOTIFICATION_WEBHOOK_SECRET', 'Paddle webhooks cannot be verified');
   required('CRON_SECRET', 'the reconcile job cannot be authorised');
   required('GITHUB_ORG', 'there is no default org, so provisioning cannot fall back to another environment’s');
