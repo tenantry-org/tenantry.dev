@@ -54,9 +54,10 @@ export function aggregateAccess(entitlements: EntitlementRecord[]): CustomerAcce
 
   if (entitled.length === 0) return { status: 'revoked', tier: null, licenceExpiresAt: null };
 
-  const tier = entitled
-    .map((entitlement) => entitlement.tier)
-    .reduce((best, candidate) => (TIER_ORDER.indexOf(candidate) > TIER_ORDER.indexOf(best) ? candidate : best));
+  const tier = entitled.reduce(
+    (best, entitlement) => (TIER_ORDER.indexOf(entitlement.tier) > TIER_ORDER.indexOf(best) ? entitlement.tier : best),
+    entitled[0].tier,
+  );
   const periodEnds = entitled.flatMap((entitlement) => entitlement.currentPeriodEndsAt?.getTime() ?? []);
 
   return {

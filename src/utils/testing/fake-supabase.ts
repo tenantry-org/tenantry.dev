@@ -28,7 +28,9 @@ export function fakeSupabase(
       return { data: rpcs[name]?.(args) ?? null, error: null };
     },
     from(table: string) {
-      const chain: Record<string, unknown> = {};
+      // A settled promise carrying the builder's methods, so awaiting the chain gives the table's list.
+      const listed: Promise<Result> = Promise.resolve({ data: tables[table]?.list ?? [], error: null });
+      const chain = listed as Promise<Result> & Record<string, unknown>;
       for (const method of ['select', 'eq', 'gt', 'in', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
         chain[method] = (...args: unknown[]) => {
           calls?.push({ table, method, args });
@@ -36,7 +38,6 @@ export function fakeSupabase(
         };
       }
       chain.maybeSingle = async (): Promise<Result> => ({ data: tables[table]?.single ?? null, error: null });
-      chain.then = (resolve: (value: Result) => unknown) => resolve({ data: tables[table]?.list ?? [], error: null });
       return chain;
     },
   };
