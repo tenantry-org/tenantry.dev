@@ -10,8 +10,13 @@
  *
  * Source resolution (first that exists wins), per group:
  *   - env override: CORE_DOCS_DIR / PRO_DOCS_DIR
- *   - sibling checkout: ../tenantry-core/docs, ../tenantry-pro/docs   (local dev)
- *   - git submodule:    content/_src/core/docs, content/_src/pro/docs (CI / production)
+ *   - sibling checkout: ../tenantry-core/docs, ../tenantry-pro/docs   (local dev only)
+ *   - git submodule:    content/_src/core/docs, content/_src/pro/docs
+ *
+ * The submodules pin released docs: Core's repository at a release tag, and for Pro the public
+ * tenantry-pro-docs repository, which each Pro release publishes to (Vercel cannot fetch the private Pro
+ * repository). On Vercel and in CI only the submodules are read, so a build never publishes a working
+ * copy's unreleased docs, and a missing source fails the build instead of shipping without those docs.
  *
  * Run with: pnpm sync:docs
  */
@@ -21,6 +26,7 @@ import { fileURLToPath } from 'url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = resolve(here, '..');
+const releaseBuild = Boolean(process.env.VERCEL || process.env.CI);
 
 const groups = [
   {
@@ -80,8 +86,12 @@ function orderPages(slugs) {
 }
 
 function resolveSource(group) {
-  if (process.env[group.envVar]) return resolve(process.env[group.envVar]);
-  for (const candidate of group.candidates) {
+  if (process.env[group.envVar]) {
+    const override = resolve(process.env[group.envVar]);
+    return existsSync(override) ? override : null;
+  }
+  const candidates = releaseBuild ? group.candidates.filter((c) => c.startsWith('content/')) : group.candidates;
+  for (const candidate of candidates) {
     const abs = resolve(siteRoot, candidate);
     if (existsSync(abs)) return abs;
   }
@@ -144,9 +154,12 @@ for (const group of groups) {
   const outDir = join(siteRoot, 'content', 'docs', group.name);
 
   if (!source) {
-    console.warn(
-      `sync-docs: no source found for "${group.name}" (set ${group.envVar} or add the submodule). Skipping.`,
-    );
+    const message = `sync-docs: no source found for "${group.name}" (set ${group.envVar} or add the submodule).`;
+    if (releaseBuild) {
+      console.error(`${message} Run \`git submodule update --init\`; a build without these docs would publish none.`);
+      process.exit(1);
+    }
+    console.warn(`${message} Skipping.`);
     continue;
   }
 
@@ -175,6 +188,7 @@ for (const group of groups) {
 
 // Root docs landing + top-level nav order.
 const docsRoot = join(siteRoot, 'content', 'docs');
+mkdirSync(docsRoot, { recursive: true });
 writeFileSync(
   join(docsRoot, 'index.mdx'),
   `---
