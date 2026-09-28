@@ -46,7 +46,7 @@ function StatusBadge({ status }: { status: string }) {
 
 const cardClass = 'bg-background/50 backdrop-blur-[24px] border-border p-6';
 
-function GraceNotice({ grace }: { grace: { endsAt: string; ended: boolean } | null }) {
+function GraceNotice({ grace }: Readonly<{ grace: { endsAt: string; ended: boolean } | null }>) {
   const updatePaymentMethod = <Link href={'/dashboard/subscriptions'}>Update your payment method</Link>;
   const ends = grace ? new Date(grace.endsAt).toLocaleDateString() : null;
 

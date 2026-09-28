@@ -1,6 +1,6 @@
 import { Webhooks } from '@paddle/paddle-node-sdk';
 import { ProcessWebhook } from '@/utils/paddle/process-webhook';
-import { claimEvents, completeEvent, releaseWaitingEvents, retryEvent } from '@/utils/webhooks/inbox';
+import { claimEvents, completeEvent, type InboxEvent, releaseWaitingEvents, retryEvent } from '@/utils/webhooks/inbox';
 import { RECONCILE_CUSTOMER_EVENT, reconcileCustomer } from '@/utils/entitlements/reconcile-customer';
 
 /** How long a claimed event stays locked: longer than processing one event can take. */
@@ -19,17 +19,17 @@ export interface DrainResult {
  * arrives. Several drains can run at once: the claim hands each customer's events to one of them, in order.
  * Besides Paddle's notifications the inbox holds reconcile jobs (reconcile.ts), which run in the same order.
  */
+interface Handlers {
+  processor: Pick<ProcessWebhook, 'processEvent'>;
+  reconciler: (customerId: string) => Promise<unknown>;
+}
+
 export async function drainInbox({
   budgetMs = 30_000,
   processor = new ProcessWebhook(),
   reconciler = reconcileCustomer,
   now = () => Date.now(),
-}: {
-  budgetMs?: number;
-  processor?: Pick<ProcessWebhook, 'processEvent'>;
-  reconciler?: (customerId: string) => Promise<unknown>;
-  now?: () => number;
-} = {}): Promise<DrainResult> {
+}: Partial<Handlers> & { budgetMs?: number; now?: () => number } = {}): Promise<DrainResult> {
   const result: DrainResult = { processed: 0, retrying: 0, failed: 0 };
   const deadline = now() + budgetMs;
 
@@ -38,32 +38,39 @@ export async function drainInbox({
     if (events.length === 0) break;
 
     for (const event of events) {
-      try {
-        if (event.eventType === RECONCILE_CUSTOMER_EVENT) {
-          console.info(`Reconcile ${event.customerId}:`, JSON.stringify(await reconciler(event.customerId as string)));
-        } else {
-          await processor.processEvent(
-            Webhooks.fromJson(event.payload as unknown as Parameters<typeof Webhooks.fromJson>[0]),
-          );
-        }
-        await completeEvent(event.eventId);
-        result.processed++;
-
-        // Their subscription events may have been waiting for this customer to exist.
-        if (event.eventType.startsWith('customer.') && event.customerId) {
-          await releaseWaitingEvents(event.customerId);
-        }
-      } catch (error) {
-        const outcome = await retryEvent(event, error);
-        result[outcome]++;
-        const log = outcome === 'failed' ? console.error : console.warn;
-        log(
-          `Inbox event ${event.eventId} (${event.eventType}) ${outcome === 'failed' ? 'failed for good' : 'will be retried'}:`,
-          error,
-        );
-      }
+      result[await handleEvent(event, { processor, reconciler })]++;
     }
   }
 
   return result;
+}
+
+// Processes one claimed event and completes it, or schedules a retry (or gives up) if it fails.
+async function handleEvent(event: InboxEvent, handlers: Handlers): Promise<keyof DrainResult> {
+  try {
+    await runEvent(event, handlers);
+    await completeEvent(event.eventId);
+
+    // Their subscription events may have been waiting for this customer to exist.
+    if (event.eventType.startsWith('customer.') && event.customerId) {
+      await releaseWaitingEvents(event.customerId);
+    }
+
+    return 'processed';
+  } catch (error) {
+    const outcome = await retryEvent(event, error);
+    const log = outcome === 'failed' ? console.error : console.warn;
+    const fate = outcome === 'failed' ? 'failed for good' : 'will be retried';
+    log(`Inbox event ${event.eventId} (${event.eventType}) ${fate}:`, error);
+    return outcome;
+  }
+}
+
+async function runEvent(event: InboxEvent, { processor, reconciler }: Handlers) {
+  if (event.eventType === RECONCILE_CUSTOMER_EVENT) {
+    console.info(`Reconcile ${event.customerId}:`, JSON.stringify(await reconciler(event.customerId as string)));
+    return;
+  }
+
+  await processor.processEvent(Webhooks.fromJson(event.payload as unknown as Parameters<typeof Webhooks.fromJson>[0]));
 }

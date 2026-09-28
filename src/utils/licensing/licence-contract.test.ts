@@ -119,6 +119,7 @@ describe('licence format contract with Tenantry.Pro', () => {
       };
 
       writeFileSync(fixturePath, `${JSON.stringify(contract, null, 2)}\n`);
+      expect(JSON.parse(readFileSync(fixturePath, 'utf8'))).toEqual(contract);
     });
 
     return;

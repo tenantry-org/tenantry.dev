@@ -18,5 +18,5 @@ export async function alertOperator(subject: string, detail: string): Promise<vo
 }
 
 function escapeHtml(text: string): string {
-  return text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
+  return text.replace(/[&<>"']/g, (character) => `&#${character.codePointAt(0)};`);
 }

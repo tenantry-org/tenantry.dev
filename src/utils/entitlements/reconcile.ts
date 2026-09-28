@@ -40,7 +40,7 @@ async function customersToReconcile(): Promise<string[]> {
     for (const row of (data ?? []) as { customer_id: string }[]) customerIds.add(row.customer_id);
   }
 
-  return [...customerIds].sort();
+  return [...customerIds].sort((a, b) => a.localeCompare(b));
 }
 
 async function queueReconcileJobs(customerIds: string[], now: Date) {

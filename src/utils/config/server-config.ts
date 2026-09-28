@@ -1,4 +1,4 @@
-import { createPrivateKey, createPublicKey } from 'crypto';
+import { createPrivateKey, createPublicKey } from 'node:crypto';
 import { parseTierMap } from '@/constants/tier-mapping';
 
 /**
@@ -13,7 +13,8 @@ export type PaddleEnvironment = 'sandbox' | 'production';
 
 export class ServerConfigError extends Error {
   constructor(readonly problems: string[]) {
-    super(`The server configuration is invalid:\n${problems.map((problem) => `  - ${problem}`).join('\n')}`);
+    const list = problems.map((problem) => `  - ${problem}`).join('\n');
+    super(`The server configuration is invalid:\n${list}`);
     this.name = 'ServerConfigError';
   }
 }
@@ -38,10 +39,8 @@ export function validateServerConfig(
 
   const paddleEnvironment = value('NEXT_PUBLIC_PADDLE_ENV');
   if (paddleEnvironment !== 'sandbox' && paddleEnvironment !== 'production') {
-    problems.push(
-      `NEXT_PUBLIC_PADDLE_ENV must be "sandbox" or "production" (it is ${paddleEnvironment ? `"${paddleEnvironment}"` : 'not set'}); ` +
-        'there is no default',
-    );
+    const actual = paddleEnvironment ? `"${paddleEnvironment}"` : 'not set';
+    problems.push(`NEXT_PUBLIC_PADDLE_ENV must be "sandbox" or "production" (it is ${actual}); there is no default`);
   }
 
   required('NEXT_PUBLIC_SUPABASE_URL', 'the site cannot reach its database');

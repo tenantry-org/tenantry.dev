@@ -1,5 +1,7 @@
 import type * as EntitlementsStore from '@/utils/entitlements/entitlements-store';
-import type { EntitlementRecord, EntitlementStatus } from '@/utils/entitlements/entitlements-store';
+
+type EntitlementRecord = EntitlementsStore.EntitlementRecord;
+type EntitlementStatus = EntitlementsStore.EntitlementStatus;
 
 /**
  * In-memory stand-in for entitlements-store.ts, for tests that follow a customer's access through several
@@ -53,7 +55,9 @@ export const memory = {
     async upsertEntitlement(record: EntitlementRecord) {
       // As entitlements_grace_started_check does: grace exactly when grace_started_at is set.
       if ((record.status === 'grace') !== (record.graceStartedAt !== null)) {
-        throw { code: '23514', message: 'violates check constraint "entitlements_grace_started_check"' };
+        throw Object.assign(new Error('violates check constraint "entitlements_grace_started_check"'), {
+          code: '23514',
+        });
       }
       state.entitlements.set(record.subscriptionId, { ...record });
     },
