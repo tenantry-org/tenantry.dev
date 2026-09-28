@@ -44,7 +44,8 @@ export function CheckoutContents({ userEmail }: Props) {
             frameTarget: 'paddle-checkout-frame',
             frameInitialHeight: 450,
             frameStyle: 'width: 100%; background-color: transparent; border: none',
-            successUrl: '/checkout/success',
+            // Paddle needs an absolute URL; a relative one is rejected and the buyer is not redirected.
+            successUrl: `${window.location.origin}/checkout/success`,
           },
         },
       }).then(async (paddle) => {

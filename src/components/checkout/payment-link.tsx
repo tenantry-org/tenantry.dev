@@ -20,7 +20,9 @@ export function PaymentLink() {
     initializePaddle({
       token,
       environment: process.env.NEXT_PUBLIC_PADDLE_ENV as Environments,
-      checkout: { settings: { displayMode: 'overlay', theme: 'dark', successUrl: '/checkout/success' } },
+      checkout: {
+        settings: { displayMode: 'overlay', theme: 'dark', successUrl: `${window.location.origin}/checkout/success` },
+      },
     });
   }, [transactionId]);
 
