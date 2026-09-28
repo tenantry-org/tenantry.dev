@@ -1,4 +1,4 @@
-import { membershipOf, revokeAccess } from '@/utils/github/provisioning';
+import { hasPendingInvitation, membershipOf, revokeAccess } from '@/utils/github/provisioning';
 import { provisioningAllowed } from '@/utils/provisioning-guard';
 import {
   CustomerAccessRecord,
@@ -54,6 +54,7 @@ export interface CustomerReconciliation {
  *     that failed during webhook handling,
  *   - an org invitation that was accepted (recorded as a member from then on), or that GitHub dropped
  *     after 7 days unaccepted, or a member removed from the team while still entitled (invited again),
+ *   - a removal that failed part-way, such as an invitation left pending after leaving the team,
  *   - licences left live after access ended.
  *
  * Every step is idempotent, so a job that throws is retried by the inbox with backoff.
@@ -109,8 +110,10 @@ async function reconcileGrant(
 }
 
 // A customer who is not entitled must not be in the team, or hold an invitation they could still accept.
+// The invitation is checked even without a membership: a removal that failed between leaving the team and
+// cancelling the invitation leaves only the invitation.
 async function reconcileRemoval(githubLogin: string): Promise<GithubReconciliation> {
-  if ((await membershipOf(githubLogin)) === null) return 'unchanged';
+  if ((await membershipOf(githubLogin)) === null && !(await hasPendingInvitation(githubLogin))) return 'unchanged';
 
   await revokeAccess(githubLogin);
   return 'removed';

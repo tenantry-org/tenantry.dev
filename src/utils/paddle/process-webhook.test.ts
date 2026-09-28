@@ -1,23 +1,27 @@
 import { Webhooks } from '@paddle/paddle-node-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaddleEventJson } from '@/utils/webhooks/inbox';
-import { adjustmentEvent, subscriptionEvent } from '@/utils/testing/paddle-events';
+import { adjustmentEvent, customerEvent, subscriptionEvent } from '@/utils/testing/paddle-events';
 import { memory } from '@/utils/testing/memory-entitlements';
 import { ProcessWebhook } from './process-webhook';
 
 const state = vi.hoisted(() => ({
   lastEventAt: new Map<string, string>(),
+  customerEmails: new Map<string, string>(),
   rpcError: null as { code: string; message: string } | null,
 }));
 
-// Stands in for record_subscription_event: applies an event unless a newer one was applied already.
+// Stands in for record_subscription_event and record_customer_event (supabase/tests/database): each applies
+// an event unless a newer one for the same subscription or customer was applied already.
 vi.mock('@/utils/supabase/server-internal', () => ({
   createClient: async () => ({
-    rpc: async (_name: string, args: Record<string, string>) => {
+    rpc: async (name: string, args: Record<string, string>) => {
       if (state.rpcError) return { data: null, error: state.rpcError };
-      const last = state.lastEventAt.get(args.p_subscription_id);
+      const key = name === 'record_customer_event' ? `customer:${args.p_customer_id}` : args.p_subscription_id;
+      const last = state.lastEventAt.get(key);
       if (last && new Date(last) > new Date(args.p_occurred_at)) return { data: false, error: null };
-      state.lastEventAt.set(args.p_subscription_id, args.p_occurred_at);
+      state.lastEventAt.set(key, args.p_occurred_at);
+      if (name === 'record_customer_event') state.customerEmails.set(args.p_customer_id, args.p_email);
       return { data: true, error: null };
     },
   }),
@@ -82,6 +86,7 @@ describe('ProcessWebhook', () => {
     vi.clearAllMocks();
     vi.stubEnv('PADDLE_PRO_PRODUCT_ID', 'pro_01');
     state.lastEventAt.clear();
+    state.customerEmails.clear();
     state.rpcError = null;
     memory.reset();
     memory.state.emails.set('ctm_01', 'buyer@example.com');
@@ -126,6 +131,103 @@ describe('ProcessWebhook', () => {
     expect(memory.state.access.size).toBe(0);
     expect(effects.grantAccess).not.toHaveBeenCalled();
     expect(effects.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('ends access when the Pro subscription moves to another product, and on later events for it', async () => {
+    await processor.processEvent(delivered(created));
+    vi.clearAllMocks();
+
+    const movedAway = subscriptionEvent({
+      eventId: 'evt_moved',
+      occurredAt: '2026-09-28T11:30:00Z',
+      status: 'active',
+      productId: 'pro_02',
+    });
+    await processor.processEvent(delivered(movedAway));
+
+    expect(memory.state.entitlements.get('sub_01')).toMatchObject({ status: 'revoked', graceStartedAt: null });
+    expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
+    expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
+    expect(memory.liveLicences('ctm_01')).toEqual([]);
+    expect(emailSubjects()).toEqual([ENDED]);
+    vi.clearAllMocks();
+
+    // A later event for the other product changes nothing more.
+    await processor.processEvent(
+      delivered(
+        subscriptionEvent({
+          eventId: 'evt_moved_cancel',
+          eventType: 'subscription.canceled',
+          occurredAt: '2026-09-28T12:00:00Z',
+          status: 'canceled',
+          productId: 'pro_02',
+        }),
+      ),
+    );
+
+    expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
+    expect(effects.revokeAccess).not.toHaveBeenCalled();
+    expect(effects.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('keeps access through another Pro subscription when one moves to another product', async () => {
+    await processor.processEvent(delivered(created));
+    await processor.processEvent(
+      delivered(
+        subscriptionEvent({
+          eventId: 'evt_created_2',
+          eventType: 'subscription.created',
+          occurredAt: '2026-09-28T11:10:00Z',
+          status: 'active',
+          subscriptionId: 'sub_02',
+        }),
+      ),
+    );
+    vi.clearAllMocks();
+
+    await processor.processEvent(
+      delivered(
+        subscriptionEvent({
+          eventId: 'evt_moved',
+          occurredAt: '2026-09-28T11:30:00Z',
+          status: 'active',
+          productId: 'pro_02',
+        }),
+      ),
+    );
+
+    expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
+    expect(memory.state.access.get('ctm_01')?.status).toBe('active');
+    expect(effects.revokeAccess).not.toHaveBeenCalled();
+    expect(effects.sendEmail).not.toHaveBeenCalled();
+  });
+
+  describe('customer events', () => {
+    const emailEvent = (eventId: string, occurredAt: string, email: string) =>
+      delivered(customerEvent({ eventId, eventType: 'customer.updated', occurredAt, customerId: 'ctm_01', email }));
+
+    it('records the email normalised, with when the event occurred', async () => {
+      await processor.processEvent(emailEvent('evt_c1', '2026-09-29T10:00:00Z', ' Buyer@Example.COM '));
+
+      expect(state.customerEmails.get('ctm_01')).toBe('buyer@example.com');
+      expect(state.lastEventAt.get('customer:ctm_01')).toBe('2026-09-29T10:00:00Z');
+    });
+
+    it('keeps a newer email when an older customer event is delivered after it', async () => {
+      await processor.processEvent(emailEvent('evt_c1', '2026-09-29T10:00:00Z', 'old@example.com'));
+      await processor.processEvent(emailEvent('evt_c3', '2026-09-29T11:00:00Z', 'new@example.com'));
+      await processor.processEvent(emailEvent('evt_c2', '2026-09-29T10:30:00Z', 'old@example.com'));
+
+      expect(state.customerEmails.get('ctm_01')).toBe('new@example.com');
+    });
+
+    it('fails when the customer cannot be recorded, so the worker retries it', async () => {
+      state.rpcError = { code: '08006', message: 'connection failure' };
+
+      await expect(
+        processor.processEvent(emailEvent('evt_c1', '2026-09-29T10:00:00Z', 'a@example.com')),
+      ).rejects.toEqual(state.rpcError);
+    });
   });
 
   it('applies the same events in order: access granted, then revoked', async () => {

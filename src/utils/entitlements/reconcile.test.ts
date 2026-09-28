@@ -5,10 +5,18 @@ import { reconcileEntitlements } from './reconcile';
 const worker = vi.hoisted(() => ({ drainInbox: vi.fn() }));
 vi.mock('@/utils/webhooks/worker', () => worker);
 
-const state = vi.hoisted(() => ({ tables: {} as Record<string, FakeTable>, calls: [] as FakeCall[] }));
+const state = vi.hoisted(() => ({
+  tables: {} as Record<string, FakeTable>,
+  calls: [] as FakeCall[],
+  customers: [] as string[],
+}));
+// customers_to_reconcile is tested against the database in supabase/tests/database/reconcile.test.sql.
 vi.mock('@/utils/supabase/server-internal', async () => {
   const { fakeSupabase } = await import('@/utils/testing/fake-supabase');
-  return { createClient: async () => fakeSupabase(state.tables, state.calls) };
+  return {
+    createClient: async () =>
+      fakeSupabase(state.tables, state.calls, { customers_to_reconcile: () => state.customers }),
+  };
 });
 
 const NOW = new Date('2026-10-31T04:00:00Z');
@@ -18,12 +26,8 @@ describe('reconcileEntitlements', () => {
     vi.clearAllMocks();
     state.calls.length = 0;
     worker.drainInbox.mockResolvedValue({ processed: 3, retrying: 0, failed: 0 });
-    state.tables = {
-      customer_access: { list: [{ customer_id: 'ctm_entitled' }] },
-      entitlements: { list: [{ customer_id: 'ctm_entitled' }, { customer_id: 'ctm_revoked_by_mistake' }] },
-      github_links: { list: [{ customer_id: 'ctm_linked' }] },
-      licences: { list: [{ customer_id: 'ctm_linked' }] },
-    };
+    state.tables = {};
+    state.customers = ['ctm_entitled', 'ctm_linked', 'ctm_revoked_by_mistake'];
   });
 
   it('queues one reconcile job per customer who is entitled, linked or licensed, then drains the inbox', async () => {
@@ -52,20 +56,17 @@ describe('reconcileEntitlements', () => {
     expect(worker.drainInbox).toHaveBeenCalledWith({ budgetMs: 45_000 });
   });
 
-  it('finds customers by their live licences and entitled subscriptions, not only their recorded access', async () => {
-    await reconcileEntitlements({ now: NOW });
+  it('queues every customer the database returns, beyond the API row limit', async () => {
+    state.customers = Array.from({ length: 2500 }, (_, index) => `ctm_${String(index).padStart(4, '0')}`);
 
-    expect(state.calls).toContainEqual({ table: 'licences', method: 'eq', args: ['revoked', false] });
-    expect(state.calls).toContainEqual({ table: 'entitlements', method: 'in', args: ['status', ['active', 'grace']] });
-    expect(state.calls).toContainEqual({
-      table: 'customer_access',
-      method: 'in',
-      args: ['status', ['active', 'grace']],
-    });
+    await expect(reconcileEntitlements({ now: NOW })).resolves.toMatchObject({ customers: 2500 });
+
+    const queued = state.calls.find((call) => call.table === 'webhook_inbox' && call.method === 'upsert');
+    expect((queued!.args[0] as unknown[]).length).toBe(2500);
   });
 
   it('queues nothing when there is no one to reconcile, and still drains the inbox', async () => {
-    state.tables = {};
+    state.customers = [];
 
     await expect(reconcileEntitlements({ now: NOW })).resolves.toMatchObject({ customers: 0 });
     expect(state.calls).not.toContainEqual(expect.objectContaining({ table: 'webhook_inbox' }));

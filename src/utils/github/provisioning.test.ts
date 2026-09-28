@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   grantAccess,
+  hasPendingInvitation,
   membershipOf,
   OrgInvitationApi,
   ProvisioningDeps,
@@ -126,5 +127,31 @@ describe('membershipOf', () => {
     });
 
     await expect(membershipOf('octocat', deps)).resolves.toBeNull();
+  });
+});
+
+describe('hasPendingInvitation', () => {
+  it("finds the user's pending org invitation on any page, ignoring the login's case", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({ id: index, login: `user${index}` }));
+    const { deps } = mockDeps(
+      {},
+      {
+        listPendingInvitations: vi
+          .fn()
+          .mockResolvedValueOnce({ data: firstPage })
+          .mockResolvedValueOnce({ data: [{ id: 502, login: 'OctoCat' }] }),
+      },
+    );
+
+    await expect(hasPendingInvitation('octocat', deps)).resolves.toBe(true);
+  });
+
+  it('returns false when the user has none', async () => {
+    const { deps } = mockDeps(
+      {},
+      { listPendingInvitations: vi.fn().mockResolvedValue({ data: [{ id: 1, login: 'other' }] }) },
+    );
+
+    await expect(hasPendingInvitation('octocat', deps)).resolves.toBe(false);
   });
 });

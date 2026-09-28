@@ -41,7 +41,8 @@ interface AdjustmentEventData {
 export class ProcessWebhook {
   /**
    * Applies one notification. Called by the inbox worker, one customer's events at a time and oldest
-   * first; a subscription event older than the last one applied to its subscription changes nothing.
+   * first; a subscription or customer event older than the last one applied to its subscription or customer
+   * changes nothing.
    * Throwing makes the worker retry the event later.
    */
   async processEvent(eventData: EventEntity) {
@@ -58,7 +59,7 @@ export class ProcessWebhook {
         break;
       case EventName.CustomerCreated:
       case EventName.CustomerUpdated:
-        await this.updateCustomerData(eventData);
+        await this.recordCustomerEvent(eventData);
         break;
       case EventName.AdjustmentCreated:
       case EventName.AdjustmentUpdated:
@@ -76,16 +77,23 @@ export class ProcessWebhook {
       return;
     }
 
+    // A subscription that is not (or is no longer) for Pro entitles to nothing: if it was for Pro before,
+    // its entitlement ends, and the customer keeps access only through their other subscriptions.
+    const previous = await getEntitlement(data.id);
+
     if (!isProProduct(data.items[0]?.price?.productId)) {
       console.warn(
         `Paddle webhook: subscription ${data.id} is not for the Tenantry Pro product (PADDLE_PRO_PRODUCT_ID); ` +
           'it entitles to nothing.',
       );
+      if (previous && previous.status !== 'revoked') {
+        await upsertEntitlement({ ...previous, status: 'revoked', graceStartedAt: null });
+        await syncCustomerAccess(data.customerId);
+      }
       return;
     }
 
     // A past-due subscription is in grace from its first past-due event (grace.ts).
-    const previous = await getEntitlement(data.id);
     const entitlement = entitlementFor(data.status, previous?.graceStartedAt ?? null, new Date(occurredAt));
 
     await upsertEntitlement({
@@ -159,17 +167,23 @@ export class ProcessWebhook {
     return applied === true;
   }
 
-  private async updateCustomerData(eventData: CustomerCreatedEvent | CustomerUpdatedEvent) {
+  // Records the customer's email unless a newer customer event has already been applied: the email decides
+  // which account owns the customer, so a delayed event must not restore an older one.
+  private async recordCustomerEvent(eventData: CustomerCreatedEvent | CustomerUpdatedEvent) {
     const supabase = await createClient();
-    const { error } = await supabase
-      .from('customers')
-      .upsert({
-        customer_id: eventData.data.id,
-        // Stored normalised, as the database also enforces, so it matches the buyer's account in any case.
-        email: normaliseEmail(eventData.data.email),
-      })
-      .select();
+    const { data: applied, error } = await supabase.rpc('record_customer_event', {
+      p_customer_id: eventData.data.id,
+      // Stored normalised, as the database also enforces, so it matches the buyer's account in any case.
+      p_email: normaliseEmail(eventData.data.email),
+      p_occurred_at: eventData.occurredAt,
+    });
 
     if (error) throw error;
+
+    if (applied !== true) {
+      console.info(
+        `Paddle webhook: ignoring a customer event for ${eventData.data.id} older than the last one applied.`,
+      );
+    }
   }
 }

@@ -8,6 +8,7 @@ const effects = vi.hoisted(() => ({
   grantAccess: vi.fn(),
   revokeAccess: vi.fn(),
   membershipOf: vi.fn(),
+  hasPendingInvitation: vi.fn(),
   sendEmail: vi.fn(),
   provisioningAllowed: vi.fn(),
 }));
@@ -15,6 +16,7 @@ vi.mock('@/utils/github/provisioning', () => ({
   grantAccess: effects.grantAccess,
   revokeAccess: effects.revokeAccess,
   membershipOf: effects.membershipOf,
+  hasPendingInvitation: effects.hasPendingInvitation,
 }));
 vi.mock('@/utils/entitlements/entitlements-store', async () => {
   const { memory } = await import('@/utils/testing/memory-entitlements');
@@ -58,6 +60,7 @@ describe('reconcileCustomer', () => {
     effects.provisioningAllowed.mockReturnValue(true);
     effects.grantAccess.mockResolvedValue('active');
     effects.membershipOf.mockResolvedValue(null);
+    effects.hasPendingInvitation.mockResolvedValue(false);
     memory.reset();
     memory.state.emails.set('ctm_1', 'buyer@example.com');
     memory.state.githubLogins.set('ctm_1', 'octocat');
@@ -153,6 +156,25 @@ describe('reconcileCustomer', () => {
 
       await expect(reconcileCustomer('ctm_1')).resolves.toMatchObject({ github: 'removed' });
       expect(effects.revokeAccess).toHaveBeenCalledWith('octocat');
+    });
+
+    it('cancels an invitation left pending by a removal that failed after leaving the team', async () => {
+      await record({ status: 'revoked' });
+      await syncCustomerAccess('ctm_1');
+      effects.membershipOf.mockResolvedValue(null);
+      effects.hasPendingInvitation.mockResolvedValue(true);
+
+      await expect(reconcileCustomer('ctm_1')).resolves.toMatchObject({ github: 'removed' });
+      expect(effects.revokeAccess).toHaveBeenCalledWith('octocat');
+    });
+
+    it('does nothing for a lapsed customer with neither a membership nor an invitation', async () => {
+      await record({ status: 'revoked' });
+      await syncCustomerAccess('ctm_1');
+
+      await expect(reconcileCustomer('ctm_1')).resolves.toMatchObject({ github: 'unchanged' });
+      expect(effects.hasPendingInvitation).toHaveBeenCalledWith('octocat');
+      expect(effects.revokeAccess).not.toHaveBeenCalled();
     });
   });
 

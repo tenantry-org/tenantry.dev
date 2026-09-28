@@ -146,6 +146,18 @@ export async function membershipOf(
   }
 }
 
+/**
+ * Whether the user holds a pending org invitation. Checked apart from the team membership: a removal that
+ * took the user out of the team but failed to cancel the invitation leaves no membership, but an
+ * invitation that can still be accepted.
+ */
+export async function hasPendingInvitation(
+  githubLogin: string,
+  deps: ProvisioningDeps = defaultDeps(),
+): Promise<boolean> {
+  return (await findPendingInvitation(githubLogin, deps)) !== null;
+}
+
 // The id of the user's pending org invitation, or null. GitHub logins are case-insensitive.
 async function findPendingInvitation(githubLogin: string, deps: ProvisioningDeps): Promise<number | null> {
   const login = githubLogin.toLowerCase();

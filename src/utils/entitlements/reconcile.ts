@@ -24,23 +24,16 @@ export async function reconcileEntitlements({
   return { customers: customerIds.length, inbox: await drainInbox({ budgetMs }) };
 }
 
-// Everyone whose access, GitHub membership or licences might need correcting.
+// Everyone whose access, GitHub membership or licences might need correcting: entitled (by recorded access
+// or by a subscription), linked to GitHub, or holding a live licence. One array, so the API's row limit
+// cannot leave anyone out.
 async function customersToReconcile(): Promise<string[]> {
   const supabase = await createClient();
-  const lookups = await Promise.all([
-    supabase.from('customer_access').select('customer_id').in('status', ['active', 'grace']),
-    supabase.from('entitlements').select('customer_id').in('status', ['active', 'grace']),
-    supabase.from('github_links').select('customer_id'),
-    supabase.from('licences').select('customer_id').eq('revoked', false),
-  ]);
+  const { data, error } = await supabase.rpc('customers_to_reconcile');
 
-  const customerIds = new Set<string>();
-  for (const { data, error } of lookups) {
-    if (error) throw error;
-    for (const row of (data ?? []) as { customer_id: string }[]) customerIds.add(row.customer_id);
-  }
+  if (error) throw error;
 
-  return [...customerIds].sort((a, b) => a.localeCompare(b));
+  return (data ?? []) as string[];
 }
 
 async function queueReconcileJobs(customerIds: string[], now: Date) {
