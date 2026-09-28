@@ -66,23 +66,12 @@ describe('syncGithubLinkForCurrentUser', () => {
 
   afterEach(() => {
     delete process.env.PROVISIONING_MODE;
-    delete process.env.PROVISION_ALLOWLIST;
   });
 
   it('links the account but does not grant access when PROVISIONING_MODE is unset', async () => {
     const result = await syncGithubLinkForCurrentUser();
 
     expect(result).toEqual({ linked: true, granted: false, reason: 'provisioning-disabled' });
-    expect(github.grantAccess).not.toHaveBeenCalled();
-  });
-
-  it('does not grant access to a customer outside the allowlist', async () => {
-    process.env.PROVISIONING_MODE = 'auto';
-    process.env.PROVISION_ALLOWLIST = 'someone-else@example.com';
-
-    const result = await syncGithubLinkForCurrentUser();
-
-    expect(result.granted).toBe(false);
     expect(github.grantAccess).not.toHaveBeenCalled();
   });
 

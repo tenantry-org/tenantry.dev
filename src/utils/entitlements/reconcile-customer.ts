@@ -1,10 +1,9 @@
 import { hasPendingInvitation, membershipOf, revokeAccess } from '@/utils/github/provisioning';
-import { provisioningAllowed } from '@/utils/provisioning-guard';
+import { automatedProvisioningEnabled } from '@/utils/provisioning-guard';
 import {
   CustomerAccessRecord,
   getCurrentLicence,
   getCustomerAccess,
-  getCustomerEmail,
   getGithubLogin,
   revokeLicences,
   setGithubState,
@@ -101,7 +100,7 @@ async function reconcileGrant(
   }
 
   // Honour the provisioning gate, so reconcile cannot backfill a grant the webhook withheld.
-  if (!provisioningAllowed(await getCustomerEmail(customerId))) return 'withheld';
+  if (!automatedProvisioningEnabled()) return 'withheld';
 
   const state = await grantAndRecord(customerId, githubLogin);
   if (state === 'failed') throw new Error(`GitHub grant failed for customer ${customerId}`);

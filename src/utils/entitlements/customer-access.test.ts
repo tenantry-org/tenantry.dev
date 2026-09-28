@@ -7,7 +7,7 @@ const effects = vi.hoisted(() => ({
   grantAccess: vi.fn().mockResolvedValue('active'),
   revokeAccess: vi.fn(),
   sendEmail: vi.fn(),
-  provisioningAllowed: vi.fn(),
+  automatedProvisioningEnabled: vi.fn(),
   issueLicence: vi.fn(),
 }));
 vi.mock('@/utils/github/provisioning', () => ({
@@ -24,7 +24,7 @@ vi.mock('@/utils/licensing/licence-issuer', () => ({ issueLicence: effects.issue
 function signLicence({ expiresAt }: { expiresAt: Date }) {
   return `licence:${expiresAt.toISOString()}`;
 }
-vi.mock('@/utils/provisioning-guard', () => ({ provisioningAllowed: effects.provisioningAllowed }));
+vi.mock('@/utils/provisioning-guard', () => ({ automatedProvisioningEnabled: effects.automatedProvisioningEnabled }));
 
 const OCTOBER = new Date('2026-10-01T00:00:00Z');
 const NOVEMBER = new Date('2026-11-01T00:00:00Z');
@@ -89,7 +89,7 @@ describe('aggregateAccess', () => {
 describe('syncCustomerAccess', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    effects.provisioningAllowed.mockReturnValue(true);
+    effects.automatedProvisioningEnabled.mockReturnValue(true);
     effects.issueLicence.mockImplementation(signLicence);
     memory.reset();
     memory.state.emails.set('ctm_1', 'buyer@example.com');
@@ -167,7 +167,7 @@ describe('syncCustomerAccess', () => {
   });
 
   it('in manual mode records access but grants nothing, and still ends access and says so', async () => {
-    effects.provisioningAllowed.mockReturnValue(false);
+    effects.automatedProvisioningEnabled.mockReturnValue(false);
 
     await expect(entitle()).resolves.toBe('started');
     expect(memory.state.access.get('ctm_1')).toEqual({ status: 'active', githubState: 'none', githubInvitedAt: null });
@@ -221,7 +221,7 @@ describe('licence issuance failures', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('ALERT_EMAIL', 'ops@example.com');
-    effects.provisioningAllowed.mockReturnValue(true);
+    effects.automatedProvisioningEnabled.mockReturnValue(true);
     effects.issueLicence.mockImplementation(signLicence);
     memory.reset();
     memory.state.emails.set('ctm_1', 'buyer@example.com');
@@ -338,7 +338,7 @@ describe('grace period', () => {
     vi.clearAllMocks();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
-    effects.provisioningAllowed.mockReturnValue(true);
+    effects.automatedProvisioningEnabled.mockReturnValue(true);
     effects.issueLicence.mockImplementation(signLicence);
     memory.reset();
     memory.state.emails.set('ctm_1', 'buyer@example.com');

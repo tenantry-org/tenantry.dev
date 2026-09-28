@@ -48,7 +48,7 @@ vi.mock('@/utils/email/send', () => ({ sendEmail: effects.sendEmail }));
 vi.mock('@/utils/licensing/licence-issuer', () => ({
   issueLicence: ({ expiresAt }: { expiresAt: Date }) => `licence:${expiresAt.toISOString()}`,
 }));
-vi.mock('@/utils/provisioning-guard', () => ({ provisioningAllowed: () => true }));
+vi.mock('@/utils/provisioning-guard', () => ({ automatedProvisioningEnabled: () => true }));
 
 function delivered(event: PaddleEventJson) {
   return Webhooks.fromJson(event as unknown as Parameters<typeof Webhooks.fromJson>[0]);

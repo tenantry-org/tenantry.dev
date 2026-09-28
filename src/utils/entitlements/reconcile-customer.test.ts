@@ -10,7 +10,7 @@ const effects = vi.hoisted(() => ({
   membershipOf: vi.fn(),
   hasPendingInvitation: vi.fn(),
   sendEmail: vi.fn(),
-  provisioningAllowed: vi.fn(),
+  automatedProvisioningEnabled: vi.fn(),
 }));
 vi.mock('@/utils/github/provisioning', () => ({
   grantAccess: effects.grantAccess,
@@ -26,7 +26,7 @@ vi.mock('@/utils/email/send', () => ({ sendEmail: effects.sendEmail }));
 vi.mock('@/utils/licensing/licence-issuer', () => ({
   issueLicence: ({ expiresAt }: { expiresAt: Date }) => `licence:${expiresAt.toISOString()}`,
 }));
-vi.mock('@/utils/provisioning-guard', () => ({ provisioningAllowed: effects.provisioningAllowed }));
+vi.mock('@/utils/provisioning-guard', () => ({ automatedProvisioningEnabled: effects.automatedProvisioningEnabled }));
 
 const OCTOBER = new Date('2026-10-01T00:00:00Z');
 const NOVEMBER = new Date('2026-11-01T00:00:00Z');
@@ -57,7 +57,7 @@ describe('reconcileCustomer', () => {
     vi.clearAllMocks();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-01T00:10:00Z'));
-    effects.provisioningAllowed.mockReturnValue(true);
+    effects.automatedProvisioningEnabled.mockReturnValue(true);
     effects.grantAccess.mockResolvedValue('active');
     effects.membershipOf.mockResolvedValue(null);
     effects.hasPendingInvitation.mockResolvedValue(false);
@@ -149,7 +149,7 @@ describe('reconcileCustomer', () => {
     });
 
     it('cancels the pending invitation of a customer who is no longer entitled', async () => {
-      effects.provisioningAllowed.mockReturnValue(false);
+      effects.automatedProvisioningEnabled.mockReturnValue(false);
       await record({ status: 'revoked' });
       await syncCustomerAccess('ctm_1');
       effects.membershipOf.mockResolvedValue('pending');
@@ -183,18 +183,18 @@ describe('reconcileCustomer', () => {
     await startAccess();
     memory.state.githubLogins.set('ctm_1', 'octocat');
 
-    effects.provisioningAllowed.mockReturnValue(false);
+    effects.automatedProvisioningEnabled.mockReturnValue(false);
     await expect(reconcileCustomer('ctm_1')).resolves.toMatchObject({ github: 'withheld' });
     expect(effects.grantAccess).not.toHaveBeenCalled();
 
-    effects.provisioningAllowed.mockReturnValue(true);
+    effects.automatedProvisioningEnabled.mockReturnValue(true);
     await expect(reconcileCustomer('ctm_1')).resolves.toMatchObject({ github: 'granted' });
     expect(effects.grantAccess).toHaveBeenCalledWith('octocat');
     expect(githubState()).toBe('active');
   });
 
   it('removes a customer who is not entitled from the team and revokes licences left live, whatever the mode', async () => {
-    effects.provisioningAllowed.mockReturnValue(false);
+    effects.automatedProvisioningEnabled.mockReturnValue(false);
     await record({ status: 'revoked' });
     await syncCustomerAccess('ctm_1');
     await memory.store.recordLicence({ customerId: 'ctm_1', jwt: 'left-over', expiresAt: NOVEMBER });

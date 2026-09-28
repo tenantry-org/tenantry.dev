@@ -17,7 +17,7 @@ import { issueLicence } from '@/utils/licensing/licence-issuer';
 import { grantAccess, revokeAccess } from '@/utils/github/provisioning';
 import { sendEmail } from '@/utils/email/send';
 import { accessRevokedEmail, welcomeProEmail } from '@/utils/email/templates';
-import { provisioningAllowed } from '@/utils/provisioning-guard';
+import { automatedProvisioningEnabled } from '@/utils/provisioning-guard';
 import { alertOperator } from '@/utils/email/alerts';
 import { errorMessage } from '@/utils/errors';
 import { graceEndsAt } from '@/utils/entitlements/grace';
@@ -114,12 +114,12 @@ export async function syncCustomerAccess(customerId: string): Promise<AccessSync
     return { change: 'ended', licence: null };
   }
 
-  // Provisioning gate: in manual mode (PROVISIONING_MODE not 'auto') or for a customer outside the
-  // allowlist, access is recorded but GitHub access and the licence are left to the operator.
-  if (!provisioningAllowed(email)) {
+  // Provisioning gate: in manual mode (PROVISIONING_MODE not 'auto') access is recorded but GitHub access
+  // and the licence are left to the operator.
+  if (!automatedProvisioningEnabled()) {
     console.warn(
-      `Customer access: automated provisioning is off for ${email ?? customerId} ` +
-        '(PROVISIONING_MODE/PROVISION_ALLOWLIST); recording access but withholding GitHub access and licence.',
+      `Customer access: automated provisioning is off (PROVISIONING_MODE) for customer ${customerId}; ` +
+        'recording access but withholding GitHub access and licence.',
     );
     return { change: wasEntitled ? 'unchanged' : 'started', licence: null };
   }

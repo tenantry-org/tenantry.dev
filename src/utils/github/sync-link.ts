@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createServiceClient } from '@/utils/supabase/server-internal';
-import { provisioningAllowed } from '@/utils/provisioning-guard';
+import { automatedProvisioningEnabled } from '@/utils/provisioning-guard';
 import { confirmedEmail } from '@/utils/customers/email';
 import { grantAndRecord, isEntitled } from '@/utils/entitlements/customer-access';
 import { resetGithubState } from '@/utils/entitlements/entitlements-store';
@@ -120,9 +120,9 @@ async function syncGithubLink(): Promise<SyncResult> {
   if (accessError) throw accessError;
   if (!access || !isEntitled(access.status)) return { linked: true, granted: false, reason: 'no-active-entitlement' };
 
-  // Same gate as the webhook and reconcile paths: manual mode or a non-allowlisted customer links the
-  // account but leaves the grant to the operator.
-  if (!provisioningAllowed(email)) return { linked: true, granted: false, reason: 'provisioning-disabled' };
+  // Same gate as the webhook and reconcile paths: manual mode links the account but leaves the grant to
+  // the operator.
+  if (!automatedProvisioningEnabled()) return { linked: true, granted: false, reason: 'provisioning-disabled' };
 
   const state = await grantAndRecord(customerId, login);
   if (state === 'failed') return { linked: true, granted: false, reason: 'grant-failed' };
