@@ -230,6 +230,18 @@ describe('ProcessWebhook', () => {
     });
   });
 
+  it('changes nothing when the same event is processed again, as after a worker crash before it was marked done', async () => {
+    await processor.processEvent(delivered(created));
+    await processor.processEvent(delivered(created));
+    await processor.processEvent(delivered(cancelled));
+    await processor.processEvent(delivered(cancelled));
+
+    expect(effects.grantAccess).toHaveBeenCalledOnce();
+    expect(effects.revokeAccess).toHaveBeenCalledOnce();
+    expect(memory.state.licences).toHaveLength(1);
+    expect(emailSubjects()).toEqual([WELCOME, ENDED]);
+  });
+
   it('applies the same events in order: access granted, then revoked', async () => {
     await processor.processEvent(delivered(earlierUpdate));
     expect(effects.grantAccess).toHaveBeenCalledWith('octocat');

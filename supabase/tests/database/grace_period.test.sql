@@ -2,6 +2,10 @@
 -- Run with `supabase test db` against the local database.
 begin;
 create extension if not exists pgtap with schema extensions;
+-- As postgres with pgTAP's schema on the path: `supabase test db --linked` connects to a hosted database as a
+-- CLI login role that cannot use the extensions schema.
+set local role postgres;
+set local search_path to public, extensions;
 
 select plan(5);
 

@@ -2,6 +2,10 @@
 -- confirmed email, compared case-insensitively. Run with `supabase test db` against the local database.
 begin;
 create extension if not exists pgtap with schema extensions;
+-- As postgres with pgTAP's schema on the path: `supabase test db --linked` connects to a hosted database as a
+-- CLI login role that cannot use the extensions schema.
+set local role postgres;
+set local search_path to public, extensions;
 
 select plan(18);
 
@@ -51,7 +55,7 @@ select is((select count(*)::int from public.subscriptions), 0, 'unconfirmed: no 
 select is((select count(*)::int from public.github_links), 0, 'unconfirmed: no GitHub link');
 
 -- The buyer confirms the address.
-reset role;
+set local role postgres;
 update auth.users set email_confirmed_at = now() where id = '11111111-1111-1111-1111-111111111111';
 set local role authenticated;
 

@@ -2,6 +2,10 @@
 -- Run with `supabase test db` against the local database.
 begin;
 create extension if not exists pgtap with schema extensions;
+-- As postgres with pgTAP's schema on the path: `supabase test db --linked` connects to a hosted database as a
+-- CLI login role that cannot use the extensions schema.
+set local role postgres;
+set local search_path to public, extensions;
 
 select plan(17);
 
@@ -85,7 +89,7 @@ select throws_ok(
   $$select public.record_subscription_event('sub_1', 'ctm_sub', 'active', null, null, null, now())$$,
   '42501', null,
   'signed-in users cannot record subscription events');
-reset role;
+set local role postgres;
 
 select hasnt_table('public', 'processed_webhook_events', 'the old deduplication table is gone');
 
