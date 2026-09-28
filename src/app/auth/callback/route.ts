@@ -21,6 +21,7 @@ export async function GET(request: Request) {
     }
   }
 
-  // return the user to an error page with instructions
-  return NextResponse.redirect(`${origin}/auth/auth-code-error`);
+  // The link could not sign the user in: opened in another browser than the one that asked for it, used
+  // twice, or expired. An email confirmation has still taken effect, so logging in works.
+  return NextResponse.redirect(`${origin}/login?error=link`);
 }

@@ -34,7 +34,7 @@ export default function Header({ user }: Props) {
           <div className="flex space-x-4">
             {user?.id ? (
               <Button variant={'secondary'} asChild={true}>
-                <Link href={'/dashboard'}>Dashboard</Link>
+                <Link href={'/dashboard/pro'}>Dashboard</Link>
               </Button>
             ) : (
               <Button asChild={true} variant={'secondary'}>

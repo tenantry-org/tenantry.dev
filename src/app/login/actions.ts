@@ -2,18 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
 import { createClient } from '@/utils/supabase/server';
-
-async function siteOrigin(): Promise<string> {
-  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
-
-  const requestHeaders = await headers();
-  const host = requestHeaders.get('host') ?? '';
-  const proto = requestHeaders.get('x-forwarded-proto') ?? 'https';
-
-  return host ? `${proto}://${host}` : '';
-}
+import { siteOrigin } from '@/utils/site-origin';
 
 interface FormData {
   email: string;
@@ -28,7 +18,7 @@ export async function login(data: FormData) {
   }
 
   revalidatePath('/', 'layout');
-  redirect('/');
+  redirect('/dashboard/pro');
 }
 
 export async function signInWithGithub() {

@@ -1,20 +1,10 @@
 'use server';
 
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { isLinkError, syncGithubLinkForCurrentUser } from '@/utils/github/sync-link';
-
-async function siteOrigin(): Promise<string> {
-  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
-
-  const requestHeaders = await headers();
-  const host = requestHeaders.get('host') ?? '';
-  const proto = requestHeaders.get('x-forwarded-proto') ?? 'https';
-
-  return host ? `${proto}://${host}` : '';
-}
+import { siteOrigin } from '@/utils/site-origin';
 
 /**
  * Connects the customer's GitHub account.

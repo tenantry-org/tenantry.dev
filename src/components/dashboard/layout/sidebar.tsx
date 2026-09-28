@@ -1,15 +1,15 @@
 'use client';
 
-import { Album, CreditCard, Home, KeyRound } from 'lucide-react';
+import { Album, CreditCard, KeyRound } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 const sidebarItems = [
   {
-    title: 'Dashboard',
-    icon: <Home className="h-6 w-6" />,
-    href: '/dashboard',
+    title: 'Pro access',
+    icon: <KeyRound className="h-6 w-6" />,
+    href: '/dashboard/pro',
   },
   {
     title: 'Subscriptions',
@@ -20,11 +20,6 @@ const sidebarItems = [
     title: 'Payments',
     icon: <CreditCard className="h-6 w-6" />,
     href: '/dashboard/payments',
-  },
-  {
-    title: 'Pro access',
-    icon: <KeyRound className="h-6 w-6" />,
-    href: '/dashboard/pro',
   },
 ];
 
@@ -38,8 +33,7 @@ export function Sidebar() {
             key={item.title}
             href={item.href}
             className={cn('flex items-center text-base gap-3 px-4 py-3 rounded-xxs dashboard-sidebar-items', {
-              'dashboard-sidebar-items-active':
-                item.href === '/dashboard' ? pathname === item.href : pathname.includes(item.href),
+              'dashboard-sidebar-items-active': pathname.startsWith(item.href),
             })}
           >
             {item.icon}

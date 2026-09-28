@@ -4,11 +4,15 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { signInWithGithub } from '@/app/login/actions';
 import Image from 'next/image';
+import { useTransition } from 'react';
 
 interface Props {
   label: string;
 }
 export function GhLoginButton({ label }: Props) {
+  // Pending until GitHub's page loads: the action redirects there.
+  const [pending, startTransition] = useTransition();
+
   return (
     <div
       className={
@@ -20,7 +24,13 @@ export function GhLoginButton({ label }: Props) {
         <div className={'text-border text-xs font-medium px-4'}>or</div>
         <Separator className={'w-5/12 bg-border'} />
       </div>
-      <Button onClick={() => signInWithGithub()} variant={'secondary'} className={'w-full'}>
+      <Button
+        onClick={() => startTransition(() => signInWithGithub())}
+        variant={'secondary'}
+        className={'w-full'}
+        disabled={pending}
+        aria-busy={pending}
+      >
         <Image
           height="24"
           className={'mr-3'}
@@ -29,7 +39,7 @@ export function GhLoginButton({ label }: Props) {
           unoptimized={true}
           alt={'GitHub logo'}
         />
-        {label}
+        {pending ? 'Opening GitHub…' : label}
       </Button>
     </div>
   );

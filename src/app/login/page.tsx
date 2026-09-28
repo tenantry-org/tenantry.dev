@@ -4,7 +4,13 @@ import { LoginCardGradient } from '@/components/gradients/login-card-gradient';
 import { LoginForm } from '@/components/authentication/login-form';
 import { GhLoginButton } from '@/components/authentication/gh-login-button';
 
-export default function LoginPage() {
+const NOTICES: Record<string, string> = {
+  link: 'That link could not sign you in here. If you were confirming your email, it is confirmed: log in below.',
+};
+
+export default async function LoginPage({ searchParams }: Readonly<{ searchParams: Promise<{ error?: string }> }>) {
+  const { error } = await searchParams;
+
   return (
     <div>
       <LoginGradient />
@@ -15,7 +21,7 @@ export default function LoginPage() {
           }
         >
           <LoginCardGradient />
-          <LoginForm />
+          <LoginForm notice={error ? NOTICES[error] : undefined} />
         </div>
         <GhLoginButton label={'Log in with GitHub'} />
         <div
