@@ -10,8 +10,9 @@ export interface Offer {
  * The single Tenantry Pro offer (D10). Tenantry Core is free and open source; Pro is one subscription,
  * billed monthly or yearly, with no tiers or seats.
  *
- * NOTE: the priceId values are PLACEHOLDERS from the starter kit. Replace them with the Pro product's real
- * Paddle price ids (plan item 6.10); both prices belong to the product named by PADDLE_PRO_PRODUCT_ID.
+ * Each environment has its own Paddle prices, both belonging to the product named by PADDLE_PRO_PRODUCT_ID:
+ * NEXT_PUBLIC_PADDLE_PRICE_MONTHLY and NEXT_PUBLIC_PADDLE_PRICE_YEARLY, checked at startup (server-config.ts).
+ * They are compiled into the client build, so changing one needs a redeploy.
  */
 export const ProOffer: Offer = {
   name: 'Tenantry Pro',
@@ -26,5 +27,13 @@ export const ProOffer: Offer = {
     'Private NuGet package feed',
     'Email support',
   ],
-  priceId: { month: 'pri_01hsxycme6m95sejkz7sbz5e9g', year: 'pri_01hsxyeb2bmrg618bzwcwvdd6q' },
+  priceId: {
+    month: process.env.NEXT_PUBLIC_PADDLE_PRICE_MONTHLY ?? '',
+    year: process.env.NEXT_PUBLIC_PADDLE_PRICE_YEARLY ?? '',
+  },
 };
+
+/** Whether a Paddle price id is one of the Pro offer's prices, the only ones the checkout sells. */
+export function isOfferPrice(priceId: string): boolean {
+  return priceId !== '' && Object.values(ProOffer.priceId).includes(priceId);
+}

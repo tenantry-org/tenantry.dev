@@ -18,7 +18,7 @@ export function PriceAmount({ loading, offer, priceMap, priceSuffix, value }: Pr
       ) : (
         <>
           <div className={cn('text-[80px] leading-[96px] tracking-[-1.6px] font-medium')}>
-            {priceMap[offer.priceId[value]].replace(/\.00$/, '')}
+            {priceMap[offer.priceId[value]]?.replace(/\.00$/, '')}
           </div>
           <div className={cn('font-medium leading-[12px] text-[12px]')}>{priceSuffix}</div>
         </>

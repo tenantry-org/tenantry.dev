@@ -30,6 +30,8 @@ function environment(paddleEnvironment: 'sandbox' | 'production', overrides: Rec
     GITHUB_APP_PRIVATE_KEY: 'app-key',
     GITHUB_APP_INSTALLATION_ID: '2',
     PADDLE_PRO_PRODUCT_ID: 'pro_01',
+    NEXT_PUBLIC_PADDLE_PRICE_MONTHLY: 'pri_01month',
+    NEXT_PUBLIC_PADDLE_PRICE_YEARLY: 'pri_01year',
     LICENCE_SIGNING_PRIVATE_KEY: paddleEnvironment === 'production' ? productionKey.pem : sandboxKey.pem,
     NEXT_PUBLIC_SITE_URL: 'https://tenantry.dev',
     RESEND_API_KEY: 'resend',
@@ -113,6 +115,18 @@ describe('validateServerConfig', () => {
     ]);
     expect(problems(environment('sandbox', { PROVISIONING_MODE: 'atuo' }))).toEqual([
       expect.stringContaining('PROVISIONING_MODE must be "manual" or "auto"'),
+    ]);
+  });
+
+  it('needs both Pro prices, as distinct Paddle price ids', () => {
+    expect(problems(environment('sandbox', { NEXT_PUBLIC_PADDLE_PRICE_YEARLY: undefined }))).toEqual([
+      expect.stringContaining('NEXT_PUBLIC_PADDLE_PRICE_YEARLY is not set'),
+    ]);
+    expect(problems(environment('sandbox', { NEXT_PUBLIC_PADDLE_PRICE_MONTHLY: 'pro_01month' }))).toEqual([
+      expect.stringContaining('must be a Paddle price id'),
+    ]);
+    expect(problems(environment('sandbox', { NEXT_PUBLIC_PADDLE_PRICE_YEARLY: 'pri_01month' }))).toEqual([
+      expect.stringContaining('are the same price'),
     ]);
   });
 

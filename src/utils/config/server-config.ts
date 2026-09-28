@@ -61,6 +61,20 @@ export function validateServerConfig(
     problems.push(`PROVISIONING_MODE must be "manual" or "auto", or unset for manual (it is "${mode}")`);
   }
 
+  const monthly = value('NEXT_PUBLIC_PADDLE_PRICE_MONTHLY');
+  const yearly = value('NEXT_PUBLIC_PADDLE_PRICE_YEARLY');
+  for (const [name, price] of [
+    ['NEXT_PUBLIC_PADDLE_PRICE_MONTHLY', monthly],
+    ['NEXT_PUBLIC_PADDLE_PRICE_YEARLY', yearly],
+  ] as const) {
+    if (!price) problems.push(`${name} is not set: the Pro offer cannot be bought`);
+    else if (!/^pri_[a-z0-9]+$/.test(price))
+      problems.push(`${name} must be a Paddle price id ("pri_…"); it is "${price}"`);
+  }
+  if (monthly && monthly === yearly) {
+    problems.push('NEXT_PUBLIC_PADDLE_PRICE_MONTHLY and NEXT_PUBLIC_PADDLE_PRICE_YEARLY are the same price');
+  }
+
   try {
     parseProProductId(value('PADDLE_PRO_PRODUCT_ID'));
   } catch (error) {

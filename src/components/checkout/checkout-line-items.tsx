@@ -1,4 +1,3 @@
-import { QuantityField } from '@/components/checkout/quantity-field';
 import { Separator } from '@/components/ui/separator';
 import { CheckoutEventsData } from '@paddle/paddle-js/types/checkout/events';
 import { formatMoney } from '@/utils/paddle/parse-money';
@@ -19,15 +18,12 @@ function LoadingText({ value, currencyCode }: LoadingTextProps) {
 
 interface Props {
   checkoutData: CheckoutEventsData | null;
-  quantity: number;
-  handleQuantityChange: (quantity: number) => void;
 }
 
-export function CheckoutLineItems({ handleQuantityChange, checkoutData, quantity }: Props) {
+export function CheckoutLineItems({ checkoutData }: Props) {
   return (
     <>
       <div className={'md:pt-12 text-base leading-[20px] font-medium'}>{checkoutData?.items[0].price_name}</div>
-      <QuantityField quantity={quantity} handleQuantityChange={handleQuantityChange} />
       <Separator className={'bg-border/50 mt-6'} />
       <div className={'pt-6 flex justify-between'}>
         <span className={'text-base leading-[20px] font-medium text-muted-foreground'}>Subtotal</span>

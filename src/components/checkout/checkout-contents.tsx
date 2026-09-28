@@ -4,9 +4,8 @@ import { PriceSection } from '@/components/checkout/price-section';
 import { CheckoutFormGradients } from '@/components/gradients/checkout-form-gradients';
 import { type Environments, initializePaddle, type Paddle } from '@paddle/paddle-js';
 import type { CheckoutEventsData } from '@paddle/paddle-js/types/checkout/events';
-import throttle from 'lodash.throttle';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface PathParams {
   priceId: string;
@@ -19,20 +18,12 @@ interface Props {
 
 export function CheckoutContents({ userEmail }: Props) {
   const { priceId } = useParams<PathParams>();
-  const [quantity, setQuantity] = useState<number>(1);
   const [paddle, setPaddle] = useState<Paddle | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutEventsData | null>(null);
 
   const handleCheckoutEvents = (event: CheckoutEventsData) => {
     setCheckoutData(event);
   };
-
-  const updateItems = useCallback(
-    throttle((paddle: Paddle, priceId: string, quantity: number) => {
-      paddle.Checkout.updateItems([{ priceId, quantity }]);
-    }, 1000),
-    [],
-  );
 
   useEffect(() => {
     if (!paddle?.Initialized && process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN && process.env.NEXT_PUBLIC_PADDLE_ENV) {
@@ -59,6 +50,7 @@ export function CheckoutContents({ userEmail }: Props) {
       }).then(async (paddle) => {
         if (paddle && priceId) {
           setPaddle(paddle);
+          // One subscription per purchase: the offer has no seats, so there is no quantity to choose.
           paddle.Checkout.open({
             ...(userEmail && { customer: { email: userEmail } }),
             items: [{ priceId: priceId, quantity: 1 }],
@@ -67,12 +59,6 @@ export function CheckoutContents({ userEmail }: Props) {
       });
     }
   }, [paddle?.Initialized, priceId, userEmail]);
-
-  useEffect(() => {
-    if (paddle && priceId && paddle.Initialized) {
-      updateItems(paddle, priceId, quantity);
-    }
-  }, [paddle, priceId, quantity, updateItems]);
 
   return (
     <div
@@ -83,7 +69,7 @@ export function CheckoutContents({ userEmail }: Props) {
       <CheckoutFormGradients />
       <div className={'flex flex-col md:flex-row gap-8 md:gap-16'}>
         <div className={'w-full md:w-[400px]'}>
-          <PriceSection checkoutData={checkoutData} quantity={quantity} handleQuantityChange={setQuantity} />
+          <PriceSection checkoutData={checkoutData} />
         </div>
         <div className={'min-w-[375px] lg:min-w-[535px]'}>
           <div className={'text-base leading-[20px] font-semibold mb-8'}>Payment details</div>
