@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { sendEmail } from './send';
+import { resendRequest, sendEmail } from './send';
 import { accessRevokedEmail, welcomeProEmail } from './templates';
 
 describe('sendEmail', () => {
@@ -13,6 +13,18 @@ describe('sendEmail', () => {
     delete process.env.RESEND_API_KEY;
 
     await expect(sendEmail({ to: 'a@b.com', subject: 's', html: '<p>x</p>' })).resolves.toBe(false);
+  });
+
+  it('sends replies to EMAIL_REPLY_TO, from the configured no-reply sender', () => {
+    const message = { to: 'cust@example.com', subject: 's', html: '<p>x</p>' };
+
+    expect(
+      resendRequest(message, {
+        EMAIL_FROM: 'Tenantry <noreply@tenantry.dev>',
+        EMAIL_REPLY_TO: ' support@tenantry.dev ',
+      }),
+    ).toEqual({ from: 'Tenantry <noreply@tenantry.dev>', reply_to: 'support@tenantry.dev', ...message });
+    expect(resendRequest(message, {})).not.toHaveProperty('reply_to');
   });
 });
 

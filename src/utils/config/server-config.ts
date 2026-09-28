@@ -73,6 +73,7 @@ export function validateServerConfig(
     required('NEXT_PUBLIC_SITE_URL', 'redirects and emails need the public site URL');
     required('RESEND_API_KEY', 'customers would get no welcome or revocation emails');
     required('EMAIL_FROM', 'customers would get no welcome or revocation emails');
+    required('EMAIL_REPLY_TO', 'customers replying to an email would reach the no-reply sender');
     required(
       'ALERT_EMAIL',
       'failures that need the operator, such as a licence that cannot be issued, would go unnoticed',

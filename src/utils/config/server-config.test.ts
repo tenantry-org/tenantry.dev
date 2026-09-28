@@ -34,6 +34,7 @@ function environment(paddleEnvironment: 'sandbox' | 'production', overrides: Rec
     NEXT_PUBLIC_SITE_URL: 'https://tenantry.dev',
     RESEND_API_KEY: 'resend',
     EMAIL_FROM: 'Tenantry <hello@tenantry.dev>',
+    EMAIL_REPLY_TO: 'support@tenantry.dev',
     ALERT_EMAIL: 'ops@tenantry.dev',
     ...overrides,
   };
@@ -120,11 +121,12 @@ describe('validateServerConfig', () => {
       NEXT_PUBLIC_SITE_URL: undefined,
       RESEND_API_KEY: undefined,
       EMAIL_FROM: undefined,
+      EMAIL_REPLY_TO: undefined,
       ALERT_EMAIL: undefined,
     };
 
     expect(problems(environment('sandbox', withoutThem))).toEqual([]);
-    expect(problems(environment('production', withoutThem))).toHaveLength(4);
+    expect(problems(environment('production', withoutThem))).toHaveLength(5);
     expect(problems(environment('production', { ALERT_EMAIL: undefined }))).toEqual([
       expect.stringContaining('ALERT_EMAIL is not set'),
     ]);
