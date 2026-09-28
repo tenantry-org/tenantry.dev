@@ -3,12 +3,12 @@ import '../../../styles/checkout.css';
 import { CheckoutHeader } from '@/components/checkout/checkout-header';
 import { CheckoutContents } from '@/components/checkout/checkout-contents';
 import { createClient } from '@/utils/supabase/server';
-import { isOfferPrice } from '@/constants/pro-offer';
+import { checkoutEnabled, isOfferPrice } from '@/constants/pro-offer';
 import { notFound } from 'next/navigation';
 
 export default async function CheckoutPage({ params }: Readonly<{ params: Promise<{ priceId: string }> }>) {
   // Only the Pro offer's prices are for sale; any other price would take a payment that entitles nothing.
-  if (!isOfferPrice((await params).priceId)) notFound();
+  if (!checkoutEnabled || !isOfferPrice((await params).priceId)) notFound();
 
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();

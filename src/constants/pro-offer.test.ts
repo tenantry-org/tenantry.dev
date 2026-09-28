@@ -27,4 +27,17 @@ describe('isOfferPrice', () => {
     expect(isOfferPrice('')).toBe(false);
     expect(isOfferPrice('pri_01month')).toBe(false);
   });
+
+  it('keeps the checkout closed unless it is explicitly enabled', async () => {
+    for (const [value, open] of [
+      [undefined, false],
+      ['false', false],
+      ['1', false],
+      ['true', true],
+    ] as const) {
+      vi.resetModules();
+      vi.stubEnv('NEXT_PUBLIC_CHECKOUT_ENABLED', value);
+      expect((await import('./pro-offer')).checkoutEnabled).toBe(open);
+    }
+  });
 });

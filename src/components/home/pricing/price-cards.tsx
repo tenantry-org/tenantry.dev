@@ -1,4 +1,4 @@
-import { ProOffer } from '@/constants/pro-offer';
+import { checkoutEnabled, ProOffer } from '@/constants/pro-offer';
 import { IBillingFrequency } from '@/constants/billing-frequency';
 import { FeaturesList } from '@/components/home/pricing/features-list';
 import { PriceAmount } from '@/components/home/pricing/price-amount';
@@ -37,9 +37,15 @@ export function PriceCards({ loading, frequency, priceMap }: Props) {
           <div className={'px-8 text-[16px] leading-[24px]'}>{offer.description}</div>
         </div>
         <div className={'px-8 mt-8'}>
-          <Button className={'w-full'} variant={'secondary'} asChild={true}>
-            <Link href={`/checkout/${offer.priceId[frequency.value]}`}>Get started</Link>
-          </Button>
+          {checkoutEnabled ? (
+            <Button className={'w-full'} variant={'secondary'} asChild={true}>
+              <Link href={`/checkout/${offer.priceId[frequency.value]}`}>Get started</Link>
+            </Button>
+          ) : (
+            <Button className={'w-full'} variant={'secondary'} disabled={true}>
+              Available soon
+            </Button>
+          )}
         </div>
         <FeaturesList offer={offer} />
       </div>

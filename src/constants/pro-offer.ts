@@ -33,6 +33,13 @@ export const ProOffer: Offer = {
   },
 };
 
+/**
+ * Whether the Pro offer can be bought. Off unless NEXT_PUBLIC_CHECKOUT_ENABLED is exactly 'true', so a site
+ * that is live before sales open (for Paddle's domain review, which needs the public site and its legal
+ * pages) takes no payment. Compiled into the client build: changing it needs a redeploy.
+ */
+export const checkoutEnabled = process.env.NEXT_PUBLIC_CHECKOUT_ENABLED === 'true';
+
 /** Whether a Paddle price id is one of the Pro offer's prices, the only ones the checkout sells. */
 export function isOfferPrice(priceId: string): boolean {
   return priceId !== '' && Object.values(ProOffer.priceId).includes(priceId);
