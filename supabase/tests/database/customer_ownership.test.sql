@@ -3,7 +3,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(18);
 
 -- The buyer signed up with the address they bought with but has not confirmed it yet (as an impostor
 -- using a purchaser's address would be); another user is confirmed; a third bought with a mixed-case
@@ -21,6 +21,8 @@ insert into public.subscriptions (subscription_id, subscription_status, customer
   ('sub_buyer', 'active', 'ctm_buyer');
 insert into public.entitlements (customer_id, subscription_id, tier, status) values
   ('ctm_buyer', 'sub_buyer', 'pro', 'active');
+insert into public.customer_access (customer_id, status, tier) values
+  ('ctm_buyer', 'active', 'pro');
 insert into public.licences (customer_id, jwt, tier, expires_at) values
   ('ctm_buyer', 'buyer-licence', 'pro', now() + interval '1 year'),
   ('ctm_mixed', 'mixed-licence', 'pro', now() + interval '1 year');
@@ -44,6 +46,7 @@ set local request.jwt.claims to '{"sub": "11111111-1111-1111-1111-111111111111",
 select is((select count(*)::int from public.customers), 0, 'unconfirmed: no customer row');
 select is((select count(*)::int from public.licences), 0, 'unconfirmed: no licence');
 select is((select count(*)::int from public.entitlements), 0, 'unconfirmed: no entitlement');
+select is((select count(*)::int from public.customer_access), 0, 'unconfirmed: no customer access');
 select is((select count(*)::int from public.subscriptions), 0, 'unconfirmed: no subscription');
 select is((select count(*)::int from public.github_links), 0, 'unconfirmed: no GitHub link');
 
@@ -55,6 +58,7 @@ set local role authenticated;
 select is((select count(*)::int from public.customers), 1, 'confirmed: their customer row');
 select is((select jwt from public.licences), 'buyer-licence', 'confirmed: their licence, and only theirs');
 select is((select count(*)::int from public.entitlements), 1, 'confirmed: their entitlement');
+select is((select status from public.customer_access), 'active', 'confirmed: their access');
 select is((select count(*)::int from public.subscriptions), 1, 'confirmed: their subscription');
 select is((select count(*)::int from public.github_links), 1, 'confirmed: their GitHub link');
 

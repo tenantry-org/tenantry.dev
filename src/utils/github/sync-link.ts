@@ -3,10 +3,12 @@ import { createClient as createServiceClient } from '@/utils/supabase/server-int
 import { grantAccess } from '@/utils/github/provisioning';
 import { provisioningAllowed } from '@/utils/provisioning-guard';
 import { confirmedEmail } from '@/utils/customers/email';
+import { markGithubGranted } from '@/utils/entitlements/entitlements-store';
+import { isEntitled } from '@/utils/entitlements/customer-access';
 
 /**
- * Reconciles the signed-in user's GitHub identity into `github_links` and, if they hold an active or
- * grace entitlement, grants them access to the private org/feed. This is the step that closes the
+ * Reconciles the signed-in user's GitHub identity into `github_links` and, if their customer is entitled
+ * (any active or grace subscription), grants them access to the private org/feed. This is the step that closes the
  * loop between "customer connected GitHub" and "customer can restore Tenantry.Pro".
  *
  * Safe to call repeatedly (idempotent): from the OAuth callback and from the "Connect GitHub" action.
@@ -60,16 +62,15 @@ export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
 
   if (linkError) throw linkError;
 
-  // Grant immediately if there is an entitlement that should have access.
-  const { data: entitlement } = await service
-    .from('entitlements')
-    .select('id')
+  // Grant immediately if the customer is entitled (by any of their subscriptions).
+  const { data: access, error: accessError } = await service
+    .from('customer_access')
+    .select('status')
     .eq('customer_id', customerId)
-    .in('status', ['active', 'grace'])
-    .limit(1)
     .maybeSingle();
 
-  if (!entitlement) return { linked: true, granted: false, reason: 'no-active-entitlement' };
+  if (accessError) throw accessError;
+  if (!access || !isEntitled(access.status)) return { linked: true, granted: false, reason: 'no-active-entitlement' };
 
   // Same gate as the webhook and reconcile paths: manual mode or a non-allowlisted customer links the
   // account but leaves the grant to the operator.
@@ -77,12 +78,7 @@ export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
 
   try {
     await grantAccess(login);
-    const now = new Date().toISOString();
-    await service
-      .from('entitlements')
-      .update({ github_granted: true, granted_at: now, updated_at: now })
-      .eq('customer_id', customerId)
-      .in('status', ['active', 'grace']);
+    await markGithubGranted(customerId);
 
     return { linked: true, granted: true };
   } catch (error) {

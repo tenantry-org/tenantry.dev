@@ -1,13 +1,17 @@
 import { createClient } from '@/utils/supabase/server-internal';
 import { grantAccess, hasAccess, revokeAccess } from '@/utils/github/provisioning';
 import { provisioningAllowed } from '@/utils/provisioning-guard';
+import { getCustomerEmail, getGithubLogin, markGithubGranted } from '@/utils/entitlements/entitlements-store';
+import { isEntitled } from '@/utils/entitlements/customer-access';
 
 /**
- * Reconciles entitlements ↔ GitHub access. Catches stragglers a single webhook can miss:
- *   - a customer who linked GitHub after their subscription activated (grant pending),
- *   - a grant/revoke that failed transiently during webhook handling.
+ * Brings GitHub access in line with each customer's recorded access (`customer_access`, see
+ * customer-access.ts). Catches what a single webhook can miss:
+ *   - a customer who linked GitHub after their access started (grant pending),
+ *   - a grant or removal that failed transiently during webhook handling.
  *
- * Idempotent and safe to run on a schedule (e.g. Vercel Cron hitting /api/reconcile).
+ * It never starts or ends a customer's access, and sends no email. Idempotent and safe to run on a
+ * schedule (e.g. Vercel Cron hitting /api/reconcile).
  */
 export interface ReconcileResult {
   granted: string[];
@@ -21,49 +25,43 @@ export async function reconcileEntitlements(): Promise<ReconcileResult> {
 
   // 1. Entitled (active/grace) but not yet granted, and GitHub is linked → grant.
   const { data: pending, error: pendingError } = await supabase
-    .from('entitlements')
+    .from('customer_access')
     .select('customer_id')
     .in('status', ['active', 'grace'])
     .eq('github_granted', false);
   if (pendingError) throw pendingError;
 
-  for (const entitlement of pending ?? []) {
-    const login = await linkedLogin(supabase, entitlement.customer_id);
-    if (!login) continue;
-
-    // Honour the provisioning gate (PROVISIONING_MODE + allowlist) so reconcile can't backfill a grant
-    // the webhook withheld.
-    if (!provisioningAllowed(await customerEmail(supabase, entitlement.customer_id))) continue;
-
+  for (const { customer_id: customerId } of pending ?? []) {
     try {
+      const login = await getGithubLogin(customerId);
+      if (!login) continue;
+
+      // Honour the provisioning gate (PROVISIONING_MODE + allowlist) so reconcile can't backfill a grant
+      // the webhook withheld.
+      if (!provisioningAllowed(await getCustomerEmail(customerId))) continue;
+
       await grantAccess(login);
-      const now = new Date().toISOString();
-      await supabase
-        .from('entitlements')
-        .update({ github_granted: true, granted_at: now, updated_at: now })
-        .eq('customer_id', entitlement.customer_id)
-        .in('status', ['active', 'grace']);
-      result.granted.push(entitlement.customer_id);
+      await markGithubGranted(customerId);
+      result.granted.push(customerId);
     } catch (error) {
-      result.errors.push(`grant ${entitlement.customer_id}: ${String(error)}`);
+      result.errors.push(`grant ${customerId}: ${String(error)}`);
     }
   }
 
-  // 2. Linked customers with NO active/grace entitlement who still have org access → revoke.
+  // 2. Linked customers who are not entitled but are still in the team → remove them.
   const { data: links, error: linksError } = await supabase.from('github_links').select('customer_id, github_login');
   if (linksError) throw linksError;
 
   for (const link of links ?? []) {
-    const { data: active } = await supabase
-      .from('entitlements')
-      .select('id')
-      .eq('customer_id', link.customer_id)
-      .in('status', ['active', 'grace'])
-      .limit(1)
-      .maybeSingle();
-    if (active) continue; // still entitled — leave access in place
-
     try {
+      const { data: access, error } = await supabase
+        .from('customer_access')
+        .select('status')
+        .eq('customer_id', link.customer_id)
+        .maybeSingle();
+      if (error) throw error;
+      if (access && isEntitled(access.status)) continue; // still entitled
+
       if (await hasAccess(link.github_login)) {
         await revokeAccess(link.github_login);
         result.revoked.push(link.customer_id);
@@ -74,26 +72,4 @@ export async function reconcileEntitlements(): Promise<ReconcileResult> {
   }
 
   return result;
-}
-
-async function linkedLogin(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  customerId: string,
-): Promise<string | null> {
-  const { data } = await supabase
-    .from('github_links')
-    .select('github_login')
-    .eq('customer_id', customerId)
-    .maybeSingle();
-
-  return data?.github_login ?? null;
-}
-
-async function customerEmail(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  customerId: string,
-): Promise<string | null> {
-  const { data } = await supabase.from('customers').select('email').eq('customer_id', customerId).maybeSingle();
-
-  return data?.email ?? null;
 }

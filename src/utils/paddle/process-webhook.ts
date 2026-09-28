@@ -7,24 +7,9 @@ import {
 } from '@paddle/paddle-node-sdk';
 import { createClient } from '@/utils/supabase/server-internal';
 import { resolveTier } from '@/constants/tier-mapping';
-import { issueLicence } from '@/utils/licensing/licence-issuer';
-import {
-  EntitlementStatus,
-  getCustomerEmail,
-  getGithubLogin,
-  recordLicence,
-  revokeLicences,
-  upsertEntitlement,
-} from '@/utils/entitlements/entitlements-store';
-import { grantAccess, revokeAccess } from '@/utils/github/provisioning';
-import { sendEmail } from '@/utils/email/send';
-import { accessRevokedEmail, welcomeProEmail } from '@/utils/email/templates';
-import { provisioningAllowed } from '@/utils/provisioning-guard';
+import { EntitlementStatus, upsertEntitlement } from '@/utils/entitlements/entitlements-store';
+import { syncCustomerAccess } from '@/utils/entitlements/customer-access';
 import { normaliseEmail } from '@/utils/customers/email';
-
-// Fallback licence lifetime when Paddle doesn't supply a current billing period (the validator's
-// own 30-day grace then covers any renewal gap; we re-issue on every subscription event).
-const FALLBACK_LICENCE_DAYS = 30;
 
 // Structural view of the bits of SubscriptionNotification this handler needs.
 interface SubscriptionEventData {
@@ -50,14 +35,9 @@ export class ProcessWebhook {
       case EventName.SubscriptionCanceled:
       case EventName.SubscriptionPaused:
       case EventName.SubscriptionResumed:
-      case EventName.SubscriptionTrialing: {
-        const data = eventData.data as unknown as SubscriptionEventData;
-        if (!(await this.handleSubscription(data, eventData.occurredAt))) break;
-        // Lifecycle emails fire once per transition (these events fire once and the inbox stores each
-        // event once), so they don't spam on every subscription.updated.
-        await this.sendLifecycleEmail(eventData.eventType, data.customerId);
+      case EventName.SubscriptionTrialing:
+        await this.handleSubscription(eventData.data as unknown as SubscriptionEventData, eventData.occurredAt);
         break;
-      }
       case EventName.CustomerCreated:
       case EventName.CustomerUpdated:
         await this.updateCustomerData(eventData);
@@ -65,34 +45,13 @@ export class ProcessWebhook {
     }
   }
 
-  private async sendLifecycleEmail(eventType: EventName, customerId: string) {
-    const template =
-      eventType === EventName.SubscriptionActivated
-        ? welcomeProEmail
-        : eventType === EventName.SubscriptionCanceled
-          ? accessRevokedEmail
-          : null;
-    if (!template) return;
-
-    const email = await getCustomerEmail(customerId);
-    if (!email) {
-      console.info(`Paddle webhook: no email on file for customer ${customerId}; skipping lifecycle email.`);
-      return;
-    }
-
-    // Don't invite customers to "connect GitHub" when automated provisioning won't grant them access.
-    if (template === welcomeProEmail && !provisioningAllowed(email)) return;
-
-    await sendEmail(template(email)); // sendEmail never throws
-  }
-
-  // Records the subscription, then reconciles the customer's entitlement, licence, and GitHub access
-  // to match the subscription's current status. Returns false, having changed nothing, if a newer event
-  // for this subscription has already been applied (Paddle does not guarantee delivery order).
-  private async handleSubscription(data: SubscriptionEventData, occurredAt: string): Promise<boolean> {
+  // Records the subscription and its entitlement, then brings the customer's access (GitHub, licence,
+  // emails) in line with all their entitlements. Changes nothing if a newer event for this subscription
+  // has already been applied (Paddle does not guarantee delivery order).
+  private async handleSubscription(data: SubscriptionEventData, occurredAt: string) {
     if (!(await this.recordSubscriptionEvent(data, occurredAt))) {
       console.info(`Paddle webhook: ignoring a ${data.status} event for ${data.id} older than the last one applied.`);
-      return false;
+      return;
     }
 
     const tier = resolveTier(data.items[0]?.price?.productId);
@@ -102,100 +61,18 @@ export class ProcessWebhook {
         `Paddle webhook: subscription ${data.id} product is not mapped to a tier (see PADDLE_PRODUCT_TIER_MAP); ` +
           'skipping entitlement provisioning.',
       );
-      return true;
-    }
-
-    const status = mapStatus(data.status);
-
-    if (status === 'revoked') {
-      await this.revokeEntitlement(data, tier);
-      return true;
-    }
-
-    // Provisioning gate: in manual mode (PROVISIONING_MODE not 'auto') or for a non-allowlisted customer,
-    // record the entitlement but withhold GitHub access + licence.
-    const email = await getCustomerEmail(data.customerId);
-    if (!provisioningAllowed(email)) {
-      console.warn(
-        `Paddle webhook: automated provisioning is off for ${email ?? data.customerId} ` +
-          '(PROVISIONING_MODE/PROVISION_ALLOWLIST); recording entitlement but withholding GitHub access and licence.',
-      );
-      await upsertEntitlement({
-        customerId: data.customerId,
-        subscriptionId: data.id,
-        tier,
-        status,
-        githubGranted: false,
-      });
-      return true;
-    }
-
-    await this.grantEntitlement(data, tier, status);
-    return true;
-  }
-
-  private async grantEntitlement(data: SubscriptionEventData, tier: string, status: EntitlementStatus) {
-    const githubLogin = await getGithubLogin(data.customerId);
-
-    // Grant GitHub access if the customer has linked their account. Failures here (e.g. the GitHub App
-    // not yet configured) are logged but must not fail the webhook — a reconciliation job can backfill.
-    let githubGranted = false;
-
-    if (githubLogin) {
-      try {
-        await grantAccess(githubLogin);
-        githubGranted = true;
-      } catch (error) {
-        console.error(`Paddle webhook: failed to grant GitHub access to ${githubLogin}:`, error);
-      }
-    } else {
-      console.info(
-        `Paddle webhook: customer ${data.customerId} has not linked GitHub yet; entitlement recorded as pending access.`,
-      );
+      return;
     }
 
     await upsertEntitlement({
       customerId: data.customerId,
       subscriptionId: data.id,
       tier,
-      status,
-      githubGranted,
+      status: mapStatus(data.status),
+      currentPeriodEndsAt: data.currentBillingPeriod?.endsAt ? new Date(data.currentBillingPeriod.endsAt) : null,
     });
 
-    // Issue a fresh licence tracking the current billing period. Secret-dependent — log and continue.
-    try {
-      const expiresAt = licenceExpiry(data);
-      const jwt = issueLicence({ customerId: data.customerId, tier, expiresAt });
-      await recordLicence({ customerId: data.customerId, jwt, tier, expiresAt });
-    } catch (error) {
-      console.error(`Paddle webhook: failed to issue licence for customer ${data.customerId}:`, error);
-    }
-  }
-
-  private async revokeEntitlement(data: SubscriptionEventData, tier: string) {
-    const githubLogin = await getGithubLogin(data.customerId);
-
-    if (githubLogin) {
-      try {
-        await revokeAccess(githubLogin);
-      } catch (error) {
-        console.error(`Paddle webhook: failed to revoke GitHub access for ${githubLogin}:`, error);
-      }
-    }
-
-    await upsertEntitlement({
-      customerId: data.customerId,
-      subscriptionId: data.id,
-      tier,
-      status: 'revoked',
-      githubGranted: false,
-    });
-
-    try {
-      await revokeLicences(data.customerId);
-    } catch (error) {
-      console.error(`Paddle webhook: failed to revoke licences for customer ${data.customerId}:`, error);
-    }
+    await syncCustomerAccess(data.customerId);
   }
 
   // Returns false if a newer event for this subscription has already been applied. Throws a foreign-key
@@ -246,12 +123,4 @@ function mapStatus(status: SubscriptionStatus): EntitlementStatus {
     default:
       return 'revoked';
   }
-}
-
-function licenceExpiry(data: SubscriptionEventData): Date {
-  if (data.currentBillingPeriod?.endsAt) {
-    return new Date(data.currentBillingPeriod.endsAt);
-  }
-
-  return new Date(Date.now() + FALLBACK_LICENCE_DAYS * 24 * 60 * 60 * 1000);
 }

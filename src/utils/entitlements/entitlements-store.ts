@@ -8,12 +8,18 @@ import { createClient } from '@/utils/supabase/server-internal';
 
 export type EntitlementStatus = 'active' | 'grace' | 'revoked';
 
+/** A subscription's entitlement. GitHub access and the licence are per customer (see customer-access.ts). */
 export interface EntitlementRecord {
   customerId: string;
   subscriptionId: string;
   tier: string;
   status: EntitlementStatus;
-  githubGranted: boolean;
+  currentPeriodEndsAt: Date | null;
+}
+
+export interface CurrentLicence {
+  tier: string;
+  expiresAt: Date;
 }
 
 /** Returns the customer's email (populated by Paddle customer webhooks), or null if unknown. */
@@ -51,8 +57,7 @@ export async function upsertEntitlement(record: EntitlementRecord): Promise<void
       subscription_id: record.subscriptionId,
       tier: record.tier,
       status: record.status,
-      github_granted: record.githubGranted,
-      granted_at: record.githubGranted ? now : null,
+      current_period_ends_at: record.currentPeriodEndsAt?.toISOString() ?? null,
       revoked_at: record.status === 'revoked' ? now : null,
       updated_at: now,
     },
@@ -60,6 +65,75 @@ export async function upsertEntitlement(record: EntitlementRecord): Promise<void
   );
 
   if (error) throw error;
+}
+
+/** Returns all of a customer's entitlements, one per subscription. */
+export async function listEntitlements(customerId: string): Promise<EntitlementRecord[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('entitlements')
+    .select('subscription_id,tier,status,current_period_ends_at')
+    .eq('customer_id', customerId);
+
+  if (error) throw error;
+
+  return ((data ?? []) as Record<string, string | null>[]).map((row) => ({
+    customerId,
+    subscriptionId: row.subscription_id as string,
+    tier: row.tier as string,
+    status: row.status as EntitlementStatus,
+    currentPeriodEndsAt: row.current_period_ends_at ? new Date(row.current_period_ends_at) : null,
+  }));
+}
+
+/**
+ * Records the customer's access (derived from all their entitlements) and returns the status it replaced,
+ * 'revoked' for a customer seen for the first time. Ending access also clears `github_granted`.
+ */
+export async function setCustomerAccess(
+  customerId: string,
+  status: EntitlementStatus,
+  tier: string | null,
+): Promise<EntitlementStatus> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('set_customer_access', {
+    p_customer_id: customerId,
+    p_status: status,
+    p_tier: tier,
+  });
+
+  if (error) throw error;
+
+  return data as EntitlementStatus;
+}
+
+/** Records that the customer's GitHub account was added to the team, unless their access has since ended. */
+export async function markGithubGranted(customerId: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('customer_access')
+    .update({ github_granted: true, updated_at: new Date().toISOString() })
+    .eq('customer_id', customerId)
+    .in('status', ['active', 'grace']);
+
+  if (error) throw error;
+}
+
+/** The customer's most recently issued licence that is not revoked, or null. */
+export async function getCurrentLicence(customerId: string): Promise<CurrentLicence | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('licences')
+    .select('tier,expires_at')
+    .eq('customer_id', customerId)
+    .eq('revoked', false)
+    .order('issued_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data ? { tier: data.tier as string, expiresAt: new Date(data.expires_at as string) } : null;
 }
 
 /** Records a freshly issued licence token for a customer. */
@@ -81,7 +155,7 @@ export async function recordLicence(params: {
   if (error) throw error;
 }
 
-/** Marks all of a customer's licences as revoked (e.g. on cancellation past grace). */
+/** Marks all of a customer's licences as revoked, when their access ends. */
 export async function revokeLicences(customerId: string): Promise<void> {
   const supabase = await createClient();
 

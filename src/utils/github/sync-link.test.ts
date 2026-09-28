@@ -7,6 +7,7 @@ vi.mock('@/utils/github/provisioning', () => github);
 
 const state = vi.hoisted(() => ({
   user: null as Record<string, unknown> | null,
+  accessStatus: 'active',
   calls: [] as FakeCall[],
 }));
 
@@ -32,7 +33,7 @@ vi.mock('@/utils/supabase/server-internal', async () => {
       fakeSupabase(
         {
           customers: { single: { customer_id: 'ctm_1' } },
-          entitlements: { single: { id: 'ent_1' } },
+          customer_access: { single: { status: state.accessStatus } },
         },
         state.calls,
       ),
@@ -43,6 +44,7 @@ describe('syncGithubLinkForCurrentUser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.user = signedInUser();
+    state.accessStatus = 'active';
     state.calls.length = 0;
   });
 
@@ -75,6 +77,16 @@ describe('syncGithubLinkForCurrentUser', () => {
 
     expect(result).toEqual({ linked: true, granted: true });
     expect(github.grantAccess).toHaveBeenCalledWith('octocat');
+  });
+
+  it("links but does not grant access when none of the customer's subscriptions entitles them", async () => {
+    process.env.PROVISIONING_MODE = 'auto';
+    state.accessStatus = 'revoked';
+
+    const result = await syncGithubLinkForCurrentUser();
+
+    expect(result).toEqual({ linked: true, granted: false, reason: 'no-active-entitlement' });
+    expect(github.grantAccess).not.toHaveBeenCalled();
   });
 
   it('does not link an account whose email is not confirmed, and looks nothing up', async () => {

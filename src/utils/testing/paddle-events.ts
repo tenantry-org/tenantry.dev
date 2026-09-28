@@ -10,9 +10,11 @@ export function subscriptionEvent(options: {
   subscriptionId?: string;
   customerId?: string;
   productId?: string;
+  periodEndsAt?: string;
 }): PaddleEventJson {
   const { eventId, occurredAt, status } = options;
   const productId = options.productId ?? 'pro_01';
+  const periodEndsAt = options.periodEndsAt ?? '2026-10-01T00:00:00Z';
 
   return {
     event_id: eventId,
@@ -30,14 +32,14 @@ export function subscriptionEvent(options: {
       updated_at: occurredAt,
       started_at: '2026-09-01T00:00:00Z',
       first_billed_at: '2026-09-01T00:00:00Z',
-      next_billed_at: status === 'canceled' ? null : '2026-10-01T00:00:00Z',
+      next_billed_at: status === 'canceled' ? null : periodEndsAt,
       paused_at: null,
       canceled_at: status === 'canceled' ? occurredAt : null,
       discount: null,
       collection_mode: 'automatic',
       billing_details: null,
       current_billing_period:
-        status === 'canceled' ? null : { starts_at: '2026-09-01T00:00:00Z', ends_at: '2026-10-01T00:00:00Z' },
+        status === 'canceled' ? null : { starts_at: '2026-09-01T00:00:00Z', ends_at: periodEndsAt },
       billing_cycle: { interval: 'month', frequency: 1 },
       scheduled_change: null,
       items: [

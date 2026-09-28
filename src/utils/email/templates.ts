@@ -10,7 +10,7 @@ ${body}
 </div>`;
 }
 
-/** Sent once when a subscription becomes active. Points the customer at the Pro access page. */
+/** Sent when a customer's access starts (their first entitled subscription). Points them at the Pro access page. */
 export function welcomeProEmail(to: string): EmailMessage {
   return {
     to,
@@ -25,14 +25,14 @@ export function welcomeProEmail(to: string): EmailMessage {
   };
 }
 
-/** Sent when a subscription is canceled and access is being revoked. */
+/** Sent when a customer's access ends: none of their subscriptions entitles them any more. */
 export function accessRevokedEmail(to: string): EmailMessage {
   return {
     to,
     subject: 'Your Tenantry Pro subscription has ended',
     html: layout(
       `<h1 style="font-size:20px">Your Tenantry Pro access has ended</h1>
-<p>Your subscription was canceled, so access to the private repository and package feed has been removed.</p>
+<p>You no longer have an active Tenantry Pro subscription, so access to the private repository and package feed has been removed.</p>
 <p>Already-installed builds keep working, but you won't receive new Pro package versions. You can resubscribe any time:</p>
 <p><a href="${SITE_URL}/#pricing" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">View pricing</a></p>`,
     ),

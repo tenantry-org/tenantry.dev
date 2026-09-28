@@ -3,11 +3,12 @@ import { getCustomerId } from '@/utils/paddle/get-customer-id';
 
 /**
  * Read model for the customer-facing Pro access page. Uses the user-scoped client, so RLS guarantees
- * a customer only ever sees their own entitlement / licence / GitHub link.
+ * a customer only ever sees their own access / licence / GitHub link.
  */
 export interface ProAccess {
   customerId: string | null;
-  entitlement: { tier: string; status: string; githubGranted: boolean } | null;
+  /** The customer's access across all their subscriptions (`customer_access`). */
+  entitlement: { tier: string | null; status: string; githubGranted: boolean } | null;
   licence: { jwt: string; tier: string; expiresAt: string } | null;
   githubLogin: string | null;
 }
@@ -22,13 +23,7 @@ export async function getProAccess(): Promise<ProAccess> {
   const supabase = await createClient();
 
   const [{ data: entitlement }, { data: licence }, { data: link }] = await Promise.all([
-    supabase
-      .from('entitlements')
-      .select('tier,status,github_granted')
-      .eq('customer_id', customerId)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    supabase.from('customer_access').select('tier,status,github_granted').eq('customer_id', customerId).maybeSingle(),
     supabase
       .from('licences')
       .select('jwt,tier,expires_at')
