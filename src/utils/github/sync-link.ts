@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server';
 import { createClient as createServiceClient } from '@/utils/supabase/server-internal';
 import { grantAccess } from '@/utils/github/provisioning';
 import { provisioningAllowed } from '@/utils/provisioning-guard';
+import { confirmedEmail } from '@/utils/customers/email';
 
 /**
  * Reconciles the signed-in user's GitHub identity into `github_links` and, if they hold an active or
@@ -10,7 +11,8 @@ import { provisioningAllowed } from '@/utils/provisioning-guard';
  *
  * Safe to call repeatedly (idempotent): from the OAuth callback and from the "Connect GitHub" action.
  * Reads identity with the user-scoped client; writes with the service-role client (RLS has no
- * INSERT/UPDATE policy for authenticated users).
+ * INSERT/UPDATE policy for authenticated users). The user is matched to a customer by their confirmed
+ * email only: anyone can sign up with a purchaser's address, but only the purchaser can confirm it.
  */
 export interface SyncResult {
   linked: boolean;
@@ -26,6 +28,9 @@ export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
 
   if (!user) return { linked: false, granted: false, reason: 'not-authenticated' };
   if (!user.email) return { linked: false, granted: false, reason: 'no-email' };
+
+  const email = confirmedEmail(user);
+  if (!email) return { linked: false, granted: false, reason: 'email-not-confirmed' };
 
   const githubIdentity = user.identities?.find((identity) => identity.provider === 'github');
   if (!githubIdentity) return { linked: false, granted: false, reason: 'no-github-identity' };
@@ -44,11 +49,7 @@ export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
   const service = await createServiceClient();
 
   // Only purchasers have a customer row; until then there is nothing to link to.
-  const { data: customer } = await service
-    .from('customers')
-    .select('customer_id')
-    .eq('email', user.email)
-    .maybeSingle();
+  const { data: customer } = await service.from('customers').select('customer_id').eq('email', email).maybeSingle();
   const customerId = customer?.customer_id as string | undefined;
 
   if (!customerId) return { linked: false, granted: false, reason: 'no-customer' };
@@ -72,7 +73,7 @@ export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
 
   // Same gate as the webhook and reconcile paths: manual mode or a non-allowlisted customer links the
   // account but leaves the grant to the operator.
-  if (!provisioningAllowed(user.email)) return { linked: true, granted: false, reason: 'provisioning-disabled' };
+  if (!provisioningAllowed(email)) return { linked: true, granted: false, reason: 'provisioning-disabled' };
 
   try {
     await grantAccess(login);

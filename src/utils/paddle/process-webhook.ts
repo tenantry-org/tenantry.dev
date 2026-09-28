@@ -20,6 +20,7 @@ import { grantAccess, revokeAccess } from '@/utils/github/provisioning';
 import { sendEmail } from '@/utils/email/send';
 import { accessRevokedEmail, welcomeProEmail } from '@/utils/email/templates';
 import { provisioningAllowed } from '@/utils/provisioning-guard';
+import { normaliseEmail } from '@/utils/customers/email';
 
 // Fallback licence lifetime when Paddle doesn't supply a current billing period (the validator's
 // own 30-day grace then covers any renewal gap; we re-issue on every subscription event).
@@ -211,7 +212,8 @@ export class ProcessWebhook {
       .from('customers')
       .upsert({
         customer_id: eventData.data.id,
-        email: eventData.data.email,
+        // Stored normalised, as the database also enforces, so it matches the buyer's account in any case.
+        email: normaliseEmail(eventData.data.email),
       })
       .select();
 
