@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { AccountButton, SignInButton } from '@/components/home/header/account-button';
+import { AccountButton } from '@/components/home/header/account-button';
 import { Logo } from '@/components/brand/logo';
 
 const NAV = [
@@ -38,7 +38,9 @@ export default function Header() {
           >
             Docs
           </Link>
-          <Suspense fallback={<SignInButton />}>
+          {/* Until the session is read, hold the button's place without naming it: showing Sign in here made it
+              flash for signed-in visitors. */}
+          <Suspense fallback={<div className={'h-8 w-24'} aria-hidden={true} />}>
             <AccountButton />
           </Suspense>
         </div>
