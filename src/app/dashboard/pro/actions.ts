@@ -23,7 +23,7 @@ export async function connectGithub() {
   if (alreadyHasGithub) {
     const { reason } = await syncGithubLinkForCurrentUser();
     if (isLinkError(reason)) redirect(`/dashboard/pro?error=${reason}`);
-    revalidatePath('/dashboard/pro');
+    revalidatePath('/dashboard/pro', 'layout'); // Access, Install and Billing all show this customer's state
     return;
   }
 

@@ -2,9 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { Check, Copy, CreditCard, Download, KeyRound, Package } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Check, Copy, Download } from 'lucide-react';
 import { GithubIcon } from '@/components/icons/github-icon';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -129,297 +127,266 @@ function GithubStatus({
 
 const cardClass = 'p-6';
 
-export function ProAccessView({ access, githubOrg, linkError, accountEmail }: Props) {
+/** Whether the customer has Pro now: the pages show the no-subscription card otherwise. */
+function isEntitled(access: ProAccess): access is ProAccess & { entitlement: NonNullable<ProAccess['entitlement']> } {
+  return Boolean(access.entitlement) && access.entitlement?.status !== 'revoked';
+}
+
+function NoSubscription({ access, accountEmail }: Readonly<{ access: ProAccess; accountEmail: string | null }>) {
+  return (
+    <Card className={cardClass}>
+      <CardHeader className={'p-0'}>
+        <CardTitle>No active Tenantry Pro subscription</CardTitle>
+      </CardHeader>
+      <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
+        <p className={'text-muted-foreground'}>
+          Subscribe to Tenantry Pro to get the private package feed and your licence key.
+        </p>
+        {!access.customerId && accountEmail && (
+          <p className={'text-muted-foreground'}>
+            Purchases are matched to accounts by email address, and none was made with{' '}
+            <span className={'font-medium text-foreground'}>{accountEmail}</span>. If you bought Tenantry Pro with
+            another address, log in with an account for that address, or email{' '}
+            <a className={'text-link underline underline-offset-4'} href={'mailto:support@tenantry.dev'}>
+              support@tenantry.dev
+            </a>
+            .
+          </p>
+        )}
+        <Button asChild className={'w-fit'}>
+          <Link href={'/#pricing'}>View pricing</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Access (/dashboard/pro): the GitHub connection and the licence key. */
+export function AccessView({ access, githubOrg, linkError, accountEmail }: Props) {
+  if (!isEntitled(access)) return <NoSubscription access={access} accountEmail={accountEmail} />;
   const { entitlement, licence, githubLogin } = access;
 
-  if (!entitlement || entitlement.status === 'revoked') {
-    return (
+  return (
+    <div className={'grid gap-6 lg:grid-cols-2'}>
+      {/* GitHub connection */}
       <Card className={cardClass}>
         <CardHeader className={'p-0'}>
-          <CardTitle>No active Tenantry Pro subscription</CardTitle>
+          <CardTitle>GitHub access</CardTitle>
         </CardHeader>
-        <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
-          <p className={'text-muted-foreground'}>
-            Subscribe to Tenantry Pro to get the private package feed and your licence key.
-          </p>
-          {!access.customerId && accountEmail && (
+        <CardContent className={'p-0 pt-4 flex flex-col gap-3'}>
+          {linkError && LINK_ERROR_TEXT[linkError] && (
+            <p role={'alert'} className={'rounded-md bg-destructive-surface px-3 py-2 text-sm text-destructive'}>
+              {LINK_ERROR_TEXT[linkError]}
+            </p>
+          )}
+          {githubLogin ? (
+            <>
+              <p className={'text-muted-foreground'}>
+                Connected as <span className={'font-medium text-foreground'}>@{githubLogin}</span>
+              </p>
+              <GithubStatus
+                state={entitlement.github}
+                invitationExpiresAt={entitlement.invitationExpiresAt}
+                githubOrg={githubOrg}
+              />
+              <form action={connectGithub}>
+                <Button type={'submit'} variant={'outline'} size={'sm'}>
+                  <GithubIcon className={'h-4 w-4'} /> Refresh access
+                </Button>
+              </form>
+            </>
+          ) : (
+            <>
+              <p className={'text-muted-foreground'}>
+                Connect GitHub to get added to the <span className={'font-medium text-foreground'}>{githubOrg}</span>{' '}
+                org, which grants access to the private Tenantry Pro package feed.
+              </p>
+              <form action={connectGithub}>
+                <Button type={'submit'}>
+                  <GithubIcon className={'h-4 w-4'} /> Connect GitHub
+                </Button>
+              </form>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Licence key */}
+      <Card className={cardClass}>
+        <CardHeader className={'p-0'}>
+          <CardTitle>Licence key</CardTitle>
+        </CardHeader>
+        <CardContent className={'p-0 pt-4 flex flex-col gap-3'}>
+          {licence ? (
+            <>
+              <p className={'text-sm text-muted-foreground'}>
+                It does not expire: renewals keep the same key. Keep it out of source control and pass it to{' '}
+                <code>pro.WithLicence</code>, here from the configuration key <code>{LICENCE_CONFIG_KEY}</code>:
+              </p>
+              <code
+                className={
+                  'block max-h-24 overflow-auto rounded-md border border-border bg-code p-3 font-mono text-xs break-all'
+                }
+              >
+                {licence.jwt}
+              </code>
+              <div className={'flex gap-2'}>
+                <CopyButton value={licence.jwt} label={'Copy key'} />
+                <Button
+                  type={'button'}
+                  variant={'outline'}
+                  size={'sm'}
+                  onClick={() => {
+                    const blob = new Blob([licence.jwt], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const anchor = document.createElement('a');
+                    anchor.href = url;
+                    anchor.download = 'tenantry-pro.licence';
+                    anchor.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  <Download className={'h-4 w-4'} /> Download
+                </Button>
+              </div>
+              <Snippet value={licenceRegistration} maxHeight={'max-h-32'} />
+              <p className={'text-sm text-muted-foreground'}>
+                Locally, store it with user secrets. In CI and other environments, set the environment variable{' '}
+                <code>{LICENCE_ENV_VARIABLE}</code>.
+              </p>
+              <Snippet value={licenceUserSecret} />
+            </>
+          ) : (
             <p className={'text-muted-foreground'}>
-              Purchases are matched to accounts by email address, and none was made with{' '}
-              <span className={'font-medium text-foreground'}>{accountEmail}</span>. If you bought Tenantry Pro with
-              another address, log in with an account for that address, or email{' '}
+              Your licence is being issued and will appear here shortly. If it can&apos;t be issued we are alerted
+              automatically; you can also email{' '}
               <a className={'text-link underline underline-offset-4'} href={'mailto:support@tenantry.dev'}>
                 support@tenantry.dev
               </a>
               .
             </p>
           )}
-          <Button asChild className={'w-fit'}>
-            <Link href={'/#pricing'}>View pricing</Link>
-          </Button>
         </CardContent>
       </Card>
-    );
-  }
-
-  // Something on the Access tab needs the customer: GitHub to connect, an invitation to accept, a failed grant.
-  const accessNeedsAction = !githubLogin || entitlement.github === 'invited' || entitlement.github === 'failed';
-
-  return (
-    <ProTabs linkError={linkError} accessNeedsAction={accessNeedsAction}>
-      <TabsContent value={'access'} className={'grid gap-6 lg:grid-cols-2'}>
-        {/* GitHub connection */}
-        <Card className={cardClass}>
-          <CardHeader className={'p-0'}>
-            <CardTitle>GitHub access</CardTitle>
-          </CardHeader>
-          <CardContent className={'p-0 pt-4 flex flex-col gap-3'}>
-            {linkError && LINK_ERROR_TEXT[linkError] && (
-              <p role={'alert'} className={'rounded-md bg-destructive-surface px-3 py-2 text-sm text-destructive'}>
-                {LINK_ERROR_TEXT[linkError]}
-              </p>
-            )}
-            {githubLogin ? (
-              <>
-                <p className={'text-muted-foreground'}>
-                  Connected as <span className={'font-medium text-foreground'}>@{githubLogin}</span>
-                </p>
-                <GithubStatus
-                  state={entitlement.github}
-                  invitationExpiresAt={entitlement.invitationExpiresAt}
-                  githubOrg={githubOrg}
-                />
-                <form action={connectGithub}>
-                  <Button type={'submit'} variant={'outline'} size={'sm'}>
-                    <GithubIcon className={'h-4 w-4'} /> Refresh access
-                  </Button>
-                </form>
-              </>
-            ) : (
-              <>
-                <p className={'text-muted-foreground'}>
-                  Connect GitHub to get added to the <span className={'font-medium text-foreground'}>{githubOrg}</span>{' '}
-                  org, which grants access to the private Tenantry Pro package feed.
-                </p>
-                <form action={connectGithub}>
-                  <Button type={'submit'}>
-                    <GithubIcon className={'h-4 w-4'} /> Connect GitHub
-                  </Button>
-                </form>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Licence key */}
-        <Card className={cardClass}>
-          <CardHeader className={'p-0'}>
-            <CardTitle>Licence key</CardTitle>
-          </CardHeader>
-          <CardContent className={'p-0 pt-4 flex flex-col gap-3'}>
-            {licence ? (
-              <>
-                <p className={'text-sm text-muted-foreground'}>
-                  It does not expire: renewals keep the same key. Keep it out of source control and pass it to{' '}
-                  <code>pro.WithLicence</code>, here from the configuration key <code>{LICENCE_CONFIG_KEY}</code>:
-                </p>
-                <code
-                  className={
-                    'block max-h-24 overflow-auto rounded-md border border-border bg-code p-3 font-mono text-xs break-all'
-                  }
-                >
-                  {licence.jwt}
-                </code>
-                <div className={'flex gap-2'}>
-                  <CopyButton value={licence.jwt} label={'Copy key'} />
-                  <Button
-                    type={'button'}
-                    variant={'outline'}
-                    size={'sm'}
-                    onClick={() => {
-                      const blob = new Blob([licence.jwt], { type: 'text/plain' });
-                      const url = URL.createObjectURL(blob);
-                      const anchor = document.createElement('a');
-                      anchor.href = url;
-                      anchor.download = 'tenantry-pro.licence';
-                      anchor.click();
-                      URL.revokeObjectURL(url);
-                    }}
-                  >
-                    <Download className={'h-4 w-4'} /> Download
-                  </Button>
-                </div>
-                <Snippet value={licenceRegistration} maxHeight={'max-h-32'} />
-                <p className={'text-sm text-muted-foreground'}>
-                  Locally, store it with user secrets. In CI and other environments, set the environment variable{' '}
-                  <code>{LICENCE_ENV_VARIABLE}</code>.
-                </p>
-                <Snippet value={licenceUserSecret} />
-              </>
-            ) : (
-              <p className={'text-muted-foreground'}>
-                Your licence is being issued and will appear here shortly. If it can&apos;t be issued we are alerted
-                automatically; you can also email{' '}
-                <a className={'text-link underline underline-offset-4'} href={'mailto:support@tenantry.dev'}>
-                  support@tenantry.dev
-                </a>
-                .
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value={'install'} className={'max-w-4xl'}>
-        {/* Feed setup */}
-        <Card className={cardClass}>
-          <CardHeader className={'p-0'}>
-            <CardTitle>Install the packages</CardTitle>
-          </CardHeader>
-          <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
-            <p className={'text-sm text-muted-foreground'}>
-              Tenantry Pro&apos;s packages are on a private GitHub Packages feed; Tenantry core and everything else stay
-              on nuget.org. The full guide, including Docker builds and troubleshooting, is{' '}
-              <Link className={'text-link underline underline-offset-4'} href={INSTALL_GUIDE}>
-                Installation
-              </Link>
-              .
-            </p>
-
-            <div className={'flex flex-col gap-2'}>
-              <h3 className={'text-sm font-semibold'}>1. Create a token</h3>
-              <p className={'text-sm text-muted-foreground'}>
-                {githubLogin ? (
-                  <>
-                    Signed in to GitHub as <span className={'font-medium text-foreground'}>@{githubLogin}</span>,{' '}
-                  </>
-                ) : (
-                  <>Once GitHub is connected above, and signed in to GitHub as that account, </>
-                )}
-                <Link
-                  className={'text-link underline underline-offset-4'}
-                  href={CREATE_TOKEN_URL}
-                  target={'_blank'}
-                  rel={'noopener noreferrer'}
-                >
-                  create a personal access token (classic)
-                </Link>{' '}
-                with only the <code>read:packages</code> scope, and give it an expiry date. GitHub Packages accepts
-                classic tokens only, and only from an account with access to the feed.
-              </p>
-            </div>
-
-            <div className={'flex flex-col gap-2'}>
-              <h3 className={'text-sm font-semibold'}>2. Add this nuget.config next to your solution</h3>
-              <p className={'text-sm text-muted-foreground'}>
-                It holds no secrets, so commit it. It sends <code>Tenantry.Pro</code> and <code>Tenantry.Pro.*</code> to
-                the private feed and everything else to nuget.org, and reads the credentials from two environment
-                variables.
-              </p>
-              <Snippet value={nugetConfig(githubOrg)} label={'Copy nuget.config'} />
-            </div>
-
-            <div className={'flex flex-col gap-2'}>
-              <h3 className={'text-sm font-semibold'}>3. Set the credentials</h3>
-              <p className={'text-sm text-muted-foreground'}>
-                On your machine (shell profile or user environment), then restart your terminal and IDE:
-              </p>
-              <Snippet value={feedCredentials(githubLogin)} label={'Copy'} />
-            </div>
-
-            <div className={'flex flex-col gap-2'}>
-              <h3 className={'text-sm font-semibold'}>4. CI</h3>
-              <p className={'text-sm text-muted-foreground'}>
-                Store the token and the licence key as secrets. In GitHub Actions the workflow&apos;s own{' '}
-                <code>GITHUB_TOKEN</code> cannot read another organisation&apos;s private packages, so pass your token:
-              </p>
-              <Snippet value={ciWorkflow} label={'Copy workflow'} />
-              <p className={'text-sm text-muted-foreground'}>
-                Other CI systems work the same way: <code>{FEED_USERNAME_VARIABLE}</code> and{' '}
-                <code>{FEED_TOKEN_VARIABLE}</code> for the restore, <code>{LICENCE_ENV_VARIABLE}</code> for anything
-                that starts the application.
-              </p>
-            </div>
-
-            <div className={'flex flex-col gap-2'}>
-              <h3 className={'text-sm font-semibold'}>Rotating credentials</h3>
-              <ul className={'flex list-disc flex-col gap-1 pl-5 text-sm text-muted-foreground'}>
-                <li>
-                  When the token nears its expiry, create a new one the same way and update the environment variable and
-                  CI secret. Nothing else changes.
-                </li>
-                <li>
-                  If it may have leaked,{' '}
-                  <Link
-                    className={'text-link underline underline-offset-4'}
-                    href={'https://github.com/settings/tokens'}
-                    target={'_blank'}
-                    rel={'noopener noreferrer'}
-                  >
-                    revoke it on GitHub
-                  </Link>{' '}
-                  straight away and create another.
-                </li>
-                <li>
-                  To move access to another GitHub account, connect it above and accept its invitation; the previous
-                  account loses access, so create the token from the new one.
-                </li>
-                <li>The licence key never needs rotating.</li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value={'billing'} className={'max-w-3xl'}>
-        <BillingCard entitlement={entitlement} subscriptions={access.subscriptions} cardClass={cardClass} />
-      </TabsContent>
-    </ProTabs>
+    </div>
   );
 }
 
-const TABS = ['access', 'install', 'billing'] as const;
-type Tab = (typeof TABS)[number];
-
-/**
- * The Pro page's tabs. The open tab is kept in ?tab=, so a reload or a shared link keeps it; a GitHub linking
- * error (?error=) opens Access, where it is shown.
- */
-function ProTabs({
-  linkError,
-  accessNeedsAction,
-  children,
-}: Readonly<{ linkError?: string; accessNeedsAction: boolean; children: React.ReactNode }>) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const requested = searchParams.get('tab');
-  const tab: Tab = linkError ? 'access' : TABS.includes(requested as Tab) ? (requested as Tab) : 'access';
-
-  function select(value: string) {
-    const params = new URLSearchParams(searchParams);
-    params.delete('error');
-    if (value === 'access') params.delete('tab');
-    else params.set('tab', value);
-    const query = params.toString();
-    // The browser's history API, which Next keeps useSearchParams in step with: switching tabs needs no server
-    // round trip, so it does not reload the page's data.
-    window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
-  }
+/** Install (/dashboard/pro/install): setting up the private package feed, locally and in CI. */
+export function InstallView({ access, githubOrg, accountEmail }: Omit<Props, 'linkError'>) {
+  if (!isEntitled(access)) return <NoSubscription access={access} accountEmail={accountEmail} />;
+  const { githubLogin } = access;
 
   return (
-    <Tabs value={tab} onValueChange={select}>
-      <TabsList aria-label={'Tenantry Pro'}>
-        <TabsTrigger value={'access'}>
-          <KeyRound /> Access
-          {accessNeedsAction && <span className={'h-2 w-2 rounded-full bg-link'} aria-label={'needs attention'} />}
-        </TabsTrigger>
-        <TabsTrigger value={'install'}>
-          <Package /> Install
-        </TabsTrigger>
-        <TabsTrigger value={'billing'}>
-          <CreditCard /> Billing
-        </TabsTrigger>
-      </TabsList>
-      {children}
-    </Tabs>
+    <div className={'max-w-4xl'}>
+      <Card className={cardClass}>
+        <CardHeader className={'p-0'}>
+          <CardTitle>Install the packages</CardTitle>
+        </CardHeader>
+        <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
+          <p className={'text-sm text-muted-foreground'}>
+            Tenantry Pro&apos;s packages are on a private GitHub Packages feed; Tenantry core and everything else stay
+            on nuget.org. The full guide, including Docker builds and troubleshooting, is{' '}
+            <Link className={'text-link underline underline-offset-4'} href={INSTALL_GUIDE}>
+              Installation
+            </Link>
+            .
+          </p>
+
+          <div className={'flex flex-col gap-2'}>
+            <h3 className={'text-sm font-semibold'}>1. Create a token</h3>
+            <p className={'text-sm text-muted-foreground'}>
+              {githubLogin ? (
+                <>
+                  Signed in to GitHub as <span className={'font-medium text-foreground'}>@{githubLogin}</span>,{' '}
+                </>
+              ) : (
+                <>Once GitHub is connected on the Access page, and signed in to GitHub as that account, </>
+              )}
+              <Link
+                className={'text-link underline underline-offset-4'}
+                href={CREATE_TOKEN_URL}
+                target={'_blank'}
+                rel={'noopener noreferrer'}
+              >
+                create a personal access token (classic)
+              </Link>{' '}
+              with only the <code>read:packages</code> scope, and give it an expiry date. GitHub Packages accepts
+              classic tokens only, and only from an account with access to the feed.
+            </p>
+          </div>
+
+          <div className={'flex flex-col gap-2'}>
+            <h3 className={'text-sm font-semibold'}>2. Add this nuget.config next to your solution</h3>
+            <p className={'text-sm text-muted-foreground'}>
+              It holds no secrets, so commit it. It sends <code>Tenantry.Pro</code> and <code>Tenantry.Pro.*</code> to
+              the private feed and everything else to nuget.org, and reads the credentials from two environment
+              variables.
+            </p>
+            <Snippet value={nugetConfig(githubOrg)} label={'Copy nuget.config'} />
+          </div>
+
+          <div className={'flex flex-col gap-2'}>
+            <h3 className={'text-sm font-semibold'}>3. Set the credentials</h3>
+            <p className={'text-sm text-muted-foreground'}>
+              On your machine (shell profile or user environment), then restart your terminal and IDE:
+            </p>
+            <Snippet value={feedCredentials(githubLogin)} label={'Copy'} />
+          </div>
+
+          <div className={'flex flex-col gap-2'}>
+            <h3 className={'text-sm font-semibold'}>4. CI</h3>
+            <p className={'text-sm text-muted-foreground'}>
+              Store the token and the licence key as secrets. In GitHub Actions the workflow&apos;s own{' '}
+              <code>GITHUB_TOKEN</code> cannot read another organisation&apos;s private packages, so pass your token:
+            </p>
+            <Snippet value={ciWorkflow} label={'Copy workflow'} />
+            <p className={'text-sm text-muted-foreground'}>
+              Other CI systems work the same way: <code>{FEED_USERNAME_VARIABLE}</code> and{' '}
+              <code>{FEED_TOKEN_VARIABLE}</code> for the restore, <code>{LICENCE_ENV_VARIABLE}</code> for anything that
+              starts the application.
+            </p>
+          </div>
+
+          <div className={'flex flex-col gap-2'}>
+            <h3 className={'text-sm font-semibold'}>Rotating credentials</h3>
+            <ul className={'flex list-disc flex-col gap-1 pl-5 text-sm text-muted-foreground'}>
+              <li>
+                When the token nears its expiry, create a new one the same way and update the environment variable and
+                CI secret. Nothing else changes.
+              </li>
+              <li>
+                If it may have leaked,{' '}
+                <Link
+                  className={'text-link underline underline-offset-4'}
+                  href={'https://github.com/settings/tokens'}
+                  target={'_blank'}
+                  rel={'noopener noreferrer'}
+                >
+                  revoke it on GitHub
+                </Link>{' '}
+                straight away and create another.
+              </li>
+              <li>
+                To move access to another GitHub account, connect it on the Access page and accept its invitation; the
+                previous account loses access, so create the token from the new one.
+              </li>
+              <li>The licence key never needs rotating.</li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/** Billing (/dashboard/pro/billing): the subscription card. */
+export function BillingView({ access, accountEmail }: Pick<Props, 'access' | 'accountEmail'>) {
+  if (!isEntitled(access)) return <NoSubscription access={access} accountEmail={accountEmail} />;
+
+  return (
+    <div className={'max-w-3xl'}>
+      <BillingCard entitlement={access.entitlement} subscriptions={access.subscriptions} cardClass={cardClass} />
+    </div>
   );
 }

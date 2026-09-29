@@ -58,7 +58,7 @@ export async function keepSubscription(subscriptionId: string): Promise<Result<{
     }
 
     await getPaddleInstance().subscriptions.update(subscriptionId, { scheduledChange: null });
-    revalidatePath('/dashboard/pro');
+    revalidatePath('/dashboard/pro', 'layout'); // Access, Install and Billing all show this customer's state
     return { kept: true };
   } catch (e) {
     console.log('Error keeping subscription', e);
