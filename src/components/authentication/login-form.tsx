@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { login } from '@/app/login/actions';
 import { FormEvent, useState, useTransition } from 'react';
@@ -41,6 +42,9 @@ export function LoginForm({ notice }: Props) {
       <Button type={'submit'} className={'w-full'} disabled={pending} aria-busy={pending}>
         {pending ? 'Logging in…' : 'Log in'}
       </Button>
+      <Link href={'/forgot-password'} className={'text-center text-sm text-link hover:underline'}>
+        Forgot your password?
+      </Link>
     </form>
   );
 }
