@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { EntitlementRecord } from '@/utils/entitlements/entitlements-store';
 import { memory } from '@/utils/testing/memory-entitlements';
-import { aggregateAccess, syncCustomerAccess } from './customer-access';
+import { aggregateAccess, grantAndRecord, syncCustomerAccess } from './customer-access';
 
 const effects = vi.hoisted(() => ({
   grantAccess: vi.fn().mockResolvedValue('active'),
@@ -174,6 +174,33 @@ describe('syncCustomerAccess', () => {
     expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'active', githubState: 'failed' });
     expect(memory.liveLicences('ctm_1')).toHaveLength(1);
     expect(effects.sendEmail).toHaveBeenCalledOnce();
+  });
+
+  it('alerts the operator on the first failed grant only, and again after a success', async () => {
+    vi.stubEnv('ALERT_EMAIL', 'ops@example.com');
+    const alerts = () => emailSubjects().filter((subject) => subject.startsWith('[Tenantry alert]'));
+    effects.grantAccess.mockRejectedValue(new Error('GitHub unavailable'));
+    onTestFinished(() => {
+      effects.grantAccess.mockResolvedValue('active');
+      vi.unstubAllEnvs();
+    });
+
+    await entitle();
+    expect(alerts()).toEqual(['[Tenantry alert] GitHub grant failed for customer ctm_1']);
+    expect(effects.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ html: expect.stringContaining('octocat') }),
+    );
+
+    // Reconcile's retries keep failing: no further alert.
+    await expect(grantAndRecord('ctm_1', 'octocat')).resolves.toBe('failed');
+    await expect(grantAndRecord('ctm_1', 'octocat')).resolves.toBe('failed');
+    expect(alerts()).toHaveLength(1);
+
+    // A retry succeeds; a later failure is a new problem and alerts again.
+    effects.grantAccess.mockResolvedValueOnce('active');
+    await expect(grantAndRecord('ctm_1', 'octocat')).resolves.toBe('active');
+    await expect(grantAndRecord('ctm_1', 'octocat')).resolves.toBe('failed');
+    expect(alerts()).toHaveLength(2);
   });
 
   it('records nothing when reading the entitlements fails, so the event is retried whole', async () => {

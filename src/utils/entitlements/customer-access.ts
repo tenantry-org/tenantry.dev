@@ -3,6 +3,7 @@ import {
   EntitlementStatus,
   GithubState,
   hasLiveLicence,
+  getCustomerAccess,
   getCustomerEmail,
   getGithubLogin,
   clearLicenceFailure,
@@ -143,7 +144,8 @@ async function grantGithubAccess(customerId: string) {
 
 /**
  * Adds the customer's GitHub account to the team and records the outcome: 'active', 'invited' (an org
- * invitation to accept), or 'failed', which reconcile retries. Never throws.
+ * invitation to accept), or 'failed', which reconcile retries. The first failure after a success alerts the
+ * operator; retries that keep failing do not. Never throws.
  */
 export async function grantAndRecord(customerId: string, githubLogin: string): Promise<GithubState> {
   let state: GithubState;
@@ -155,6 +157,7 @@ export async function grantAndRecord(customerId: string, githubLogin: string): P
       error,
     );
     state = 'failed';
+    await grantFailed(customerId, githubLogin, error);
   }
 
   try {
@@ -164,6 +167,26 @@ export async function grantAndRecord(customerId: string, githubLogin: string): P
   }
 
   return state;
+}
+
+// Alerts unless the grant was already failing (a retry). If the state cannot be read, alerts anyway rather
+// than risk staying silent.
+async function grantFailed(customerId: string, githubLogin: string, error: unknown) {
+  let alreadyFailing = false;
+  try {
+    alreadyFailing = (await getCustomerAccess(customerId))?.githubState === 'failed';
+  } catch (readError) {
+    console.error(`Customer access: could not read the GitHub state of customer ${customerId}:`, readError);
+  }
+
+  if (alreadyFailing) return;
+
+  await alertOperator(
+    `GitHub grant failed for customer ${customerId}`,
+    `Adding GitHub account ${githubLogin} (Paddle customer ${customerId}) to the customer team failed: ` +
+      `${errorMessage(error)}. The customer has access but cannot restore packages. Reconcile retries on every ` +
+      'run, and no further alert is sent while it keeps failing.',
+  );
 }
 
 export type LicenceOutcome = 'issued' | 'current' | 'failed';

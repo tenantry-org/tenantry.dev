@@ -11,6 +11,8 @@ const inbox = vi.hoisted(() => ({
 }));
 vi.mock('@/utils/webhooks/inbox', () => inbox);
 vi.mock('@/utils/paddle/process-webhook', () => ({ ProcessWebhook: class {} }));
+const alertOperator = vi.hoisted(() => vi.fn());
+vi.mock('@/utils/email/alerts', () => ({ alertOperator }));
 
 function inboxEvent(eventId: string, eventType: string, customerId: string): InboxEvent {
   const payload = eventType.startsWith('customer.')
@@ -52,6 +54,30 @@ describe('drainInbox', () => {
     await expect(drainInbox({ processor })).resolves.toEqual({ processed: 0, retrying: 1, failed: 0 });
     expect(inbox.retryEvent).toHaveBeenCalledWith(expect.objectContaining({ eventId: 'evt_1' }), foreignKey);
     expect(inbox.completeEvent).not.toHaveBeenCalled();
+  });
+
+  it('alerts the operator when an event fails for good, but not while it is still retried', async () => {
+    inbox.claimEvents
+      .mockResolvedValueOnce([inboxEvent('evt_1', 'subscription.created', 'ctm_1')])
+      .mockResolvedValueOnce([]);
+    processor.processEvent.mockRejectedValueOnce(new Error('GitHub unavailable'));
+
+    await expect(drainInbox({ processor })).resolves.toEqual({ processed: 0, retrying: 1, failed: 0 });
+    expect(alertOperator).not.toHaveBeenCalled();
+
+    inbox.retryEvent.mockResolvedValueOnce('failed');
+    inbox.claimEvents
+      .mockResolvedValueOnce([inboxEvent('evt_1', 'subscription.created', 'ctm_1')])
+      .mockResolvedValueOnce([]);
+    processor.processEvent.mockRejectedValueOnce(new Error('GitHub unavailable'));
+
+    await expect(drainInbox({ processor })).resolves.toEqual({ processed: 0, retrying: 0, failed: 1 });
+    expect(alertOperator).toHaveBeenCalledOnce();
+    expect(alertOperator).toHaveBeenCalledWith(
+      'Inbox event evt_1 failed for good',
+      expect.stringContaining('subscription.created, customer ctm_1'),
+    );
+    expect(alertOperator.mock.calls[0][1]).toContain('GitHub unavailable');
   });
 
   it("makes a customer's waiting events due once the customer is recorded", async () => {

@@ -3,6 +3,8 @@ import { ProcessWebhook } from '@/utils/paddle/process-webhook';
 import { claimEvents, completeEvent, type InboxEvent, releaseWaitingEvents, retryEvent } from '@/utils/webhooks/inbox';
 import { RECONCILE_CUSTOMER_EVENT, reconcileCustomer } from '@/utils/entitlements/reconcile-customer';
 import { CUSTOMER_LEASE_EVENT } from '@/utils/webhooks/customer-lease';
+import { alertOperator } from '@/utils/email/alerts';
+import { errorMessage } from '@/utils/errors';
 
 /** How long a claimed event stays locked: longer than processing one event can take. */
 const LOCK_SECONDS = 120;
@@ -47,7 +49,8 @@ export async function drainInbox({
   return result;
 }
 
-// Processes one claimed event and completes it, or schedules a retry (or gives up) if it fails.
+// Processes one claimed event and completes it, or schedules a retry if it fails; gives up after the last
+// attempt and alerts the operator.
 async function handleEvent(event: InboxEvent, handlers: Handlers): Promise<keyof DrainResult> {
   try {
     await runEvent(event, handlers);
@@ -64,6 +67,16 @@ async function handleEvent(event: InboxEvent, handlers: Handlers): Promise<keyof
     const log = outcome === 'failed' ? console.error : console.warn;
     const fate = outcome === 'failed' ? 'failed for good' : 'will be retried';
     log(`Inbox event ${event.eventId} (${event.eventType}) ${fate}:`, error);
+
+    if (outcome === 'failed') {
+      await alertOperator(
+        `Inbox event ${event.eventId} failed for good`,
+        `Inbox event ${event.eventId} (${event.eventType}, customer ${event.customerId ?? 'unknown'}) failed on ` +
+          `every attempt and will not be retried: ${errorMessage(error)}. Its effect is missing until someone ` +
+          'handles it; the next reconcile corrects what it can for this customer.',
+      );
+    }
+
     return outcome;
   }
 }
