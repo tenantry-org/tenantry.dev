@@ -45,8 +45,8 @@ export async function openBillingPortal(target: BillingPortalTarget): Promise<Re
 }
 
 /**
- * Undoes a scheduled cancellation, so the subscription renews as normal (6.16). Paddle's portal cancels but
- * does not offer this, so it stays here.
+ * Undoes a scheduled cancellation, so the subscription renews as normal (6.16). The portal offers the same
+ * (Don't cancel); this saves the customer the trip there.
  */
 export async function keepSubscription(subscriptionId: string): Promise<Result<{ kept: true }>> {
   try {

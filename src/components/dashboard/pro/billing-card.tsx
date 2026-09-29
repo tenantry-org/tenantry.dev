@@ -20,13 +20,29 @@ type Pending = { kind: 'cancel' | 'keep'; subscriptionId: string } | null;
 
 /**
  * The customer's subscription and billing (6.17). Invoices, invoice details (company and tax ID), payment
- * methods and cancelling are Paddle's hosted customer portal, reached through one-time links; undoing a
- * scheduled cancellation is ours, as the portal does not offer it.
+ * methods and cancelling are Paddle's hosted customer portal, reached through one-time links. A scheduled
+ * cancellation can be undone here (Keep subscription) or in the portal (Don't cancel).
  */
 export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
   const { toast } = useToast();
   const [busy, startTransition] = useTransition();
   const [confirming, setConfirming] = useState<Pending>(null);
+  // Subscriptions just kept here. Our records change only when Paddle's webhook arrives, seconds later, so
+  // until then the card shows them renewing on the date they would have ended (their period end).
+  const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
+  const shown = subscriptions.map((subscription) =>
+    kept.has(subscription.id) && subscription.endsAt
+      ? { ...subscription, endsAt: null, renewsAt: subscription.endsAt }
+      : subscription,
+  );
+  // When every Pro subscription is set to end, access ends with the last of them.
+  const endsAt =
+    entitlement.status === 'active' && shown.length > 0 && shown.every((subscription) => subscription.endsAt)
+      ? shown
+          .map((subscription) => subscription.endsAt!)
+          .sort((a, b) => a.localeCompare(b))
+          .at(-1)!
+      : null;
 
   function notify(ok: boolean, title: string, detail: string) {
     toast({
@@ -66,8 +82,12 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
 
     startTransition(async () => {
       const result = await keepSubscription(pending.subscriptionId);
-      if ('error' in result) notify(false, 'Could not keep the subscription', result.error);
-      else notify(true, 'Cancellation removed', 'Your subscription will renew as normal.');
+      if ('error' in result) {
+        notify(false, 'Could not keep the subscription', result.error);
+        return;
+      }
+      setKept((previous) => new Set(previous).add(pending.subscriptionId));
+      notify(true, 'Cancellation removed', 'Your subscription will renew as normal.');
     });
   }
 
@@ -76,13 +96,13 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
       <CardHeader className={'p-0'}>
         <CardTitle className={'flex items-center justify-between'}>
           <span>Subscription and billing</span>
-          <StatusBadge status={entitlement.status} />
+          <StatusBadge status={entitlement.status} endsAt={endsAt} />
         </CardTitle>
       </CardHeader>
       <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
         {entitlement.status === 'grace' && <GraceNotice grace={entitlement.grace} />}
 
-        {subscriptions.map((subscription) => (
+        {shown.map((subscription) => (
           <div
             key={subscription.id}
             className={'flex flex-col gap-3 border-t border-border pt-4 first:border-t-0 first:pt-0'}
@@ -164,7 +184,15 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
   );
 }
 
-function StatusBadge({ status }: Readonly<{ status: string }>) {
+function StatusBadge({ status, endsAt }: Readonly<{ status: string; endsAt: string | null }>) {
+  if (endsAt) {
+    return (
+      <span className={'rounded-full bg-warning-surface px-2.5 py-0.5 text-xs font-medium text-warning'}>
+        Ends {new Date(endsAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+      </span>
+    );
+  }
+
   const tone =
     status === 'active'
       ? 'bg-success-surface text-success'
