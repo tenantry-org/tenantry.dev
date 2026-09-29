@@ -36,8 +36,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Generated docs content (pnpm sync:docs)
+# Generated docs content, and the partial clones it is read from (pnpm sync:docs)
 /content/docs/
+/content/_src/
 
 # fumadocs-mdx generated source
 /.source/

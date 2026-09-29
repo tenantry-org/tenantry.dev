@@ -62,6 +62,46 @@ describe('rewriteLinks in a subfolder', () => {
   });
 });
 
+describe('rewriteLinks for an older docs version', () => {
+  const base = '/docs/v0.4';
+
+  it("keeps links between pages, Core's GitHub docs and API links within that version", () => {
+    expect(rewriteLinks('[start](getting-started.md#setup) [home](README.md)', 'pro', pro, '', base)).toBe(
+      '[start](/docs/v0.4/pro/getting-started#setup) [home](/docs/v0.4/pro)',
+    );
+    expect(
+      rewriteLinks(
+        '[hosts](https://github.com/tenantry-org/tenantry-core/blob/v0.4.0/docs/non-http-hosts.md)',
+        'pro',
+        pro,
+        '',
+        base,
+      ),
+    ).toBe('[hosts](/docs/v0.4/core/non-http-hosts)');
+    expect(rewriteLinks('[scope](../core-concepts.md)', 'core', core, 'api', base)).toBe(
+      '[scope](/docs/v0.4/core/core-concepts)',
+    );
+    expect(
+      rewriteLinks(
+        '[`ITenantStore`](https://tenantry.dev/docs/core/api/tenantry-core-itenantstore)',
+        'pro',
+        pro,
+        '',
+        base,
+      ),
+    ).toBe('[`ITenantStore`](/docs/v0.4/core/api/tenantry-core-itenantstore)');
+  });
+
+  it('leaves other site links, and links into the repository, alone', () => {
+    expect(
+      rewriteLinks('[pricing](https://tenantry.dev/pricing) [docs](https://tenantry.dev/docs)', 'pro', pro, '', base),
+    ).toBe('[pricing](/pricing) [docs](/docs)');
+    expect(rewriteLinks('[sample](../samples/X)', 'pro', pro, '', base)).toBe(
+      '[sample](https://github.com/tenantry-org/tenantry-pro-docs/tree/v0.1.0/samples/X)',
+    );
+  });
+});
+
 describe('relativeLinks', () => {
   it('lists links that would resolve under the site', () => {
     const markdown = '[a](../samples/X) [b](other/page) [c](/docs/core) [d](https://x.dev) [e](#top)';

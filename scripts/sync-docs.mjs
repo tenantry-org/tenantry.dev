@@ -2,29 +2,33 @@
 /**
  * Content pipeline for the docs site.
  *
- * Ingests the markdown docs authored in the Tenantry Core and Pro repos into `content/docs/{core,pro}`,
- * preparing them for the Fumadocs render step:
+ * Ingests the markdown docs authored in the Tenantry Core and Pro repos into `content/docs`, one tree per docs
+ * version, preparing them for the Fumadocs render step:
  *   - injects frontmatter (`title` from the first H1, which is then removed from the body),
  *   - derives a short `description` from the first paragraph,
  *   - rewrites relative `.md` links to clean docs paths (e.g. `(tenant-stores.md)` → `(tenant-stores)`).
  *
- * Sources, per group: the git submodules `content/_src/core/docs` and `content/_src/pro/docs`, which pin
- * released docs: Core's repository at a release tag, and for Pro the public tenantry-pro-docs repository,
- * which each Pro release publishes to and tags (Vercel cannot fetch the private Pro repository). Every
- * build, local ones included, reads the pinned docs, so the site shows what the released packages do.
- * `pnpm docs:pin <core|pro> <tag>` moves a pin; `pnpm docs:check` fails unless both are release tags.
+ * The versions are listed in docs-versions.json (docs-versions.mjs), each with the release tags of Core's
+ * repository and of the public tenantry-pro-docs repository (which each Pro release publishes to and tags; Vercel
+ * cannot fetch the private Pro repository). Each tag's `docs/` folder is read from git, from partial clones kept
+ * in `content/_src/{core,pro}` (gitignored), so the site shows what each release's packages do. The newest
+ * version is written to `content/docs/(latest)` and served at /docs; each older one to `content/docs/v<version>`,
+ * served at /docs/v<version>. Each is a Fumadocs root folder, which the sidebar offers as a version dropdown.
+ * `pnpm docs:pin <core|pro> <tag>` pins a release; `pnpm docs:check` checks the list.
  *
  * To preview unreleased docs locally, point CORE_DOCS_DIR / PRO_DOCS_DIR at a docs folder (for example
- * `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev`). Vercel and CI refuse these overrides, and a missing
- * source fails those builds instead of shipping without the docs.
+ * `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev`); it replaces the newest version's docs. Vercel and CI refuse these
+ * overrides, and a missing source fails those builds instead of shipping without the docs.
  *
  * Run with: pnpm sync:docs
  */
 import { execFileSync } from 'child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
+import { basePath, readVersions, versionProblems } from './docs-versions.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = resolve(here, '..');
@@ -35,14 +39,12 @@ const groups = [
     name: 'core',
     title: 'Tenantry Core',
     envVar: 'CORE_DOCS_DIR',
-    submodule: 'content/_src/core/docs',
     repository: 'https://github.com/tenantry-org/tenantry-core',
   },
   {
     name: 'pro',
     title: 'Tenantry Pro',
     envVar: 'PRO_DOCS_DIR',
-    submodule: 'content/_src/pro/docs',
     repository: 'https://github.com/tenantry-org/tenantry-pro-docs',
   },
 ];
@@ -91,33 +93,7 @@ function orderPages(slugs) {
   });
 }
 
-function resolveSource(group) {
-  const override = process.env[group.envVar];
-  if (override) {
-    if (releaseBuild) {
-      console.error(`sync-docs: ${group.envVar} is set; release builds publish only the pinned submodules.`);
-      process.exit(1);
-    }
-    const dir = resolve(override);
-    return existsSync(dir) ? dir : null;
-  }
-
-  const submodule = resolve(siteRoot, group.submodule);
-  return existsSync(submodule) ? submodule : null;
-}
-
-// The commit the docs come from, so links into the repository (samples) match them: the submodule's
-// checkout, or master for a local preview from another folder.
-function sourceRef(dir) {
-  try {
-    const options = { encoding: 'utf8' };
-    return execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], options).trim(); // NOSONAR: git from the build's PATH
-  } catch {
-    return 'master';
-  }
-}
-
-function toFrontmatter(raw, group, source, dir = '') {
+function toFrontmatter(raw, group, source, dir, context) {
   const lines = raw.split('\n');
   let title = '';
   const body = [];
@@ -156,8 +132,8 @@ function toFrontmatter(raw, group, source, dir = '') {
     .trim();
   const description = (cleaned.match(/^.*?\.(?:\s|$)/)?.[0] ?? cleaned).trim();
 
-  const linked = dir === 'api' ? body.join('\n') : linkApiTypes(body.join('\n'), apiTypes);
-  const rewritten = rewriteLinks(linked, group, source, dir).trimStart();
+  const linked = dir === 'api' ? body.join('\n') : linkApiTypes(body.join('\n'), context.apiTypes);
+  const rewritten = rewriteLinks(linked, group, source, dir, context.base).trimStart();
 
   const yamlTitle = title.replaceAll('"', String.raw`\"`);
   const yamlDesc = description.replaceAll('"', String.raw`\"`);
@@ -166,13 +142,13 @@ function toFrontmatter(raw, group, source, dir = '') {
 }
 
 // Writes one folder's markdown pages as MDX and returns their slugs (README.md becomes the folder's index).
-function syncFolder(sourceDir, outDir, group, linkSource, dir) {
+function syncFolder(sourceDir, outDir, group, linkSource, dir, context) {
   const slugs = [];
   for (const file of readdirSync(sourceDir).filter((f) => f.endsWith('.md'))) {
     const slug = file.toLowerCase() === 'readme.md' ? 'index' : file.replace(/\.md$/, '');
-    const content = toFrontmatter(readFileSync(join(sourceDir, file), 'utf8'), group.name, linkSource, dir);
+    const content = toFrontmatter(readFileSync(join(sourceDir, file), 'utf8'), group.name, linkSource, dir, context);
     for (const link of relativeLinks(content))
-      brokenLinks.push(`${group.name}/${dir ? `${dir}/` : ''}${file}: ${link}`);
+      brokenLinks.push(`${context.version} ${group.name}/${dir ? `${dir}/` : ''}${file}: ${link}`);
     writeFileSync(join(outDir, `${slug}.mdx`), content);
     slugs.push(slug);
     total += 1;
@@ -199,89 +175,200 @@ function apiPages(sourceDir, slugs) {
 
 let total = 0;
 const brokenLinks = [];
+const scratch = [];
 
-// Every type in both API references, so a guide's first mention of a type links to its page, across groups too.
-// A name defined twice (ServiceCollectionExtensions in two namespaces) is ambiguous and stays unlinked.
-const apiTypes = new Map();
-const ambiguous = new Set();
-for (const group of groups) {
-  const apiSource = resolveSource(group) && join(resolveSource(group), 'api');
-  if (!apiSource || !existsSync(apiSource)) continue;
+function fail(message) {
+  console.error(`sync-docs: ${message}`);
+  process.exit(1);
+}
 
-  for (const file of readdirSync(apiSource).filter((f) => f.endsWith('.md') && f !== 'README.md')) {
-    const name = readFileSync(join(apiSource, file), 'utf8').match(/^# `([A-Za-z_]\w*)/)?.[1];
-    if (!name) continue;
-    if (apiTypes.has(name)) ambiguous.add(name);
-    apiTypes.set(name, `/docs/${group.name}/api/${file.replace(/\.md$/, '')}`);
+function git(...args) {
+  return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); // NOSONAR: git from the build's PATH
+}
+
+function hasTag(dir, tag) {
+  try {
+    git('-C', dir, 'rev-parse', '--verify', '--quiet', `refs/tags/${tag}^{commit}`);
+    return true;
+  } catch {
+    return false;
   }
 }
-for (const name of ambiguous) apiTypes.delete(name);
 
-for (const group of groups) {
-  const source = resolveSource(group);
-  const outDir = join(siteRoot, 'content', 'docs', group.name);
-
-  if (!source) {
-    const message = `sync-docs: no docs for "${group.name}": run \`git submodule update --init\`${
-      process.env[group.envVar] ? ` (or fix ${group.envVar})` : ''
-    }.`;
-    if (releaseBuild) {
-      console.error(`${message} A build without these docs would publish none.`);
-      process.exit(1);
+// A partial clone of the group's repository (no file contents until a tag's docs are read) with the given tags,
+// or null when it cannot be reached and has none of them yet.
+function repository(group, tags) {
+  const dir = resolve(siteRoot, 'content', '_src', group.name);
+  try {
+    if (!existsSync(join(dir, 'HEAD'))) {
+      rmSync(dir, { recursive: true, force: true });
+      git('clone', '--quiet', '--bare', '--filter=blob:none', '--no-tags', group.repository, dir);
     }
-    console.warn(`${message} Skipping.`);
+    const missing = tags.filter((tag) => !hasTag(dir, tag));
+    if (missing.length > 0) {
+      git(
+        '-C',
+        dir,
+        'fetch',
+        '--quiet',
+        '--filter=blob:none',
+        'origin',
+        ...missing.map((t) => `+refs/tags/${t}:refs/tags/${t}`),
+      );
+    }
+  } catch (error) {
+    console.warn(`sync-docs: could not update ${group.repository}: ${String(error.stderr || error.message).trim()}`);
+  }
+  return existsSync(join(dir, 'HEAD')) ? dir : null;
+}
+
+// The docs folder of a tag, extracted to a temporary folder.
+function docsAt(dir, tag) {
+  if (!hasTag(dir, tag)) return null;
+  const out = mkdtempSync(join(tmpdir(), 'tenantry-docs-'));
+  scratch.push(out);
+  const archive = execFileSync('git', ['-C', dir, 'archive', '--format=tar', tag, 'docs'], { maxBuffer: 1 << 28 }); // NOSONAR
+  execFileSync('tar', ['-x', '-C', out], { input: archive }); // NOSONAR: tar from the build's PATH
+  return join(out, 'docs');
+}
+
+const versions = readVersions();
+const problems = versionProblems(versions);
+if (problems.length > 0) {
+  const message = `docs-versions.json: ${problems.join(' ')}`;
+  if (releaseBuild) fail(message);
+  console.warn(`sync-docs: ${message}`);
+}
+
+const repositories = Object.fromEntries(
+  groups.map((group) => [group.name, repository(group, versions.map((entry) => entry[group.name]).filter(Boolean))]),
+);
+
+const docsRoot = join(siteRoot, 'content', 'docs');
+rmSync(docsRoot, { recursive: true, force: true });
+mkdirSync(docsRoot, { recursive: true });
+
+const folders = [];
+for (const [index, entry] of versions.entries()) {
+  const latest = index === 0;
+  const base = basePath(versions, entry.version);
+  const folder = latest ? '(latest)' : `v${entry.version}`;
+
+  // Each group's docs for this version: a local preview folder for the newest, otherwise the tag's docs.
+  const sources = {};
+  for (const group of groups) {
+    const override = latest && process.env[group.envVar];
+    if (override) {
+      if (releaseBuild) fail(`${group.envVar} is set; release builds publish only the pinned releases.`);
+      const dir = resolve(override);
+      sources[group.name] = existsSync(dir) ? { dir, ref: 'master' } : null;
+      continue;
+    }
+    const tag = entry[group.name];
+    const dir = tag && repositories[group.name] && docsAt(repositories[group.name], tag);
+    sources[group.name] = dir ? { dir, ref: tag } : null;
+  }
+
+  const missing = groups
+    .filter((group) => !sources[group.name])
+    .map((group) => `${group.name} ${entry[group.name] ?? '(not pinned)'}`);
+  if (missing.length > 0) {
+    const message = `no docs for ${entry.version}: ${missing.join(', ')}.`;
+    if (releaseBuild) fail(`${message} A build without these docs would publish none.`);
+    console.warn(`sync-docs: ${message} Skipping.`);
     continue;
   }
 
-  const overridden = Boolean(process.env[group.envVar]);
-  const linkSource = { repository: group.repository, ref: overridden ? 'master' : sourceRef(source) };
+  // Every type in both API references, so a guide's first mention of a type links to its page, across groups too.
+  // A name defined twice (ServiceCollectionExtensions in two namespaces) is ambiguous and stays unlinked.
+  const apiTypes = new Map();
+  const ambiguous = new Set();
+  for (const group of groups) {
+    const apiSource = join(sources[group.name].dir, 'api');
+    if (!existsSync(apiSource)) continue;
+    for (const file of readdirSync(apiSource).filter((f) => f.endsWith('.md') && f !== 'README.md')) {
+      const name = readFileSync(join(apiSource, file), 'utf8').match(/^# `([A-Za-z_]\w*)/)?.[1];
+      if (!name) continue;
+      if (apiTypes.has(name)) ambiguous.add(name);
+      apiTypes.set(name, `${base}/${group.name}/api/${file.replace(/\.md$/, '')}`);
+    }
+  }
+  for (const name of ambiguous) apiTypes.delete(name);
 
-  rmSync(outDir, { recursive: true, force: true });
-  mkdirSync(outDir, { recursive: true });
+  const context = { apiTypes, base, version: entry.version };
+  const versionDir = join(docsRoot, folder);
 
-  const slugs = syncFolder(source, outDir, group, linkSource, '');
-  const pages = orderPages(slugs);
+  for (const group of groups) {
+    const { dir: source, ref } = sources[group.name];
+    const outDir = join(versionDir, group.name);
+    const linkSource = { repository: group.repository, ref };
+    mkdirSync(outDir, { recursive: true });
 
-  // The API reference (docs/api, generated in each repository from its XML documentation comments) is its own
-  // section, last in the group, with its pages grouped by namespace.
-  const apiSource = join(source, 'api');
-  if (existsSync(apiSource)) {
-    const apiDir = join(outDir, 'api');
-    mkdirSync(apiDir, { recursive: true });
-    const apiSlugs = syncFolder(apiSource, apiDir, group, linkSource, 'api');
-    writeFileSync(
-      join(apiDir, 'meta.json'),
-      JSON.stringify({ title: 'API reference', pages: apiPages(apiSource, apiSlugs) }, null, 2) + '\n',
+    const slugs = syncFolder(source, outDir, group, linkSource, '', context);
+    const pages = orderPages(slugs);
+
+    // The API reference (docs/api, generated in each repository from its XML documentation comments) is its own
+    // section, last in the group, with its pages grouped by namespace.
+    const apiSource = join(source, 'api');
+    if (existsSync(apiSource)) {
+      const apiDir = join(outDir, 'api');
+      mkdirSync(apiDir, { recursive: true });
+      const apiSlugs = syncFolder(apiSource, apiDir, group, linkSource, 'api', context);
+      writeFileSync(
+        join(apiDir, 'meta.json'),
+        JSON.stringify({ title: 'API reference', pages: apiPages(apiSource, apiSlugs) }, null, 2) + '\n',
+      );
+      pages.push('api');
+    }
+
+    writeFileSync(join(outDir, 'meta.json'), JSON.stringify({ title: group.title, pages }, null, 2) + '\n');
+    console.log(
+      `sync-docs: ${entry.version} ${group.name} ← ${ref === 'master' ? source : ref} (${slugs.length} pages)`,
     );
-    pages.push('api');
   }
 
-  writeFileSync(join(outDir, 'meta.json'), JSON.stringify({ title: group.title, pages }, null, 2) + '\n');
-
-  console.log(`sync-docs: ${group.name} ← ${source} (${slugs.length} pages)`);
-}
-
-// Root docs landing + top-level nav order.
-const docsRoot = join(siteRoot, 'content', 'docs');
-mkdirSync(docsRoot, { recursive: true });
-writeFileSync(
-  join(docsRoot, 'index.mdx'),
-  `---
+  // The version's landing page, and its folder as a root folder: the sidebar shows one version at a time and
+  // offers the others in its dropdown.
+  writeFileSync(
+    join(versionDir, 'index.mdx'),
+    `---
 title: "Tenantry documentation"
-description: "Guides for Tenantry Core (open source) and Tenantry Pro."
+description: "Guides for Tenantry Core (open source) and Tenantry Pro${latest ? '' : `, version ${entry.version}`}."
 ---
 
 Tenantry is a production-grade multi-tenancy toolkit for .NET.
 
-- **[Tenantry Core](/docs/core)** — open source: tenant resolution, and isolation in a shared database or a
+- **[Tenantry Core](${base}/core)** — open source: tenant resolution, and isolation in a shared database or a
   database per tenant.
-- **[Tenantry Pro](/docs/pro)** — schema-per-tenant and mixed mode, provisioning, migration orchestration
+- **[Tenantry Pro](${base}/pro)** — schema-per-tenant and mixed mode, provisioning, migration orchestration
   across tenant databases, tenant lifecycle, and background-job / message-bus integrations.
 
 Use the sidebar to browse, or press <kbd>⌘</kbd> <kbd>K</kbd> to search.
 `,
-);
-writeFileSync(join(docsRoot, 'meta.json'), JSON.stringify({ pages: ['index', 'core', 'pro'] }, null, 2) + '\n');
+  );
+  writeFileSync(
+    join(versionDir, 'meta.json'),
+    JSON.stringify(
+      {
+        title: `v${entry.version}`,
+        description: latest ? 'Latest release' : `Core ${entry.core}, Pro ${entry.pro}`,
+        root: true,
+        pages: ['index', 'core', 'pro'],
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  folders.push(folder);
+}
+
+writeFileSync(join(docsRoot, 'meta.json'), JSON.stringify({ pages: folders }, null, 2) + '\n');
+for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
+
+if (folders.length === 0) {
+  if (releaseBuild) fail('no docs version could be synced.');
+  console.warn('sync-docs: no docs version could be synced; /docs will be empty.');
+}
 
 if (brokenLinks.length > 0) {
   const message = `sync-docs: links that would resolve under the site and 404:\n  ${brokenLinks.join('\n  ')}`;
@@ -292,4 +379,4 @@ if (brokenLinks.length > 0) {
   console.warn(message);
 }
 
-console.log(`sync-docs: wrote ${total} files + nav to content/docs/`);
+console.log(`sync-docs: wrote ${total} files + nav to content/docs/ (${folders.join(', ')})`);

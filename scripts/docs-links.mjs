@@ -9,21 +9,27 @@ import { posix } from 'path';
  *   - links outside the docs folder (../samples/…, ../README.md) point into the source repository on GitHub,
  *     at the commit the docs were synced from: (../samples/X) → (<repository>/tree/<ref>/samples/X).
  *   - absolute links to this site (the API reference links Pro's pages to Core's) become site paths.
+ * Links into the docs go to `base`, the path the version being synced is served under (/docs for the newest,
+ * /docs/v0.4 for an older one), so an older version's pages link to each other.
  * Other absolute URLs, site paths and in-page anchors are left alone. relativeLinks() lists anything still relative.
  *
  * @param {string} markdown
  * @param {string} group
  * @param {{ repository: string, ref: string } | null} [source]
  * @param {string} [dir] the page's folder inside the docs folder ('api' for the API reference), for relative links
+ * @param {string} [base] the path the docs version is served under
  */
-export function rewriteLinks(markdown, group, source = null, dir = '') {
+export function rewriteLinks(markdown, group, source = null, dir = '', base = '/docs') {
   const page = (targetGroup, path, anchor = '') => {
     const clean = path.replace(/(^|\/)readme$/i, '');
-    return `/docs/${targetGroup}${clean ? `/${clean}` : ''}${anchor}`;
+    return `${base}/${targetGroup}${clean ? `/${clean}` : ''}${anchor}`;
   };
 
   return markdown
-    .replace(/\]\(https:\/\/tenantry\.dev(\/[^)\s]*)\)/g, ']($1)')
+    .replace(
+      /\]\(https:\/\/tenantry\.dev(\/[^)\s]*)\)/g,
+      (_, path) => `](${path.replace(/^\/docs(?=\/(core|pro)\b)/, base)})`,
+    )
     .replace(
       /\]\(https:\/\/github\.com\/tenantry-org\/tenantry-core\/blob\/[^/)]+\/docs\/([\w/-]+)\.md(#[^)]*)?\)/g,
       (_, name, anchor) => `](${page('core', name, anchor)})`,

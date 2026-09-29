@@ -45,19 +45,23 @@ and fill in the values for the services you need.
 ## Docs pipeline
 
 `/docs` is rendered by Fumadocs from MDX under `content/docs/` (gitignored, generated). `pnpm sync:docs`
-(`scripts/sync-docs.mjs`) reads the source markdown from the git submodules at `content/_src/{core,pro}`
-and transforms it (injects frontmatter, rewrites links, `.md`→`.mdx`). It runs automatically before
-`dev`/`build`. Run `git submodule update --init` after cloning.
+(`scripts/sync-docs.mjs`) runs before `dev`/`build`: it reads each docs version's markdown from git and transforms
+it (injects frontmatter, rewrites links, `.md`→`.mdx`).
 
-The submodules pin **released** docs, so the site describes the published packages: Core's repository at
-a release tag, and the public `tenantry-pro-docs` repository, which each Pro release publishes and tags.
-Every build reads the pins, local ones included.
+The versions are listed in [`docs-versions.json`](docs-versions.json), newest first: each release line (`0.4`)
+with the Core and Pro release tags its docs come from (Core's repository, and the public `tenantry-pro-docs`
+repository, which each Pro release publishes and tags). The newest is served at `/docs`, each older one at
+`/docs/v<version>` with a notice pointing to the latest; the sidebar has a version dropdown and search covers
+the version being read. The tags are read from partial clones kept in `content/_src/` (gitignored), so every
+build, local ones included, shows what the released packages do.
 
+- **On each release**, pin its tags and commit `docs-versions.json`: `pnpm docs:pin core v0.5.0` and
+  `pnpm docs:pin pro v0.5.0` (a Pro tag exists once that release's publish-docs job has run). A patch moves its
+  line's tag; a new minor adds a version, and the previous one moves under `/docs/v<version>`.
+- **`pnpm docs:check`** fails unless every version has both tags and they exist.
 - **Preview unreleased docs** locally with an override, for example
-  `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or `CORE_DOCS_DIR`). Vercel and CI builds refuse overrides.
-- **On each release**, pin the docs to the new tag and commit the site: `pnpm docs:pin core v0.4.0` or
-  `pnpm docs:pin pro v0.1.0` (a Pro tag exists once that release's publish-docs job has run).
-- **`pnpm docs:check`** fails unless both submodules are checked out at release tags.
+  `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or `CORE_DOCS_DIR`); it replaces the newest version's docs.
+  Vercel and CI builds refuse overrides.
 
 ## Configuration
 

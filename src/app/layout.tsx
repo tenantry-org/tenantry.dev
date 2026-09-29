@@ -6,6 +6,7 @@ import { RootProvider } from 'fumadocs-ui/provider/next';
 import { Toaster } from '@/components/ui/toaster';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { VersionedSearchDialog } from '@/components/docs/versioned-search-dialog';
 
 // Inter for everything (the brand face), JetBrains Mono for code.
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -33,7 +34,10 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className={'min-h-screen font-sans'}>
         {/* Fumadocs' provider (search, theme) for the whole site, so the docs share the forced dark theme. */}
-        <RootProvider theme={{ forcedTheme: 'dark', defaultTheme: 'dark', enableSystem: false }}>
+        <RootProvider
+          theme={{ forcedTheme: 'dark', defaultTheme: 'dark', enableSystem: false }}
+          search={{ SearchDialog: VersionedSearchDialog }}
+        >
           {children}
           <Toaster />
         </RootProvider>
