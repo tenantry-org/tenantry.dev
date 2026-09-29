@@ -3,9 +3,7 @@
   "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtT+XB/2BXI2RiKL36z94RwmnTf4rjyRIYk3Uu1AI23v8vlV/WotSXCJo14WUkSL7y+y76E92iqmPKmdFIKqs8Q==",
   "issuedAt": "2026-09-27T00:00:00.000Z",
   "claims": {
-    "customerId": "ctm_contract",
-    "notBefore": "2026-09-27T00:00:00.000Z",
-    "expiresAt": "2099-01-01T00:00:00.000Z"
+    "customerId": "ctm_contract"
   },
-  "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJUZW5hbnRyeSIsInN1YiI6ImN0bV9jb250cmFjdCIsImlhdCI6MTc5MDQ2NzIwMCwibmJmIjoxNzkwNDY3MjAwLCJleHAiOjQwNzA5MDg4MDB9.03eF3JNkBAIDOEZuDWf5Fj7Jp9Y-UbsYZuGandw24-aHqTShd1O89Bq9EjOvnTb7x205aXuRs2gWZ8R-jF7hjA"
+  "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJUZW5hbnRyeSIsInN1YiI6ImN0bV9jb250cmFjdCIsImlhdCI6MTc5MDQ2NzIwMH0._AkI-legWKRPMawd6jFyN1M5ahLhixeVh7w2gK-adiR7jbX2bK0yLWPGEwbWTTC1eR8RFrxvMt_HTLv4skuf9w"
 }

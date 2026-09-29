@@ -8,6 +8,10 @@ import { createPrivateKey, KeyObject, sign as cryptoSign } from 'crypto';
  * JWT library verifies. Tenantry.Pro's `LicenseValidator` verifies exactly this encoding, and
  * `licence-contract.json` pins it between the two repos.
  *
+ * A licence does not expire: it has no `exp`, and Tenantry.Pro accepts any key it can verify. A customer is
+ * issued one when their access starts and keeps it; the subscription gates the private package feed (and so
+ * new versions), not the key.
+ *
  * The private key lives ONLY in the portal's secret store as `LICENCE_SIGNING_PRIVATE_KEY`
  * (PKCS#8 PEM). The matching public half is embedded in the published `Tenantry.Pro` package.
  */
@@ -17,10 +21,6 @@ const ISSUER = 'Tenantry';
 export interface LicenceClaims {
   /** Paddle customer id — becomes the JWT `sub`. */
   customerId: string;
-  /** When the licence expires (`exp`). Track the subscription period end; the 30-day runtime grace covers renewal gaps. */
-  expiresAt: Date;
-  /** Optional not-before (`nbf`). Defaults to now. */
-  notBefore?: Date;
 }
 
 function base64Url(input: Buffer | string): string {
@@ -56,8 +56,6 @@ export function issueLicence(claims: LicenceClaims, signingKey?: KeyObject): str
       iss: ISSUER,
       sub: claims.customerId,
       iat: nowSeconds,
-      nbf: Math.floor((claims.notBefore ?? new Date()).getTime() / 1000),
-      exp: Math.floor(claims.expiresAt.getTime() / 1000),
     }),
   );
 

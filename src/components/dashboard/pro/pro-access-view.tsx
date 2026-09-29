@@ -121,8 +121,8 @@ function GraceNotice({ grace }: Readonly<{ grace: { endsAt: string; ended: boole
 
   return (
     <p className={'text-secondary text-sm'}>
-      Your last payment failed. Your access and licence continue{ends ? ` until ${ends}` : ''} while Paddle retries it.{' '}
-      {updatePaymentMethod} to keep them.
+      Your last payment failed. Your access to the package feed continues{ends ? ` until ${ends}` : ''} while Paddle
+      retries it. {updatePaymentMethod} to keep it.
     </p>
   );
 }
@@ -238,8 +238,8 @@ export function ProAccessView({ access, githubOrg, linkError, accountEmail }: Pr
           {licence ? (
             <>
               <p className={'text-secondary text-sm'}>
-                Expires {new Date(licence.expiresAt).toLocaleDateString()}. Set it as <code>Tenantry:Licence</code> in
-                your app configuration.
+                Set it as <code>Tenantry:Licence</code> in your app configuration, and as a secret in CI. It does not
+                expire: renewals keep the same key.
               </p>
               <code className={'block max-h-24 overflow-auto rounded-xs bg-muted/40 p-3 text-xs break-all'}>
                 {licence.jwt}

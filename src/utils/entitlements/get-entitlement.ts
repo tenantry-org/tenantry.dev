@@ -24,7 +24,8 @@ export interface ProAccess {
     invitationExpiresAt: string | null;
     grace: { endsAt: string; ended: boolean } | null;
   } | null;
-  licence: { jwt: string; expiresAt: string } | null;
+  /** The customer's licence key; it does not expire. */
+  licence: { jwt: string } | null;
   githubLogin: string | null;
 }
 
@@ -45,7 +46,7 @@ export async function getProAccess(): Promise<ProAccess> {
       .maybeSingle(),
     supabase
       .from('licences')
-      .select('jwt,expires_at')
+      .select('jwt')
       .eq('customer_id', customerId)
       .eq('revoked', false)
       .order('issued_at', { ascending: false })
@@ -76,7 +77,7 @@ export async function getProAccess(): Promise<ProAccess> {
               : null,
         }
       : null,
-    licence: licence ? { jwt: licence.jwt, expiresAt: licence.expires_at } : null,
+    licence: licence ? { jwt: licence.jwt } : null,
     githubLogin: link?.github_login ?? null,
   };
 }

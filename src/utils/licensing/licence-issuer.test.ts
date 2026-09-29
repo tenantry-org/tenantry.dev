@@ -13,7 +13,7 @@ const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime
 
 describe('issueLicence', () => {
   it('produces a standard ES256 JWT that a JWT library verifies against the matching public key', async () => {
-    const token = issueLicence({ customerId: 'ctm_123', expiresAt: new Date(Date.now() + 3_600_000) }, privateKey);
+    const token = issueLicence({ customerId: 'ctm_123' }, privateKey);
 
     const { payload, protectedHeader } = await jwtVerify(token, publicKey, {
       algorithms: ['ES256'],
@@ -26,16 +26,13 @@ describe('issueLicence', () => {
     expect(base64UrlDecode(token.split('.')[2])).toHaveLength(64);
   });
 
-  it('writes the expected claims', () => {
-    const expiresAt = new Date(Date.now() + 3_600_000);
-    const token = issueLicence({ customerId: 'ctm_123', expiresAt }, privateKey);
+  it('writes the issuer, customer and issue time, and no expiry: licences do not expire', () => {
+    const token = issueLicence({ customerId: 'ctm_123' }, privateKey);
     const claims = JSON.parse(base64UrlDecode(token.split('.')[1]).toString());
 
-    expect(Object.keys(claims).sort()).toEqual(['exp', 'iat', 'iss', 'nbf', 'sub']);
+    expect(Object.keys(claims).sort()).toEqual(['iat', 'iss', 'sub']);
     expect(claims.iss).toBe('Tenantry');
     expect(claims.sub).toBe('ctm_123');
-    expect(claims.exp).toBe(Math.floor(expiresAt.getTime() / 1000));
-    expect(claims.nbf).toBeLessThanOrEqual(claims.iat);
   });
 
   it('throws a clear error when no signing key is configured', () => {
@@ -43,9 +40,7 @@ describe('issueLicence', () => {
     delete process.env.LICENCE_SIGNING_PRIVATE_KEY;
 
     try {
-      expect(() => issueLicence({ customerId: 'ctm_123', expiresAt: new Date() })).toThrow(
-        /LICENCE_SIGNING_PRIVATE_KEY/,
-      );
+      expect(() => issueLicence({ customerId: 'ctm_123' })).toThrow(/LICENCE_SIGNING_PRIVATE_KEY/);
     } finally {
       if (previous !== undefined) process.env.LICENCE_SIGNING_PRIVATE_KEY = previous;
     }

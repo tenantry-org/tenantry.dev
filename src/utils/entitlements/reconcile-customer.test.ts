@@ -24,7 +24,7 @@ vi.mock('@/utils/entitlements/entitlements-store', async () => {
 });
 vi.mock('@/utils/email/send', () => ({ sendEmail: effects.sendEmail }));
 vi.mock('@/utils/licensing/licence-issuer', () => ({
-  issueLicence: ({ expiresAt }: { expiresAt: Date }) => `licence:${expiresAt.toISOString()}`,
+  issueLicence: ({ customerId }: { customerId: string }) => `licence:${customerId}`,
 }));
 vi.mock('@/utils/provisioning-guard', () => ({ automatedProvisioningEnabled: effects.automatedProvisioningEnabled }));
 
@@ -197,7 +197,7 @@ describe('reconcileCustomer', () => {
     effects.automatedProvisioningEnabled.mockReturnValue(false);
     await record({ status: 'revoked' });
     await syncCustomerAccess('ctm_1');
-    await memory.store.recordLicence({ customerId: 'ctm_1', jwt: 'left-over', expiresAt: NOVEMBER });
+    await memory.store.recordLicence({ customerId: 'ctm_1', jwt: 'left-over' });
     effects.membershipOf.mockResolvedValue('active');
 
     await expect(reconcileCustomer('ctm_1')).resolves.toMatchObject({ github: 'removed', licencesRevoked: true });

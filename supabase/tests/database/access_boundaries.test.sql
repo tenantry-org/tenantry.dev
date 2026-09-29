@@ -43,10 +43,10 @@ insert into public.subscriptions (subscription_id, subscription_status, customer
 insert into public.entitlements (customer_id, subscription_id, status) values
   ('ctm_alice', 'sub_alice', 'active'), ('ctm_bob', 'sub_bob', 'active');
 insert into public.customer_access (customer_id, status) values ('ctm_alice', 'active'), ('ctm_bob', 'active');
-insert into public.licences (customer_id, jwt, expires_at, revoked) values
-  ('ctm_alice', 'alice-licence', now() + interval '1 year', false),
-  ('ctm_bob', 'bob-licence', now() + interval '1 year', false),
-  ('ctm_bob', 'bob-revoked-licence', now() + interval '1 year', true);
+insert into public.licences (customer_id, jwt, revoked) values
+  ('ctm_alice', 'alice-licence', false),
+  ('ctm_bob', 'bob-licence', false),
+  ('ctm_bob', 'bob-revoked-licence', true);
 insert into public.github_links (customer_id, github_login, github_id) values
   ('ctm_alice', 'alice-gh', 1001), ('ctm_bob', 'bob-gh', 1002);
 insert into public.licence_failures (customer_id, attempts, last_error) values ('ctm_bob', 1, 'signing failed');
@@ -81,7 +81,7 @@ select throws_ok(
   $$insert into public.entitlements (customer_id, subscription_id, status) values ('ctm_alice', 'sub_bob', 'active')$$,
   '42501', null, 'she cannot grant herself an entitlement');
 select throws_ok(
-  $$insert into public.licences (customer_id, jwt, expires_at) values ('ctm_alice', 'forged', now() + interval '9 years')$$,
+  $$insert into public.licences (customer_id, jwt) values ('ctm_alice', 'forged')$$,
   '42501', null, 'she cannot add a licence');
 select throws_ok(
   $$insert into public.github_links (customer_id, github_login, github_id) values ('ctm_bob', 'alice-gh', 1003)$$,

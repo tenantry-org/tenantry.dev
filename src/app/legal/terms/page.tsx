@@ -4,7 +4,7 @@ export const metadata = { title: 'Terms of Service — Tenantry' };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Service" lastUpdated="2026-06-28">
+    <LegalPage title="Terms of Service" lastUpdated="2026-09-29">
       <p>
         These Terms of Service (&quot;Terms&quot;) govern your access to and use of the Tenantry website, the Tenantry
         Pro software, the private package feed, and related services (collectively, the &quot;Services&quot;) provided
@@ -28,9 +28,11 @@ export default function TermsPage() {
 
       <h2>3. Access provisioning</h2>
       <p>
-        An active subscription grants access to the private <code>tenantry-pro</code> repository and the private package
-        feed via membership of our GitHub organisation. Access is granted after you connect your GitHub account and is
-        revoked when your subscription ends (subject to any grace period).
+        An active subscription grants access to the private package feed, and so to new versions of Tenantry Pro, via
+        membership of our GitHub organisation. Access is granted after you connect your GitHub account and is removed
+        when your subscription ends, or 30 days after a renewal payment fails if it is not recovered. You are also
+        issued a licence key, which does not expire; what you may do with the versions you have after your subscription
+        ends is set out in the <a href="/legal/eula">EULA</a>.
       </p>
 
       <h2>4. Acceptable use</h2>

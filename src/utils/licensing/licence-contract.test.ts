@@ -37,7 +37,7 @@ interface LicenceContract {
   note: string;
   publicKeySpki: string;
   issuedAt: string;
-  claims: { customerId: string; notBefore: string; expiresAt: string };
+  claims: { customerId: string };
   token: string;
 }
 
@@ -64,11 +64,7 @@ function contractTestKey() {
 }
 
 function toLicenceClaims(claims: LicenceContract['claims']): LicenceClaims {
-  return {
-    customerId: claims.customerId,
-    notBefore: new Date(claims.notBefore),
-    expiresAt: new Date(claims.expiresAt),
-  };
+  return { customerId: claims.customerId };
 }
 
 function issueAt(issuedAt: string, claims: LicenceContract['claims']): string {
@@ -99,11 +95,7 @@ describe('licence format contract with Tenantry.Pro', () => {
   if (process.env.UPDATE_LICENCE_CONTRACT === '1') {
     it('regenerates licence-contract.json', () => {
       const issuedAt = '2026-09-27T00:00:00.000Z';
-      const claims = {
-        customerId: 'ctm_contract',
-        notBefore: issuedAt,
-        expiresAt: '2099-01-01T00:00:00.000Z',
-      };
+      const claims = { customerId: 'ctm_contract' };
       const contract: LicenceContract = {
         note:
           'Licence format contract between tenantry-site and Tenantry.Pro. Signed with a TEST key derived from a ' +

@@ -8,7 +8,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(23);
+select plan(24);
 
 insert into public.customers (customer_id, email) values ('ctm_1', 'buyer@example.com');
 
@@ -60,6 +60,7 @@ select has_column('public', 'entitlements', 'current_period_ends_at', 'entitleme
 select hasnt_column('public', 'entitlements', 'tier', 'entitlements have no tier');
 select hasnt_column('public', 'customer_access', 'tier', 'customer access has no tier');
 select hasnt_column('public', 'licences', 'tier', 'licences have no tier');
+select hasnt_column('public', 'licences', 'expires_at', 'licences do not expire');
 select hasnt_function('public', 'set_customer_access', array['text', 'text', 'text'], 'set_customer_access takes no tier');
 
 -- GitHub invitation state (6.7).

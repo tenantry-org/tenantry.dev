@@ -4,7 +4,7 @@ export const metadata = { title: 'End User Licence Agreement — Tenantry Pro' }
 
 export default function EulaPage() {
   return (
-    <LegalPage title="End User Licence Agreement (Tenantry Pro)" lastUpdated="2026-06-28">
+    <LegalPage title="End User Licence Agreement (Tenantry Pro)" lastUpdated="2026-09-29">
       <p>
         This End User Licence Agreement (&quot;EULA&quot;) is between you (or the entity you represent) and [COMPANY
         LEGAL NAME] (&quot;Tenantry&quot;) and governs your use of the Tenantry Pro software packages (the
@@ -13,9 +13,10 @@ export default function EulaPage() {
 
       <h2>1. Licence grant</h2>
       <p>
-        Subject to an active subscription and your compliance with this EULA, Tenantry grants you a non-exclusive,
-        non-transferable, revocable licence to install and use the Software in your own applications, including
-        production use, for the duration of your subscription.
+        Subject to your compliance with this EULA, Tenantry grants you a non-exclusive, non-transferable, revocable
+        licence to install and use the Software in your own applications, including production use. An active
+        subscription gives you access to the private package feed and so to new versions of the Software; your licence
+        covers the versions you obtain while it is active, including after it ends (section 5).
       </p>
 
       <h2>2. Restrictions</h2>
@@ -27,9 +28,9 @@ export default function EulaPage() {
 
       <h2>3. Licence keys</h2>
       <p>
-        Tenantry issues a signed licence key tied to your subscription. Runtime licence checks are non-fatal by default
-        and exist for provenance and identity; they do not police your usage. The commercial gate is access to the
-        private package feed.
+        Tenantry issues you a signed licence key, which the Software verifies offline when your application starts: it
+        does not start without a valid key. The key does not expire, so you configure it once. It identifies you as a
+        licensee; it does not police your usage. The commercial gate is access to the private package feed.
       </p>
 
       <h2>4. Ownership</h2>
@@ -40,8 +41,10 @@ export default function EulaPage() {
 
       <h2>5. Term and termination</h2>
       <p>
-        This EULA applies while your subscription is active. On termination you must stop using the Software and remove
-        the Pro packages from new builds; access to the private feed and repository is revoked.
+        When your subscription ends, your access to the private package feed ends, and with it access to new versions.
+        You may continue to use the versions of the Software you obtained while your subscription was active, under this
+        EULA, with the licence key issued to you. If your payment is refunded in full or charged back, your licence
+        ends: you must stop using the Software and remove it from your applications.
       </p>
 
       <h2>6. Warranty and liability</h2>

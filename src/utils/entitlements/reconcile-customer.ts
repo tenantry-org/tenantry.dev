@@ -2,7 +2,7 @@ import { hasPendingInvitation, membershipOf, revokeAccess } from '@/utils/github
 import { automatedProvisioningEnabled } from '@/utils/provisioning-guard';
 import {
   CustomerAccessRecord,
-  getCurrentLicence,
+  hasLiveLicence,
   getCustomerAccess,
   getGithubLogin,
   revokeLicences,
@@ -71,7 +71,7 @@ export async function reconcileCustomer(customerId: string): Promise<CustomerRec
       : await reconcileRemoval(githubLogin);
   }
 
-  if (!entitled && (await getCurrentLicence(customerId))) {
+  if (!entitled && (await hasLiveLicence(customerId))) {
     await revokeLicences(customerId);
     result.licencesRevoked = true;
   }

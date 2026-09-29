@@ -13,7 +13,6 @@ type GithubState = EntitlementsStore.GithubState;
 interface Licence {
   customerId: string;
   jwt: string;
-  expiresAt: Date;
   revoked: boolean;
 }
 
@@ -102,12 +101,11 @@ export const memory = {
       access.githubInvitedAt = githubState === 'invited' ? new Date() : null;
     },
 
-    async getCurrentLicence(customerId: string) {
-      const licence = liveLicences(customerId).at(-1);
-      return licence ? { expiresAt: licence.expiresAt } : null;
+    async hasLiveLicence(customerId: string) {
+      return liveLicences(customerId).length > 0;
     },
 
-    async recordLicence(params: { customerId: string; jwt: string; expiresAt: Date }) {
+    async recordLicence(params: { customerId: string; jwt: string }) {
       state.licences.push({ ...params, revoked: false });
     },
 

@@ -29,8 +29,8 @@ insert into public.entitlements (customer_id, subscription_id, status, grace_sta
   ('ctm_entitled', 'sub_entitled', 'grace', now());
 insert into public.entitlements (customer_id, subscription_id, status) values ('ctm_lapsed', 'sub_lapsed', 'revoked');
 insert into public.github_links (customer_id, github_login, github_id) values ('ctm_linked', 'octocat', 1);
-insert into public.licences (customer_id, jwt, expires_at) values ('ctm_licensed', 'jwt', now() + interval '30 days');
-insert into public.licences (customer_id, jwt, expires_at, revoked) values ('ctm_lapsed', 'jwt', now(), true);
+insert into public.licences (customer_id, jwt) values ('ctm_licensed', 'jwt');
+insert into public.licences (customer_id, jwt, revoked) values ('ctm_lapsed', 'jwt', true);
 
 select is(
   (select count(*)::int from unnest(public.customers_to_reconcile()) id where id ~ '^ctm_[0-9]{4}$'),

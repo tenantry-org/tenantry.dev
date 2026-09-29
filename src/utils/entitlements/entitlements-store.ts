@@ -30,10 +30,6 @@ export interface EntitlementRecord {
   graceStartedAt: Date | null;
 }
 
-export interface CurrentLicence {
-  expiresAt: Date;
-}
-
 /** Returns the customer's email (populated by Paddle customer webhooks), or null if unknown. */
 export async function getCustomerEmail(customerId: string): Promise<string | null> {
   const supabase = await createClient();
@@ -180,32 +176,27 @@ export async function setGithubState(customerId: string, state: Exclude<GithubSt
   if (error) throw error;
 }
 
-/** The customer's most recently issued licence that is not revoked, or null. */
-export async function getCurrentLicence(customerId: string): Promise<CurrentLicence | null> {
+/** Whether the customer has a licence that is not revoked. */
+export async function hasLiveLicence(customerId: string): Promise<boolean> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('licences')
-    .select('expires_at')
+    .select('id')
     .eq('customer_id', customerId)
     .eq('revoked', false)
-    .order('issued_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) throw error;
 
-  return data ? { expiresAt: new Date(data.expires_at as string) } : null;
+  return data !== null;
 }
 
 /** Records a freshly issued licence token for a customer. */
-export async function recordLicence(params: { customerId: string; jwt: string; expiresAt: Date }): Promise<void> {
+export async function recordLicence(params: { customerId: string; jwt: string }): Promise<void> {
   const supabase = await createClient();
 
-  const { error } = await supabase.from('licences').insert({
-    customer_id: params.customerId,
-    jwt: params.jwt,
-    expires_at: params.expiresAt.toISOString(),
-  });
+  const { error } = await supabase.from('licences').insert({ customer_id: params.customerId, jwt: params.jwt });
 
   if (error) throw error;
 }

@@ -2,7 +2,7 @@ import {
   EntitlementRecord,
   EntitlementStatus,
   GithubState,
-  getCurrentLicence,
+  hasLiveLicence,
   getCustomerEmail,
   getGithubLogin,
   clearLicenceFailure,
@@ -29,22 +29,13 @@ import { graceEndsAt } from '@/utils/entitlements/grace';
  * entitlement becomes active or grace, and ends only when none is left. Cancelling one of two
  * subscriptions therefore leaves the customer in the team, with a licence and no revocation email.
  *
- * A past-due subscription ('grace') entitles the customer only until its grace period ends (grace.ts),
- * and its licence runs only to that point. This is decided when the access is computed, so the daily
- * reconcile ends access once grace is over, with no event from Paddle.
+ * A past-due subscription ('grace') entitles the customer only until its grace period ends (grace.ts).
+ * This is decided when the access is computed, so the daily reconcile ends access once grace is over, with
+ * no event from Paddle.
+ *
+ * The licence does not expire (licence-issuer.ts): a customer is issued one key when their access starts and
+ * keeps it through renewals, and it is revoked here when access ends.
  */
-
-// Licence lifetime when Paddle gives no billing period (the validator's own grace covers renewal gaps).
-const FALLBACK_LICENCE_DAYS = 30;
-
-export interface CustomerAccess {
-  status: EntitlementStatus;
-  /**
-   * The latest point an entitled subscription covers: its billing period end, or for one in grace the end
-   * of grace. Null if Paddle gave no billing period.
-   */
-  licenceExpiresAt: Date | null;
-}
 
 export type AccessChange = 'started' | 'ended' | 'unchanged';
 
@@ -62,17 +53,12 @@ export function isEntitled(status: EntitlementStatus): boolean {
  * Active if any subscription is active, grace if any is in grace (and its grace period has not ended by
  * `now`), otherwise revoked.
  */
-export function aggregateAccess(entitlements: EntitlementRecord[], now: Date = new Date()): CustomerAccess {
+export function aggregateAccess(entitlements: EntitlementRecord[], now: Date = new Date()): EntitlementStatus {
   const entitled = entitlements.filter((entitlement) => entitles(entitlement, now));
 
-  if (entitled.length === 0) return { status: 'revoked', licenceExpiresAt: null };
+  if (entitled.length === 0) return 'revoked';
 
-  const covered = entitled.flatMap((entitlement) => coveredUntil(entitlement)?.getTime() ?? []);
-
-  return {
-    status: entitled.some((entitlement) => entitlement.status === 'active') ? 'active' : 'grace',
-    licenceExpiresAt: covered.length > 0 ? new Date(Math.max(...covered)) : null,
-  };
+  return entitled.some((entitlement) => entitlement.status === 'active') ? 'active' : 'grace';
 }
 
 function entitles(entitlement: EntitlementRecord, now: Date): boolean {
@@ -83,16 +69,11 @@ function entitles(entitlement: EntitlementRecord, now: Date): boolean {
   return entitlement.status === 'active';
 }
 
-function coveredUntil(entitlement: EntitlementRecord): Date | null {
-  if (entitlement.status === 'grace' && entitlement.graceStartedAt) return graceEndsAt(entitlement.graceStartedAt);
-
-  return entitlement.currentPeriodEndsAt;
-}
-
 /**
  * Brings the customer's access in line with their entitlements. Grants GitHub access and sends the
  * welcome email only when access starts; revokes it, revokes the licences and sends the revocation email
- * only when it ends. While the customer stays entitled it only re-issues the licence if its expiry changed.
+ * only when it ends. While the customer stays entitled it only issues the licence if they have none (a
+ * failed issuance, or access that started while provisioning was manual).
  *
  * Called by the webhook worker after one of the customer's entitlements changed (one customer's events
  * at a time), and by reconcile for every entitled customer, which ends access whose grace period is over
@@ -102,12 +83,12 @@ function coveredUntil(entitlement: EntitlementRecord): Date | null {
  * licence issuance and revocation, and an email is not resent.
  */
 export async function syncCustomerAccess(customerId: string): Promise<AccessSync> {
-  const access = aggregateAccess(await listEntitlements(customerId));
+  const status = aggregateAccess(await listEntitlements(customerId));
   const email = await getCustomerEmail(customerId);
 
-  const wasEntitled = isEntitled(await setCustomerAccess(customerId, access.status));
+  const wasEntitled = isEntitled(await setCustomerAccess(customerId, status));
 
-  if (!isEntitled(access.status)) {
+  if (!isEntitled(status)) {
     if (!wasEntitled) return { change: 'unchanged', licence: null };
 
     await endAccess(customerId, email);
@@ -125,11 +106,11 @@ export async function syncCustomerAccess(customerId: string): Promise<AccessSync
   }
 
   if (wasEntitled) {
-    return { change: 'unchanged', licence: await ensureLicence(customerId, access) };
+    return { change: 'unchanged', licence: await ensureLicence(customerId) };
   }
 
   await grantGithubAccess(customerId);
-  const licence = await ensureLicence(customerId, access);
+  const licence = await ensureLicence(customerId);
 
   if (email) {
     await sendEmail(welcomeProEmail(email)); // sendEmail never throws
@@ -187,19 +168,15 @@ export async function grantAndRecord(customerId: string, githubLogin: string): P
 
 export type LicenceOutcome = 'issued' | 'current' | 'failed';
 
-// Issues a licence running to the latest point the customer's entitled subscriptions cover, unless the
-// current one already does. A failure is recorded (alerting the operator when it starts a run of failures) and
-// reconcile retries it; success clears the record.
-async function ensureLicence(customerId: string, access: CustomerAccess): Promise<LicenceOutcome> {
+// Issues the customer's licence unless they already have a live one; it does not expire, so renewals keep it.
+// A failure is recorded (alerting the operator when it starts a run of failures) and reconcile retries it;
+// success clears the record.
+async function ensureLicence(customerId: string): Promise<LicenceOutcome> {
   let outcome: LicenceOutcome = 'current';
 
   try {
-    const current = await getCurrentLicence(customerId);
-
-    if (!current || (access.licenceExpiresAt && current.expiresAt.getTime() !== access.licenceExpiresAt.getTime())) {
-      const expiresAt = access.licenceExpiresAt ?? new Date(Date.now() + FALLBACK_LICENCE_DAYS * 24 * 60 * 60 * 1000);
-      const jwt = issueLicence({ customerId, expiresAt });
-      await recordLicence({ customerId, jwt, expiresAt });
+    if (!(await hasLiveLicence(customerId))) {
+      await recordLicence({ customerId, jwt: issueLicence({ customerId }) });
       outcome = 'issued';
     }
   } catch (error) {
