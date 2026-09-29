@@ -3,7 +3,7 @@
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { signInWithGithub } from '@/app/login/actions';
-import Image from 'next/image';
+import { GithubIcon } from '@/components/icons/github-icon';
 import { useTransition } from 'react';
 
 interface Props {
@@ -31,14 +31,7 @@ export function GhLoginButton({ label }: Props) {
         disabled={pending}
         aria-busy={pending}
       >
-        <Image
-          height="24"
-          className={'mr-3'}
-          width="24"
-          src="https://cdn.simpleicons.org/github/878989"
-          unoptimized={true}
-          alt={'GitHub logo'}
-        />
+        <GithubIcon className={'mr-3 h-5 w-5 text-[#878989]'} />
         {pending ? 'Opening GitHub…' : label}
       </Button>
     </div>

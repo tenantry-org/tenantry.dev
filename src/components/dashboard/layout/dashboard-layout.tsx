@@ -5,6 +5,7 @@ import { DashboardGradient } from '@/components/gradients/dashboard-gradient';
 import '../../../styles/dashboard.css';
 import { Sidebar } from '@/components/dashboard/layout/sidebar';
 import { SidebarUserInfo } from '@/components/dashboard/layout/sidebar-user-info';
+import { MobileSidebar } from '@/components/dashboard/layout/mobile-sidebar';
 
 interface Props {
   children: ReactNode;
@@ -27,7 +28,15 @@ export function DashboardLayout({ children }: Props) {
           </div>
         </div>
       </div>
-      <div className="flex flex-col">{children}</div>
+      <div className="flex flex-col">
+        <div className="flex items-center gap-4 px-4 pt-4 md:hidden">
+          <MobileSidebar />
+          <Link href="/" className="flex items-center gap-2 font-semibold">
+            <Wordmark />
+          </Link>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

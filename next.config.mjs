@@ -13,11 +13,15 @@ const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Pages prerender a static shell and stream their dynamic parts into Suspense boundaries (Partial Prerendering).
+  cacheComponents: true,
+  reactCompiler: true,
+  experimental: {
+    // The Rust port of the React Compiler, which runs inside Turbopack instead of through Babel.
+    turbopackRustReactCompiler: true,
+  },
   images: {
-    remotePatterns: [
-      { protocol: 'https', hostname: 'cdn.simpleicons.org' },
-      { protocol: 'https', hostname: 'tenantry.dev' },
-    ],
+    remotePatterns: [{ protocol: 'https', hostname: 'tenantry.dev' }],
   },
   async headers() {
     return [

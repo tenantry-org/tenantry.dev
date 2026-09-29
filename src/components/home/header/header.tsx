@@ -1,12 +1,8 @@
 import Link from 'next/link';
-import { User } from '@supabase/supabase-js';
-import { Button } from '@/components/ui/button';
+import { Suspense } from 'react';
+import { AccountButton, SignInButton } from '@/components/home/header/account-button';
 
-interface Props {
-  user: User | null;
-}
-
-export default function Header({ user }: Props) {
+export default function Header() {
   return (
     <nav>
       <div className="mx-auto max-w-7xl relative px-[32px] py-[18px] flex items-center justify-between">
@@ -32,15 +28,9 @@ export default function Header({ user }: Props) {
         </div>
         <div className="flex flex-1 items-center justify-end">
           <div className="flex space-x-4">
-            {user?.id ? (
-              <Button variant={'secondary'} asChild={true}>
-                <Link href={'/dashboard/pro'}>Dashboard</Link>
-              </Button>
-            ) : (
-              <Button asChild={true} variant={'secondary'}>
-                <Link href={'/login'}>Sign in</Link>
-              </Button>
-            )}
+            <Suspense fallback={<SignInButton />}>
+              <AccountButton />
+            </Suspense>
           </div>
         </div>
       </div>

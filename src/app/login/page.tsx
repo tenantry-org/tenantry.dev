@@ -3,14 +3,17 @@ import '../../styles/login.css';
 import { LoginCardGradient } from '@/components/gradients/login-card-gradient';
 import { LoginForm } from '@/components/authentication/login-form';
 import { GhLoginButton } from '@/components/authentication/gh-login-button';
+import { Suspense } from 'react';
 
 const NOTICES: Record<string, string> = {
   link: 'That link could not sign you in here. If you were confirming your email, it is confirmed: log in below.',
 };
 
-export default async function LoginPage({ searchParams }: Readonly<{ searchParams: Promise<{ error?: string }> }>) {
-  const { error } = await searchParams;
+interface Props {
+  searchParams: Promise<{ error?: string }>;
+}
 
+export default function LoginPage({ searchParams }: Props) {
   return (
     <div>
       <LoginGradient />
@@ -21,7 +24,9 @@ export default async function LoginPage({ searchParams }: Readonly<{ searchParam
           }
         >
           <LoginCardGradient />
-          <LoginForm notice={error ? NOTICES[error] : undefined} />
+          <Suspense fallback={<LoginForm />}>
+            <LoginFormWithNotice searchParams={searchParams} />
+          </Suspense>
         </div>
         <GhLoginButton label={'Log in with GitHub'} />
         <div
@@ -39,4 +44,10 @@ export default async function LoginPage({ searchParams }: Readonly<{ searchParam
       </div>
     </div>
   );
+}
+
+// The notice comes from the query string, so only it waits for the request; the form around it is static.
+async function LoginFormWithNotice({ searchParams }: Props) {
+  const { error } = await searchParams;
+  return <LoginForm notice={error ? NOTICES[error] : undefined} />;
 }

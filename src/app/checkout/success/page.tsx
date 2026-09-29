@@ -4,12 +4,10 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { PoweredByPaddle } from '@/components/home/footer/powered-by-paddle';
 import '../../../styles/checkout.css';
-import { createClient } from '@/utils/supabase/server';
+import { Suspense } from 'react';
+import { getCurrentUser } from '@/utils/supabase/current-user';
 
-export default async function SuccessPage() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-
+export default function SuccessPage() {
   return (
     <main>
       <div className={'relative h-screen overflow-hidden'}>
@@ -21,9 +19,9 @@ export default async function SuccessPage() {
               Payment successful
             </h1>
             <p className={'text-lg pb-16'}>Success! Your payment is complete, and you’re all set.</p>
-            <Button variant={'secondary'} asChild={true}>
-              {data.user ? <Link href={'/dashboard/pro'}>Go to Dashboard</Link> : <Link href={'/'}>Go to Home</Link>}
-            </Button>
+            <Suspense fallback={<NextStepButton signedIn={false} />}>
+              <SignedInNextStep />
+            </Suspense>
           </div>
         </div>
         <div className={'absolute bottom-0 w-full'}>
@@ -31,5 +29,17 @@ export default async function SuccessPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+async function SignedInNextStep() {
+  return <NextStepButton signedIn={Boolean(await getCurrentUser())} />;
+}
+
+function NextStepButton({ signedIn }: Readonly<{ signedIn: boolean }>) {
+  return (
+    <Button variant={'secondary'} asChild={true}>
+      {signedIn ? <Link href={'/dashboard/pro'}>Go to Dashboard</Link> : <Link href={'/'}>Go to Home</Link>}
+    </Button>
   );
 }

@@ -31,7 +31,20 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: DO NOT REMOVE auth.getUser()
 
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // The dashboard's pages stream, so their own sign-in check runs after the response has started and can only
+  // redirect in the browser. Redirecting here answers a signed-out request with a real 307 before any rendering.
+  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+    const login = request.nextUrl.clone();
+    login.pathname = '/login';
+    login.search = '';
+    const redirect = NextResponse.redirect(login);
+    supabaseResponse.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
+  }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:

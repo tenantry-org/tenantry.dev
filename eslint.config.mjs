@@ -7,6 +7,10 @@ const eslintConfig = [
   ...nextCoreWebVitals,
   ...nextTypescript,
   {
+    // eslint-plugin-react 7.37 detects the React version through an API ESLint 10 removed; naming it skips that.
+    settings: { react: { version: '19.3' } },
+  },
+  {
     // react-hooks v6 (bundled with eslint-config-next 16) adds stricter rules that flag pre-existing
     // starter-kit patterns. Keep them visible as warnings rather than rewriting working code during
     // the framework upgrade.

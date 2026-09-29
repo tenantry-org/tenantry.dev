@@ -64,8 +64,7 @@ async function syncGithubLink(): Promise<SyncResult> {
   if (!githubIdentity) return { linked: false, granted: false, reason: 'no-github-identity' };
 
   const login = (githubIdentity.identity_data?.user_name ?? githubIdentity.identity_data?.preferred_username) as
-    | string
-    | undefined;
+    string | undefined;
   const githubId = Number(
     githubIdentity.identity_data?.provider_id ?? githubIdentity.identity_data?.sub ?? githubIdentity.id,
   );
