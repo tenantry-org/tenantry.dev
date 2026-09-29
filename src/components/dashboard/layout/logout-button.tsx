@@ -10,8 +10,16 @@ export function LogoutButton() {
   }
 
   return (
-    <button type={'button'} onClick={logout} aria-label={'Log out'} className={'text-muted-foreground'}>
-      <LogOut className={'h-6 w-6'} />
+    <button
+      type={'button'}
+      onClick={logout}
+      aria-label={'Log out'}
+      title={'Log out'}
+      className={
+        'cursor-pointer rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
+      }
+    >
+      <LogOut className={'h-4 w-4'} />
     </button>
   );
 }

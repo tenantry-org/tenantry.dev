@@ -2,11 +2,8 @@ import { checkoutEnabled, ProOffer } from '@/constants/pro-offer';
 import { IBillingFrequency } from '@/constants/billing-frequency';
 import { FeaturesList } from '@/components/home/pricing/features-list';
 import { PriceAmount } from '@/components/home/pricing/price-amount';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { PriceTitle } from '@/components/home/pricing/price-title';
-import { Separator } from '@/components/ui/separator';
-import { FeaturedCardGradient } from '@/components/gradients/featured-card-gradient';
 import Link from 'next/link';
 
 interface Props {
@@ -19,34 +16,28 @@ export function PriceCards({ loading, frequency, priceMap }: Props) {
   const offer = ProOffer;
 
   return (
-    <div className="isolate mx-auto grid max-w-lg grid-cols-1 gap-8">
-      <div className={cn('rounded-lg bg-background/70 backdrop-blur-[6px] overflow-hidden')}>
-        <div className={cn('flex gap-5 flex-col rounded-lg rounded-b-none pricing-card-border')}>
-          <FeaturedCardGradient />
-          <PriceTitle offer={offer} />
-          <PriceAmount
-            loading={loading}
-            offer={offer}
-            priceMap={priceMap}
-            value={frequency.value}
-            priceSuffix={frequency.priceSuffix}
-          />
-          <div className={'px-8'}>
-            <Separator className={'bg-border'} />
-          </div>
-          <div className={'px-8 text-[16px] leading-[24px]'}>{offer.description}</div>
-        </div>
-        <div className={'px-8 mt-8'}>
-          {checkoutEnabled ? (
-            <Button className={'w-full'} variant={'secondary'} asChild={true}>
-              <Link href={`/checkout/${offer.priceId[frequency.value]}`}>Get started</Link>
-            </Button>
-          ) : (
-            <Button className={'w-full'} variant={'secondary'} disabled={true}>
-              Available soon
-            </Button>
-          )}
-        </div>
+    <div className={'w-full max-w-lg overflow-hidden rounded-xl border border-border bg-card shadow-sm'}>
+      <div className={'flex flex-col gap-6 p-8'}>
+        <PriceTitle offer={offer} />
+        <PriceAmount
+          loading={loading}
+          offer={offer}
+          priceMap={priceMap}
+          value={frequency.value}
+          priceSuffix={frequency.priceSuffix}
+        />
+        <p className={'text-muted-foreground'}>{offer.description}</p>
+        {checkoutEnabled ? (
+          <Button className={'w-full'} size={'lg'} asChild={true}>
+            <Link href={`/checkout/${offer.priceId[frequency.value]}`}>Get started</Link>
+          </Button>
+        ) : (
+          <Button className={'w-full'} size={'lg'} disabled={true}>
+            Available soon
+          </Button>
+        )}
+      </div>
+      <div className={'border-t border-border bg-surface px-8 py-6'}>
         <FeaturesList offer={offer} />
       </div>
     </div>

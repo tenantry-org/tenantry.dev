@@ -10,7 +10,7 @@ interface LoadingTextProps {
 
 function LoadingText({ value, currencyCode }: LoadingTextProps) {
   if (value === undefined) {
-    return <Skeleton className="h-[20px] w-[75px] bg-border" />;
+    return <Skeleton className="h-[20px] w-[75px]" />;
   } else {
     return formatMoney(value, currencyCode);
   }
@@ -24,7 +24,7 @@ export function CheckoutLineItems({ checkoutData }: Props) {
   return (
     <>
       <div className={'md:pt-12 text-base leading-[20px] font-medium'}>{checkoutData?.items[0].price_name}</div>
-      <Separator className={'bg-border/50 mt-6'} />
+      <Separator className={'mt-6'} />
       <div className={'pt-6 flex justify-between'}>
         <span className={'text-base leading-[20px] font-medium text-muted-foreground'}>Subtotal</span>
         <span className={'text-base leading-[20px] font-semibold'}>
@@ -37,7 +37,7 @@ export function CheckoutLineItems({ checkoutData }: Props) {
           <LoadingText currencyCode={checkoutData?.currency_code} value={checkoutData?.totals.tax} />
         </span>
       </div>
-      <Separator className={'bg-border/50 mt-6'} />
+      <Separator className={'mt-6'} />
       <div className={'pt-6 flex justify-between'}>
         <span className={'text-base leading-[20px] font-medium text-muted-foreground'}>Due today</span>
         <span className={'text-base leading-[20px] font-semibold'}>

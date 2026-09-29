@@ -12,11 +12,11 @@ export function CheckoutPriceAmount({ checkoutData }: Props) {
     <>
       {total !== undefined ? (
         <div className={'pt-8 flex gap-2 items-end'}>
-          <span className={'text-5xl'}>{formatMoney(total, checkoutData?.currency_code)}</span>
-          <span className={'text-base leading-[16px]'}>inc. tax</span>
+          <span className={'text-4xl font-bold tracking-tight'}>{formatMoney(total, checkoutData?.currency_code)}</span>
+          <span className={'pb-1 text-sm text-muted-foreground'}>inc. tax</span>
         </div>
       ) : (
-        <Skeleton className="mt-8 h-[48px] w-full bg-border" />
+        <Skeleton className="mt-8 h-[48px] w-full" />
       )}
     </>
   );

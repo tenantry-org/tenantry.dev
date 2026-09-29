@@ -1,5 +1,5 @@
 import { Offer } from '@/constants/pro-offer';
-import { CircleCheck } from 'lucide-react';
+import { Check } from 'lucide-react';
 
 interface Props {
   offer: Offer;
@@ -7,11 +7,11 @@ interface Props {
 
 export function FeaturesList({ offer }: Props) {
   return (
-    <ul className={'p-8 flex flex-col gap-4'}>
+    <ul className={'flex flex-col gap-3 text-sm'}>
       {offer.features.map((feature: string) => (
-        <li key={feature} className="flex gap-x-3">
-          <CircleCheck className={'h-6 w-6 text-muted-foreground'} />
-          <span className={'text-base'}>{feature}</span>
+        <li key={feature} className={'flex gap-3'}>
+          <Check className={'mt-0.5 h-4 w-4 shrink-0 text-primary dark:text-link'} aria-hidden={true} />
+          <span>{feature}</span>
         </li>
       ))}
     </ul>

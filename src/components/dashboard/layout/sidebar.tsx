@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 const sidebarItems = [
   {
     title: 'Pro access',
-    icon: <KeyRound className="h-6 w-6" />,
+    icon: <KeyRound className={'h-4 w-4'} />,
     href: '/dashboard/pro',
   },
 ];
@@ -30,16 +30,18 @@ function CurrentSidebarLinks() {
 
 function SidebarLinks({ pathname }: Readonly<{ pathname: string | null }>) {
   return (
-    <nav className="flex flex-col grow justify-between items-start px-2 text-sm font-medium lg:px-4">
+    <nav className={'flex grow flex-col items-start px-3 text-sm font-medium'}>
       <div className={'w-full'}>
         {sidebarItems.map((item) => (
           <Link
             key={item.title}
             href={item.href}
             aria-current={pathname?.startsWith(item.href) ? 'page' : undefined}
-            className={cn('flex items-center text-base gap-3 px-4 py-3 rounded-xxs dashboard-sidebar-items', {
-              'dashboard-sidebar-items-active': pathname?.startsWith(item.href),
-            })}
+            className={cn(
+              'flex items-center gap-3 rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+              pathname?.startsWith(item.href) &&
+                'bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground',
+            )}
           >
             {item.icon}
             {item.title}

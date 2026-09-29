@@ -1,8 +1,6 @@
-import { Wordmark } from '@/components/shared/wordmark';
 import Link from 'next/link';
 import { ReactNode } from 'react';
-import { DashboardGradient } from '@/components/gradients/dashboard-gradient';
-import '../../../styles/dashboard.css';
+import { Logo } from '@/components/brand/logo';
 import { Sidebar } from '@/components/dashboard/layout/sidebar';
 import { SidebarUserInfo } from '@/components/dashboard/layout/sidebar-user-info';
 import { MobileSidebar } from '@/components/dashboard/layout/mobile-sidebar';
@@ -13,26 +11,25 @@ interface Props {
 
 export function DashboardLayout({ children }: Props) {
   return (
-    <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr] relative overflow-hidden">
-      <DashboardGradient />
-      <div className="hidden border-r md:block relative">
-        <div className="flex h-full flex-col gap-2">
-          <div className="flex items-center pt-8 pl-6 pb-10">
-            <Link href="/" className="flex items-center gap-2 font-semibold">
-              <Wordmark />
+    <div className={'grid min-h-screen w-full md:grid-cols-[240px_1fr] lg:grid-cols-[272px_1fr]'}>
+      <aside className={'hidden border-r border-border bg-surface md:block'}>
+        <div className={'sticky top-0 flex h-screen flex-col'}>
+          <div className={'flex h-16 items-center px-6'}>
+            <Link href={'/'} aria-label={'Tenantry home'} className={'text-foreground'}>
+              <Logo className={'h-6'} />
             </Link>
           </div>
-          <div className="flex flex-col grow">
+          <div className={'flex grow flex-col'}>
             <Sidebar />
             <SidebarUserInfo />
           </div>
         </div>
-      </div>
-      <div className="flex flex-col">
-        <div className="flex items-center gap-4 px-4 pt-4 md:hidden">
+      </aside>
+      <div className={'flex min-w-0 flex-col'}>
+        <div className={'flex h-16 items-center gap-3 border-b border-border px-4 md:hidden'}>
           <MobileSidebar />
-          <Link href="/" className="flex items-center gap-2 font-semibold">
-            <Wordmark />
+          <Link href={'/'} aria-label={'Tenantry home'} className={'text-foreground'}>
+            <Logo className={'h-6'} />
           </Link>
         </div>
         {children}

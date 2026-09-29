@@ -1,16 +1,11 @@
-import { Separator } from '@/components/ui/separator';
-
 interface Props {
   pageTitle: string;
 }
 
 export function DashboardPageHeader({ pageTitle }: Props) {
   return (
-    <div>
-      <div className={'flex items-center gap-6'}>
-        <h1 className="text-lg font-semibold md:text-4xl">{pageTitle}</h1>
-      </div>
-      <Separator className={'relative bg-border my-8 dashboard-header-highlight'} />
+    <div className={'mb-8 border-b border-border pb-6'}>
+      <h1 className={'text-2xl font-bold tracking-tight md:text-3xl'}>{pageTitle}</h1>
     </div>
   );
 }

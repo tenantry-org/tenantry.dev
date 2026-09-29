@@ -11,12 +11,11 @@ interface Props {
 export function AuthenticationForm({ email, onEmailChange, onPasswordChange, password }: Props) {
   return (
     <>
-      <div className="grid w-full max-w-sm items-center gap-1.5 mt-2">
-        <Label className={'text-muted-foreground leading-5'} htmlFor="email">
+      <div className="grid w-full items-center gap-1.5">
+        <Label className={'leading-5'} htmlFor="email">
           Email address
         </Label>
         <Input
-          className={'border-border rounded-xs'}
           type="email"
           id="email"
           autoComplete={'username'}
@@ -24,12 +23,11 @@ export function AuthenticationForm({ email, onEmailChange, onPasswordChange, pas
           onChange={(e) => onEmailChange(e.target.value)}
         />
       </div>
-      <div className="grid w-full max-w-sm items-center gap-1.5">
-        <Label className={'text-muted-foreground leading-5'} htmlFor="password">
+      <div className="grid w-full items-center gap-1.5">
+        <Label className={'leading-5'} htmlFor="password">
           Password
         </Label>
         <Input
-          className={'border-border rounded-xs'}
           type="password"
           id="password"
           autoComplete="current-password"

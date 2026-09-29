@@ -4,7 +4,7 @@ import { getCurrentUser } from '@/utils/supabase/current-user';
 
 export function SignInButton() {
   return (
-    <Button asChild={true} variant={'secondary'}>
+    <Button asChild={true} variant={'outline'} size={'sm'}>
       <Link href={'/login'}>Sign in</Link>
     </Button>
   );
@@ -16,7 +16,7 @@ export async function AccountButton() {
   if (!user) return <SignInButton />;
 
   return (
-    <Button variant={'secondary'} asChild={true}>
+    <Button asChild={true} size={'sm'}>
       <Link href={'/dashboard/pro'}>Dashboard</Link>
     </Button>
   );

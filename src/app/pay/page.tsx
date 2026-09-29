@@ -1,7 +1,6 @@
 import { Suspense } from 'react';
-import { CheckoutGradients } from '@/components/gradients/checkout-gradients';
+import { SimpleHeader } from '@/components/shared/simple-header';
 import { PaymentLink } from '@/components/checkout/payment-link';
-import '../../styles/checkout.css';
 
 /**
  * Paddle's default payment link (set in Paddle → Checkout → Checkout settings for each environment): where
@@ -9,13 +8,13 @@ import '../../styles/checkout.css';
  */
 export default function PayPage() {
   return (
-    <main className={'w-full min-h-screen relative overflow-hidden'}>
-      <CheckoutGradients />
-      <div className={'relative min-h-screen px-4 flex items-center justify-center text-white'}>
+    <div className={'flex min-h-screen flex-col bg-surface'}>
+      <SimpleHeader />
+      <main className={'flex flex-1 items-center justify-center px-4 py-20'}>
         <Suspense>
           <PaymentLink />
         </Suspense>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

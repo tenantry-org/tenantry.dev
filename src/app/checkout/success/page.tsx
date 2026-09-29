@@ -1,34 +1,31 @@
 import { CircleCheck } from 'lucide-react';
-import { SuccessPageGradients } from '@/components/gradients/success-page-gradients';
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { PoweredByPaddle } from '@/components/home/footer/powered-by-paddle';
-import '../../../styles/checkout.css';
 import { Suspense } from 'react';
+import { Button } from '@/components/ui/button';
+import { SimpleHeader } from '@/components/shared/simple-header';
+import { Footer } from '@/components/home/footer/footer';
 import { getCurrentUser } from '@/utils/supabase/current-user';
 
 export default function SuccessPage() {
   return (
-    <main>
-      <div className={'relative h-screen overflow-hidden'}>
-        <SuccessPageGradients />
-        <div className={'absolute inset-0 px-6 flex items-center justify-center'}>
-          <div className={'flex flex-col items-center text-white text-center'}>
-            <CircleCheck className={'mb-12 h-24 w-24 text-green-400'} aria-hidden={true} />
-            <h1 className={'text-4xl md:text-[80px] leading-9 md:leading-[80px] font-medium pb-6'}>
-              Payment successful
-            </h1>
-            <p className={'text-lg pb-16'}>Success! Your payment is complete, and you’re all set.</p>
+    <div className={'flex min-h-screen flex-col bg-surface'}>
+      <SimpleHeader />
+      <main className={'flex flex-1 items-center justify-center px-4 py-20'}>
+        <div className={'flex max-w-lg flex-col items-center text-center'}>
+          <div className={'flex h-16 w-16 items-center justify-center rounded-full bg-success-surface'}>
+            <CircleCheck className={'h-8 w-8 text-success'} aria-hidden={true} />
+          </div>
+          <h1 className={'mt-8 text-3xl font-bold tracking-tight md:text-4xl'}>Payment successful</h1>
+          <p className={'mt-4 text-lg text-muted-foreground'}>Your payment is complete, and you’re all set.</p>
+          <div className={'mt-10'}>
             <Suspense fallback={<NextStepButton signedIn={false} />}>
               <SignedInNextStep />
             </Suspense>
           </div>
         </div>
-        <div className={'absolute bottom-0 w-full'}>
-          <PoweredByPaddle />
-        </div>
-      </div>
-    </main>
+      </main>
+      <Footer />
+    </div>
   );
 }
 
@@ -38,8 +35,12 @@ async function SignedInNextStep() {
 
 function NextStepButton({ signedIn }: Readonly<{ signedIn: boolean }>) {
   return (
-    <Button variant={'secondary'} asChild={true}>
-      {signedIn ? <Link href={'/dashboard/pro'}>Go to Dashboard</Link> : <Link href={'/'}>Go to Home</Link>}
+    <Button size={'lg'} asChild={true}>
+      {signedIn ? (
+        <Link href={'/dashboard/pro'}>Go to your dashboard</Link>
+      ) : (
+        <Link href={'/'}>Go to the home page</Link>
+      )}
     </Button>
   );
 }

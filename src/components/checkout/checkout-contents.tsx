@@ -1,7 +1,7 @@
 'use client';
 
 import { PriceSection } from '@/components/checkout/price-section';
-import { CheckoutFormGradients } from '@/components/gradients/checkout-form-gradients';
+import { useTheme } from 'fumadocs-ui/provider/base';
 import { type Environments, initializePaddle, type Paddle } from '@paddle/paddle-js';
 import type { CheckoutEventsData } from '@paddle/paddle-js/types/checkout/events';
 import { useEffect, useState } from 'react';
@@ -15,13 +15,20 @@ interface Props {
 export function CheckoutContents({ priceId, userEmail }: Props) {
   const [paddle, setPaddle] = useState<Paddle | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutEventsData | null>(null);
+  // Paddle's frame takes its theme when it opens, so it matches the site's theme at that moment.
+  const { resolvedTheme } = useTheme();
 
   const handleCheckoutEvents = (event: CheckoutEventsData) => {
     setCheckoutData(event);
   };
 
   useEffect(() => {
-    if (!paddle?.Initialized && process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN && process.env.NEXT_PUBLIC_PADDLE_ENV) {
+    if (
+      resolvedTheme &&
+      !paddle?.Initialized &&
+      process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN &&
+      process.env.NEXT_PUBLIC_PADDLE_ENV
+    ) {
       initializePaddle({
         token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
         environment: process.env.NEXT_PUBLIC_PADDLE_ENV as Environments,
@@ -37,7 +44,7 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
           settings: {
             variant: 'one-page',
             displayMode: 'inline',
-            theme: 'dark',
+            theme: resolvedTheme === 'dark' ? 'dark' : 'light',
             allowLogout: !userEmail,
             frameTarget: 'paddle-checkout-frame',
             frameInitialHeight: 450,
@@ -57,21 +64,16 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
         }
       });
     }
-  }, [paddle?.Initialized, priceId, userEmail]);
+  }, [paddle?.Initialized, priceId, userEmail, resolvedTheme]);
 
   return (
-    <div
-      className={
-        'rounded-lg md:bg-background/80 md:backdrop-blur-[24px] md:p-10 md:pl-16 md:pt-16 md:min-h-[400px] flex flex-col justify-between relative'
-      }
-    >
-      <CheckoutFormGradients />
-      <div className={'flex flex-col md:flex-row gap-8 md:gap-16'}>
-        <div className={'w-full md:w-[400px]'}>
+    <div className={'rounded-xl border border-border bg-card p-6 shadow-sm md:p-10'}>
+      <div className={'flex flex-col gap-10 md:flex-row md:gap-16'}>
+        <div className={'w-full md:w-[360px] md:shrink-0'}>
           <PriceSection checkoutData={checkoutData} />
         </div>
-        <div className={'min-w-[375px] lg:min-w-[535px]'}>
-          <div className={'text-base leading-[20px] font-semibold mb-8'}>Payment details</div>
+        <div className={'min-w-0 flex-1'}>
+          <h2 className={'mb-6 text-base font-semibold'}>Payment details</h2>
           <div className={'paddle-checkout-frame'} />
         </div>
       </div>

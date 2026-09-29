@@ -32,9 +32,13 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
     toast({
       description: (
         <div className={'flex items-start gap-3'}>
-          {ok ? <CircleCheck size={20} color={'#25F497'} /> : <CircleAlert size={20} color={'#F42566'} />}
+          {ok ? (
+            <CircleCheck className={'h-5 w-5 shrink-0 text-success'} />
+          ) : (
+            <CircleAlert className={'h-5 w-5 shrink-0 text-destructive'} />
+          )}
           <div className={'flex flex-col gap-1'}>
-            <span className={'text-primary font-medium text-sm leading-5'}>{title}</span>
+            <span className={'text-sm leading-5 font-medium'}>{title}</span>
             <span className={'text-muted-foreground text-sm leading-5'}>{detail}</span>
           </div>
         </div>
@@ -83,13 +87,13 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
             key={subscription.id}
             className={'flex flex-col gap-3 border-t border-border pt-4 first:border-t-0 first:pt-0'}
           >
-            <p className={'text-secondary'}>
-              <span className={'text-primary font-medium'}>{ProOffer.name}</span>
+            <p className={'text-muted-foreground'}>
+              <span className={'font-medium text-foreground'}>{ProOffer.name}</span>
               {subscription.interval ? `, billed ${subscription.interval === 'year' ? 'yearly' : 'monthly'}` : ''}
               {subscription.status === 'past_due' && ', payment overdue'}
               {subscription.status === 'paused' && ', paused'}
             </p>
-            <p className={'text-secondary text-sm'}>
+            <p className={'text-sm text-muted-foreground'}>
               {subscription.endsAt
                 ? `Cancelled: it ends on ${formatDate(subscription.endsAt)}, and does not renew.`
                 : subscription.renewsAt && ['active', 'trialing'].includes(subscription.status)
@@ -128,17 +132,17 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
         ))}
 
         <div className={'flex flex-col gap-2 border-t border-border pt-4'}>
-          <p className={'text-secondary text-sm'}>
+          <p className={'text-sm text-muted-foreground'}>
             Invoices, the company name and tax ID on them, and your payment methods are in the billing portal, run by
             Paddle, our reseller.
           </p>
           <Button
             className={'w-fit'}
-            variant={'secondary'}
+            variant={'outline'}
             disabled={busy}
             onClick={() => openPortal({ kind: 'overview' })}
           >
-            Manage billing and invoices <ExternalLink className={'ml-2 h-4 w-4'} />
+            Manage billing and invoices <ExternalLink className={'h-4 w-4'} />
           </Button>
         </div>
       </CardContent>
@@ -163,12 +167,12 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
 function StatusBadge({ status }: Readonly<{ status: string }>) {
   const tone =
     status === 'active'
-      ? 'bg-green-500/15 text-green-400'
+      ? 'bg-success-surface text-success'
       : status === 'grace'
-        ? 'bg-yellow-500/15 text-yellow-400'
-        : 'bg-red-500/15 text-red-400';
+        ? 'bg-warning-surface text-warning'
+        : 'bg-destructive-surface text-destructive';
 
-  return <span className={`rounded-xs px-2 py-1 text-xs font-medium ${tone}`}>{status}</span>;
+  return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${tone}`}>{status}</span>;
 }
 
 function GraceNotice({ grace }: Readonly<{ grace: { endsAt: string; ended: boolean } | null }>) {
@@ -176,7 +180,7 @@ function GraceNotice({ grace }: Readonly<{ grace: { endsAt: string; ended: boole
 
   if (grace?.ended) {
     return (
-      <p className={'text-secondary text-sm'}>
+      <p className={'rounded-md bg-warning-surface px-3 py-2 text-sm text-warning'}>
         Your last payment failed, and the 30-day grace period ended on {ends}. Update your payment method to restore
         access.
       </p>
@@ -184,7 +188,7 @@ function GraceNotice({ grace }: Readonly<{ grace: { endsAt: string; ended: boole
   }
 
   return (
-    <p className={'text-secondary text-sm'}>
+    <p className={'rounded-md bg-warning-surface px-3 py-2 text-sm text-warning'}>
       Your last payment failed. Your access to the package feed continues{ends ? ` until ${ends}` : ''} while Paddle
       retries it. Update your payment method to keep it.
     </p>

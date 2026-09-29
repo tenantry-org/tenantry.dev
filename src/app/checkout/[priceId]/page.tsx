@@ -1,8 +1,6 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
-import { CheckoutGradients } from '@/components/gradients/checkout-gradients';
-import '../../../styles/checkout.css';
-import { CheckoutHeader } from '@/components/checkout/checkout-header';
+import { SimpleHeader } from '@/components/shared/simple-header';
 import { CheckoutContents } from '@/components/checkout/checkout-contents';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getCurrentUser } from '@/utils/supabase/current-user';
@@ -16,16 +14,13 @@ export default function CheckoutPage({ params }: Props) {
   if (!checkoutEnabled) notFound();
 
   return (
-    <div className={'w-full min-h-screen relative overflow-hidden'}>
-      <CheckoutGradients />
-      <div
-        className={'mx-auto max-w-6xl relative px-[16px] md:px-[32px] py-[24px] flex flex-col gap-6 justify-between'}
-      >
-        <CheckoutHeader />
-        <Suspense fallback={<Skeleton className={'h-[600px] w-full rounded-lg'} />}>
+    <div className={'min-h-screen bg-surface'}>
+      <SimpleHeader backHref={'/#pricing'} backLabel={'Back to pricing'} />
+      <main className={'mx-auto max-w-6xl px-4 py-10 md:px-8 md:py-16'}>
+        <Suspense fallback={<Skeleton className={'h-[600px] w-full rounded-xl'} />}>
           <Checkout params={params} />
         </Suspense>
-      </div>
+      </main>
     </div>
   );
 }

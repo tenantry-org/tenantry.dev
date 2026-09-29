@@ -1,6 +1,5 @@
 export interface Offer {
   name: string;
-  icon: string;
   description: string;
   features: string[];
   priceId: Record<string, string>;
@@ -16,7 +15,6 @@ export interface Offer {
  */
 export const ProOffer: Offer = {
   name: 'Tenantry Pro',
-  icon: '/assets/icons/price-tiers/basic-icon.svg',
   description: 'The tooling to run many tenant databases in production.',
   features: [
     'Tenant provisioning, lifecycle & migration orchestration across tenant databases',

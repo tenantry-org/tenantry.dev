@@ -1,39 +1,50 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
+import { ThemeSwitch } from 'fumadocs-ui/layouts/shared/slots/theme-switch';
 import { AccountButton, SignInButton } from '@/components/home/header/account-button';
+import { Logo } from '@/components/brand/logo';
+
+const NAV = [
+  { label: 'Docs', href: '/docs' },
+  { label: 'Pricing', href: '/#pricing' },
+  { label: 'GitHub', href: 'https://github.com/tenantry-org/tenantry-core', external: true },
+];
 
 export default function Header() {
   return (
-    <nav>
-      <div className="mx-auto max-w-7xl relative px-[32px] py-[18px] flex items-center justify-between">
-        <div className="flex flex-1 items-center justify-start gap-8">
-          <Link className="flex items-center text-xl font-semibold tracking-tight" href={'/'}>
-            Tenantry
+    <header className={'sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md'}>
+      <div className={'mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-4 md:px-8'}>
+        <div className={'flex items-center gap-10'}>
+          <Link href={'/'} aria-label={'Tenantry home'} className={'text-foreground'}>
+            <Logo className={'h-7'} />
           </Link>
-          <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-            <Link className="hover:text-primary" href={'/docs'}>
-              Docs
-            </Link>
-            <Link className="hover:text-primary" href={'/#pricing'}>
-              Pricing
-            </Link>
-            <Link
-              className="hover:text-primary"
-              href={'https://github.com/tenantry-org/tenantry-core'}
-              target={'_blank'}
-            >
-              GitHub
-            </Link>
-          </div>
+          <nav className={'hidden items-center gap-7 text-sm font-medium text-muted-foreground md:flex'}>
+            {NAV.map((item) => (
+              <Link
+                key={item.label}
+                className={'transition-colors hover:text-foreground'}
+                href={item.href}
+                target={item.external ? '_blank' : undefined}
+                rel={item.external ? 'noopener noreferrer' : undefined}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
         </div>
-        <div className="flex flex-1 items-center justify-end">
-          <div className="flex space-x-4">
-            <Suspense fallback={<SignInButton />}>
-              <AccountButton />
-            </Suspense>
-          </div>
+        <div className={'flex items-center gap-3'}>
+          <Link
+            href={'/docs'}
+            className={'text-sm font-medium text-muted-foreground transition-colors hover:text-foreground md:hidden'}
+          >
+            Docs
+          </Link>
+          <ThemeSwitch mode={'light-dark-system'} className={'hidden sm:flex'} />
+          <Suspense fallback={<SignInButton />}>
+            <AccountButton />
+          </Suspense>
         </div>
       </div>
-    </nav>
+    </header>
   );
 }

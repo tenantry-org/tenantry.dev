@@ -1,13 +1,15 @@
-import { Inter } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import '../styles/globals.css';
-import '../styles/layout.css';
 import { ReactNode } from 'react';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+import { RootProvider } from 'fumadocs-ui/provider/next';
 import { Toaster } from '@/components/ui/toaster';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 
-const inter = Inter({ subsets: ['latin'] });
+// Inter for everything (the brand face), JetBrains Mono for code.
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains-mono' });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://tenantry.dev'),
@@ -16,16 +18,27 @@ export const metadata: Metadata = {
     'Tenantry is a production-grade multi-tenancy toolkit for .NET. Core is open source and isolates tenants in a shared database or a database per tenant. Pro adds schema-per-tenant and mixed mode, provisioning, migration orchestration across tenant databases, tenant lifecycle management, and background-job and messaging integrations.',
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b1120' },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: ReactNode;
 }>) {
   return (
-    <html lang="en" className={'min-h-full dark'}>
-      <body className={inter.className}>
-        {children}
-        <Toaster />
+    // The theme provider sets the light or dark class before the page paints, so the server's markup differs.
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+      <body className={'min-h-screen font-sans'}>
+        {/* Fumadocs' provider (search, theme) for the whole site: the docs and the other pages share a theme. */}
+        <RootProvider theme={{ defaultTheme: 'system', enableSystem: true }}>
+          {children}
+          <Toaster />
+        </RootProvider>
         {/* Cookieless page views and real-user Core Web Vitals; both report only when deployed on Vercel. */}
         <Analytics />
         <SpeedInsights />

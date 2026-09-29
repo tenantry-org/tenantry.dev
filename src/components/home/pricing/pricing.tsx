@@ -27,9 +27,15 @@ export function Pricing() {
   }, []);
 
   return (
-    <div id="pricing" className="mx-auto max-w-7xl relative px-[32px] flex flex-col items-center justify-between">
-      <Toggle frequency={frequency} setFrequency={setFrequency} />
-      <PriceCards frequency={frequency} loading={loading} priceMap={prices} />
-    </div>
+    <section id="pricing" className={'scroll-mt-16 border-t border-border/70 bg-surface'}>
+      <div className={'mx-auto flex max-w-6xl flex-col items-center px-4 py-20 md:px-8 md:py-24'}>
+        <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>Pricing</h2>
+        <p className={'mt-4 mb-10 max-w-xl text-center text-lg text-muted-foreground'}>
+          One Pro subscription, billed monthly or yearly. Tenantry Core stays free and open source.
+        </p>
+        <Toggle frequency={frequency} setFrequency={setFrequency} />
+        <PriceCards frequency={frequency} loading={loading} priceMap={prices} />
+      </div>
+    </section>
   );
 }

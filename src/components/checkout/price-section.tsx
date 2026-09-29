@@ -18,7 +18,7 @@ export function PriceSection({ checkoutData }: Props) {
       </div>
       <div className={'block md:hidden'}>
         <CheckoutPriceAmount checkoutData={checkoutData} />
-        <Separator className={'relative bg-border/50 mt-6 checkout-order-summary-mobile-yellow-highlight'} />
+        <Separator className={'mt-6'} />
         <Accordion type="single" collapsible>
           <AccordionItem className={'border-none'} value="item-1">
             <AccordionTrigger className={'text-muted-foreground no-underline!'}>Order summary</AccordionTrigger>

@@ -14,24 +14,20 @@ export function GhLoginButton({ label }: Props) {
   const [pending, startTransition] = useTransition();
 
   return (
-    <div
-      className={
-        'mx-auto w-[343px] md:w-[488px] bg-background/80 backdrop-blur-[6px] px-6 md:px-16 pt-0 py-8 gap-6 flex flex-col items-center justify-center rounded-b-lg'
-      }
-    >
-      <div className={'flex w-full items-center justify-center'}>
-        <Separator className={'w-5/12 bg-border'} />
-        <div className={'text-border text-xs font-medium px-4'}>or</div>
-        <Separator className={'w-5/12 bg-border'} />
+    <div className={'mt-6 flex flex-col gap-6'}>
+      <div className={'flex items-center gap-4'}>
+        <Separator className={'flex-1'} />
+        <div className={'text-xs font-medium text-muted-foreground'}>or</div>
+        <Separator className={'flex-1'} />
       </div>
       <Button
         onClick={() => startTransition(() => signInWithGithub())}
-        variant={'secondary'}
+        variant={'outline'}
         className={'w-full'}
         disabled={pending}
         aria-busy={pending}
       >
-        <GithubIcon className={'mr-3 h-5 w-5 text-[#878989]'} />
+        <GithubIcon className={'h-4 w-4'} />
         {pending ? 'Opening GitHub…' : label}
       </Button>
     </div>
