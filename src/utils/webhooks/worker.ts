@@ -2,6 +2,7 @@ import { Webhooks } from '@paddle/paddle-node-sdk';
 import { ProcessWebhook } from '@/utils/paddle/process-webhook';
 import { claimEvents, completeEvent, type InboxEvent, releaseWaitingEvents, retryEvent } from '@/utils/webhooks/inbox';
 import { RECONCILE_CUSTOMER_EVENT, reconcileCustomer } from '@/utils/entitlements/reconcile-customer';
+import { CUSTOMER_LEASE_EVENT } from '@/utils/webhooks/customer-lease';
 
 /** How long a claimed event stays locked: longer than processing one event can take. */
 const LOCK_SECONDS = 120;
@@ -17,7 +18,8 @@ export interface DrainResult {
  * Processes due inbox events until none are left or the time budget is spent. Runs after each webhook
  * response and from the reconcile cron, so a failed event is retried even if no further notification
  * arrives. Several drains can run at once: the claim hands each customer's events to one of them, in order.
- * Besides Paddle's notifications the inbox holds reconcile jobs (reconcile.ts), which run in the same order.
+ * Besides Paddle's notifications the inbox holds reconcile jobs (reconcile.ts), which run in the same order,
+ * and customer leases (customer-lease.ts), which hold a customer's events back while account linking runs.
  */
 interface Handlers {
   processor: Pick<ProcessWebhook, 'processEvent'>;
@@ -67,6 +69,9 @@ async function handleEvent(event: InboxEvent, handlers: Handlers): Promise<keyof
 }
 
 async function runEvent(event: InboxEvent, { processor, reconciler }: Handlers) {
+  // A lease whose holder died without releasing it (customer-lease.ts): claimed once it expired; nothing to do.
+  if (event.eventType === CUSTOMER_LEASE_EVENT) return;
+
   if (event.eventType === RECONCILE_CUSTOMER_EVENT) {
     console.info(`Reconcile ${event.customerId}:`, JSON.stringify(await reconciler(event.customerId as string)));
     return;

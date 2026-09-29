@@ -5,6 +5,7 @@ import { confirmedEmail } from '@/utils/customers/email';
 import { grantAndRecord, isEntitled } from '@/utils/entitlements/customer-access';
 import { resetGithubState } from '@/utils/entitlements/entitlements-store';
 import { revokeAccess } from '@/utils/github/provisioning';
+import { CUSTOMER_BUSY, withCustomerLease } from '@/utils/webhooks/customer-lease';
 
 /**
  * Reconciles the signed-in user's GitHub identity into `github_links` and, if their customer is entitled
@@ -18,11 +19,13 @@ import { revokeAccess } from '@/utils/github/provisioning';
  *
  * One GitHub account belongs to at most one customer, so an account already linked to another customer is
  * refused. Linking a different account than before first removes the previous one from the team (and
- * cancels its invitation), so a relink cannot leave two accounts with access. Never throws: failures are
- * logged and returned as a reason, which the portal shows.
+ * cancels its invitation), so a relink cannot leave two accounts with access. The link is changed holding the
+ * customer's lease (customer-lease.ts), so no Paddle event or reconcile job for the customer runs meanwhile:
+ * otherwise a reconcile could read the previous link and add the previous account back. Never throws:
+ * failures are logged and returned as a reason, which the portal shows.
  */
 /** Link outcomes the portal explains to the customer (`/dashboard/pro?error=<reason>`). */
-export const LINK_ERRORS = ['github-account-linked-elsewhere', 'relink-failed', 'sync-failed'] as const;
+export const LINK_ERRORS = ['github-account-linked-elsewhere', 'relink-failed', 'link-busy', 'sync-failed'] as const;
 
 export function isLinkError(reason: string | undefined): reason is (typeof LINK_ERRORS)[number] {
   return (LINK_ERRORS as readonly string[]).includes(reason ?? '');
@@ -78,6 +81,14 @@ async function syncGithubLink(): Promise<SyncResult> {
   const customerId = customer?.customer_id as string | undefined;
 
   if (!customerId) return { linked: false, granted: false, reason: 'no-customer' };
+
+  const result = await withCustomerLease(customerId, () => linkAndGrant(customerId, login, githubId));
+  return result === CUSTOMER_BUSY ? { linked: false, granted: false, reason: 'link-busy' } : result;
+}
+
+// Records the link and grants access if the customer is entitled. Runs holding the customer's lease.
+async function linkAndGrant(customerId: string, login: string, githubId: number): Promise<SyncResult> {
+  const service = await createServiceClient();
 
   const [{ data: previous, error: previousError }, { data: holder, error: holderError }] = await Promise.all([
     service.from('github_links').select('github_login,github_id').eq('customer_id', customerId).maybeSingle(),

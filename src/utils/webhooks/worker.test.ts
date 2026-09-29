@@ -77,6 +77,23 @@ describe('drainInbox', () => {
     expect(inbox.claimEvents).toHaveBeenCalledTimes(2);
   });
 
+  it('completes an expired customer lease without running anything', async () => {
+    const reconciler = vi.fn();
+    const lease: InboxEvent = {
+      eventId: 'lease_ctm_1_1',
+      eventType: 'tenantry.customer_lease',
+      customerId: 'ctm_1',
+      attempts: 1,
+      payload: { event_id: 'lease_ctm_1_1', event_type: 'tenantry.customer_lease', occurred_at: '', data: {} },
+    };
+    inbox.claimEvents.mockResolvedValueOnce([lease]).mockResolvedValueOnce([]);
+
+    await expect(drainInbox({ processor, reconciler })).resolves.toEqual({ processed: 1, retrying: 0, failed: 0 });
+    expect(reconciler).not.toHaveBeenCalled();
+    expect(processor.processEvent).not.toHaveBeenCalled();
+    expect(inbox.completeEvent).toHaveBeenCalledWith(lease.eventId);
+  });
+
   it('runs a reconcile job in the inbox with the reconciler instead of the Paddle processor', async () => {
     const reconciler = vi.fn().mockResolvedValue({ access: 'ended' });
     const job: InboxEvent = {

@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   holder: null as { customer_id: string } | null,
   linkWriteError: undefined as { code: string; message: string } | undefined,
   failLookup: false,
+  /** Whether one of the customer's inbox events is in progress, so no lease is granted. */
+  customerBusy: false,
 }));
 
 function signedInUser(overrides: Record<string, unknown> = {}) {
@@ -48,6 +50,10 @@ vi.mock('@/utils/supabase/server-internal', async () => {
           },
         },
         state.calls,
+        {
+          acquire_customer_lease: () => (state.customerBusy ? null : 'lease_1'),
+          release_customer_lease: () => null,
+        },
       ),
   };
 });
@@ -62,6 +68,7 @@ describe('syncGithubLinkForCurrentUser', () => {
     state.holder = null;
     state.linkWriteError = undefined;
     state.failLookup = false;
+    state.customerBusy = false;
   });
 
   afterEach(() => {
@@ -148,6 +155,53 @@ describe('syncGithubLinkForCurrentUser', () => {
     });
 
     const linkWrites = () => state.calls.filter((call) => call.table === 'github_links' && call.method === 'upsert');
+    const leaseCalls = () => state.calls.filter((call) => call.table.startsWith('rpc:')).map((call) => call.table);
+
+    it("changes the link holding the customer's lease, so no reconcile can re-add the previous account", async () => {
+      state.previousLink = { github_login: 'old-account', github_id: 7 };
+      github.revokeAccess.mockImplementation(async () => {
+        state.calls.push({ table: 'github:revoke', method: 'revoke', args: [] });
+      });
+      github.grantAccess.mockImplementation(async () => {
+        state.calls.push({ table: 'github:grant', method: 'grant', args: [] });
+        return 'active';
+      });
+
+      await syncGithubLinkForCurrentUser();
+
+      const order = state.calls
+        .map((call) => call.table)
+        .filter((table) => table.startsWith('rpc:') || table.startsWith('github:') || table === 'github_links');
+      expect(order.indexOf('rpc:acquire_customer_lease')).toBeLessThan(order.indexOf('github:revoke'));
+      expect(order.lastIndexOf('rpc:release_customer_lease')).toBeGreaterThan(order.indexOf('github:grant'));
+      expect(order.indexOf('rpc:acquire_customer_lease')).toBeLessThan(order.indexOf('github_links'));
+    });
+
+    it("changes nothing while one of the customer's events is in progress, and says so", async () => {
+      vi.useFakeTimers();
+      try {
+        state.previousLink = { github_login: 'old-account', github_id: 7 };
+        state.customerBusy = true;
+
+        const result = syncGithubLinkForCurrentUser();
+        await vi.advanceTimersByTimeAsync(11_000);
+
+        await expect(result).resolves.toEqual({ linked: false, granted: false, reason: 'link-busy' });
+        expect(github.revokeAccess).not.toHaveBeenCalled();
+        expect(github.grantAccess).not.toHaveBeenCalled();
+        expect(linkWrites()).toEqual([]);
+        expect(leaseCalls()).not.toContain('rpc:release_customer_lease');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('releases the lease when linking fails', async () => {
+      state.linkWriteError = { code: '08006', message: 'connection failure' };
+
+      await expect(syncGithubLinkForCurrentUser()).resolves.toMatchObject({ reason: 'sync-failed' });
+      expect(leaseCalls()).toEqual(['rpc:acquire_customer_lease', 'rpc:release_customer_lease']);
+    });
 
     it('removes the previous GitHub account from the team before linking a different one', async () => {
       state.previousLink = { github_login: 'old-account', github_id: 7 };

@@ -24,6 +24,7 @@ const LINK_ERROR_TEXT: Record<string, string> = {
     'That GitHub account is already connected to another Tenantry customer. Connect a different account, or contact support@tenantry.dev.',
   'relink-failed':
     'We could not remove your previous GitHub account from the Tenantry org, so the new one was not connected. Try again in a moment.',
+  'link-busy': 'Your access is being updated right now, so GitHub was not connected. Try again in a minute.',
   'sync-failed': 'Connecting GitHub failed. Try again in a moment; if it keeps failing, contact support@tenantry.dev.',
   'github-link': 'GitHub did not complete the connection. Try again in a moment.',
 };
