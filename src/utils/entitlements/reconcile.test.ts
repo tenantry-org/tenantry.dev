@@ -14,8 +14,7 @@ const state = vi.hoisted(() => ({
 vi.mock('@/utils/supabase/server-internal', async () => {
   const { fakeSupabase } = await import('@/utils/testing/fake-supabase');
   return {
-    createClient: async () =>
-      fakeSupabase(state.tables, state.calls, { customers_to_reconcile: () => state.customers }),
+    createClient: () => fakeSupabase(state.tables, state.calls, { customers_to_reconcile: () => state.customers }),
   };
 });
 

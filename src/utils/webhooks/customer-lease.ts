@@ -36,7 +36,7 @@ export async function withCustomerLease<T>(
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   }: LeaseOptions = {},
 ): Promise<T | typeof CUSTOMER_BUSY> {
-  const supabase = await createClient();
+  const supabase = createClient();
   const deadline = Date.now() + waitMs;
   let leaseId: string | null = null;
 

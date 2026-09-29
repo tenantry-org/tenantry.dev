@@ -29,7 +29,7 @@ describe('the service-role client', () => {
   });
 
   it('authorises writes with the service-role key, never a signed-in session, and reads no cookies', async () => {
-    const client = await createClient();
+    const client = createClient();
 
     await client.from('github_links').upsert({ customer_id: 'ctm_1', github_login: 'octocat', github_id: 42 });
 

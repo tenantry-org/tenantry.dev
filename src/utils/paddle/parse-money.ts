@@ -2,9 +2,9 @@ export function convertAmountFromLowestUnit(amount: string, currency: string) {
   switch (currency) {
     case 'JPY':
     case 'KRW':
-      return parseFloat(amount);
+      return Number.parseFloat(amount);
     default:
-      return parseFloat(amount) / 100;
+      return Number.parseFloat(amount) / 100;
   }
 }
 

@@ -18,7 +18,8 @@ const SUBMODULES = { core: 'content/_src/core', pro: 'content/_src/pro' };
 const RELEASE_TAG = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
 function git(cwd, ...args) {
-  return execFileSync('git', args, { cwd: resolve(siteRoot, cwd), encoding: 'utf8' }).trim();
+  const options = { cwd: resolve(siteRoot, cwd), encoding: 'utf8' };
+  return execFileSync('git', args, options).trim(); // NOSONAR: git from the developer's or CI's PATH
 }
 
 function fail(message) {

@@ -99,7 +99,7 @@ export function validateServerConfig(
         `GITHUB_ORG is production's org (${PRODUCTION_GITHUB_ORG}): a sandbox purchase would grant real access`,
       );
     }
-    if (value('NEXT_PUBLIC_SUPABASE_URL')?.replace(/\/+$/, '') === PRODUCTION_SUPABASE_URL) {
+    if (sameOrigin(value('NEXT_PUBLIC_SUPABASE_URL'), PRODUCTION_SUPABASE_URL)) {
       problems.push(
         "NEXT_PUBLIC_SUPABASE_URL is production's database: sandbox events would write real customers' records",
       );
@@ -165,4 +165,9 @@ function checkSigningKey(
         'validate in production',
     );
   }
+}
+
+// Whether a configured URL points at the given origin, whatever its path or trailing slashes.
+function sameOrigin(url: string | undefined, origin: string): boolean {
+  return url !== undefined && URL.canParse(url) && new URL(url).origin === origin;
 }

@@ -28,7 +28,7 @@ function signedInUser(overrides: Record<string, unknown> = {}) {
 }
 
 vi.mock('@/utils/supabase/server', () => ({
-  createClient: async () => ({
+  createClient: () => ({
     auth: { getUser: async () => ({ data: { user: state.user } }) },
   }),
 }));
@@ -36,7 +36,7 @@ vi.mock('@/utils/supabase/server', () => ({
 vi.mock('@/utils/supabase/server-internal', async () => {
   const { fakeSupabase } = await import('@/utils/testing/fake-supabase');
   return {
-    createClient: async () =>
+    createClient: () =>
       fakeSupabase(
         {
           customers: { single: { customer_id: 'ctm_1' } },

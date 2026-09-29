@@ -60,7 +60,8 @@ export function PoweredByPaddle() {
 }
 
 // Cached so the footer prerenders with the page; it refreshes daily, so the year turns over on its own.
-async function CopyrightYear() {
+// prettier-ignore
+async function CopyrightYear() { // NOSONAR: a 'use cache' function must be async, even with nothing to await
   'use cache';
   cacheLife('days');
   return new Date().getFullYear();

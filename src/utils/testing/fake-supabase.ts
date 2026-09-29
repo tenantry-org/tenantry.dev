@@ -35,17 +35,14 @@ export function fakeSupabase(
     from(table: string) {
       const filters: Record<string, unknown> = {};
       let wrote = false;
-      // A thenable carrying the builder's methods, so awaiting the chain gives the table's list (or, after
-      // a write, the table's write error).
-      const chain: Record<string, unknown> = {
-        then(resolve: (result: Result) => unknown, reject?: (reason: unknown) => unknown) {
-          const writeError = wrote ? (tables[table]?.writeError ?? null) : null;
-          const result: Result = writeError
-            ? { data: null, error: writeError }
-            : { data: tables[table]?.list ?? [], error: null };
-          return Promise.resolve(result).then(resolve, reject);
-        },
-      };
+      // A promise carrying the builder's methods, so awaiting the chain gives the table's list (or, after a
+      // write, the table's write error). It settles in a later microtask, after the synchronous chain of
+      // builder calls has recorded any write.
+      const settled: Promise<Result> = Promise.resolve().then(() => {
+        const writeError = wrote ? (tables[table]?.writeError ?? null) : null;
+        return writeError ? { data: null, error: writeError } : { data: tables[table]?.list ?? [], error: null };
+      });
+      const chain = settled as Promise<Result> & Record<string, unknown>;
       for (const method of ['select', 'eq', 'gt', 'in', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
         chain[method] = (...args: unknown[]) => {
           calls?.push({ table, method, args });

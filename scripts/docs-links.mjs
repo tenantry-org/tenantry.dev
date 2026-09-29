@@ -46,6 +46,9 @@ export function relativeLinks(markdown) {
     .filter((target) => !/^(https?:|mailto:|\/|#)/.test(target));
 }
 
+// A markdown link (left alone), or a type name written as code, with optional type parameters.
+const LINK_OR_TYPE_NAME = /(\[[^\]]*\]\([^)]*\))|`([A-Z]\w*)(<[\w, ]+>)?`/g; // NOSONAR: build time, our own docs
+
 /**
  * Links the first mention of each API type in a guide, written as code (`ITenantScope<TKey>`, or without its type
  * parameters), to its page in the API reference. Code blocks, existing links and headings are left alone.
@@ -63,7 +66,7 @@ export function linkApiTypes(markdown, types) {
       if (line.trimStart().startsWith('```')) inFence = !inFence;
       if (inFence || line.startsWith('#')) return line;
 
-      return line.replace(/(\[[^\]]*\]\([^)]*\))|`([A-Z]\w*)(<[\w, ]+>)?`/g, (match, link, name, typeParameters) => {
+      return line.replace(LINK_OR_TYPE_NAME, (match, link, name, typeParameters) => {
         if (link || !types.has(name) || linked.has(name)) return match;
         linked.add(name);
         return `[\`${name}${typeParameters ?? ''}\`](${types.get(name)})`;

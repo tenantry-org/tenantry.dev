@@ -110,7 +110,8 @@ function resolveSource(group) {
 // checkout, or master for a local preview from another folder.
 function sourceRef(dir) {
   try {
-    return execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const options = { encoding: 'utf8' };
+    return execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], options).trim(); // NOSONAR: git from the build's PATH
   } catch {
     return 'master';
   }
@@ -125,7 +126,7 @@ function toFrontmatter(raw, group, source, dir = '') {
   for (const line of lines) {
     if (!removedH1 && line.startsWith('# ')) {
       // Code spans are for the page heading; the sidebar and <title> show plain text.
-      title = line.slice(2).replace(/`/g, '').trim();
+      title = line.slice(2).replaceAll('`', '').trim();
       removedH1 = true;
       continue;
     }
@@ -158,8 +159,8 @@ function toFrontmatter(raw, group, source, dir = '') {
   const linked = dir === 'api' ? body.join('\n') : linkApiTypes(body.join('\n'), apiTypes);
   const rewritten = rewriteLinks(linked, group, source, dir).trimStart();
 
-  const yamlTitle = title.replace(/"/g, '\\"');
-  const yamlDesc = description.replace(/"/g, '\\"');
+  const yamlTitle = title.replaceAll('"', String.raw`\"`);
+  const yamlDesc = description.replaceAll('"', String.raw`\"`);
 
   return `---\ntitle: "${yamlTitle}"\ndescription: "${yamlDesc}"\n---\n\n${rewritten}`;
 }
@@ -190,7 +191,9 @@ function apiPages(sourceDir, slugs) {
   }
   return [
     'index',
-    ...[...byNamespace.keys()].sort().flatMap((namespace) => [`---${namespace}---`, ...byNamespace.get(namespace)]),
+    ...[...byNamespace.keys()]
+      .sort((a, b) => a.localeCompare(b))
+      .flatMap((namespace) => [`---${namespace}---`, ...byNamespace.get(namespace)]),
   ];
 }
 

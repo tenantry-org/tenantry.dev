@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({ calls: [] as unknown[], inserted: [] as unknow
 vi.mock('@/utils/supabase/server-internal', async () => {
   const { fakeSupabase } = await import('@/utils/testing/fake-supabase');
   return {
-    createClient: async () => fakeSupabase({ webhook_inbox: { list: state.inserted } }, state.calls as FakeCall[]),
+    createClient: () => fakeSupabase({ webhook_inbox: { list: state.inserted } }, state.calls as FakeCall[]),
   };
 });
 

@@ -28,7 +28,7 @@ export async function reconcileEntitlements({
 // or by a subscription), linked to GitHub, or holding a live licence. One array, so the API's row limit
 // cannot leave anyone out.
 async function customersToReconcile(): Promise<string[]> {
-  const supabase = await createClient();
+  const supabase = createClient();
   const { data, error } = await supabase.rpc('customers_to_reconcile');
 
   if (error) throw error;
@@ -40,7 +40,7 @@ async function queueReconcileJobs(customerIds: string[], now: Date) {
   if (customerIds.length === 0) return;
 
   const occurredAt = now.toISOString();
-  const supabase = await createClient();
+  const supabase = createClient();
   const { error } = await supabase.from('webhook_inbox').upsert(
     customerIds.map((customerId) => {
       const eventId = `reconcile_${customerId}_${occurredAt}`;

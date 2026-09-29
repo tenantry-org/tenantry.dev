@@ -24,7 +24,7 @@ export interface LicenceClaims {
 }
 
 function base64Url(input: Buffer | string): string {
-  return Buffer.from(input).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+  return Buffer.from(input).toString('base64url');
 }
 
 function loadSigningKey(): KeyObject {

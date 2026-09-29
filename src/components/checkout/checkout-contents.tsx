@@ -46,7 +46,7 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
             successUrl: `${window.location.origin}/checkout/success`,
           },
         },
-      }).then(async (paddle) => {
+      }).then((paddle) => {
         if (paddle && priceId) {
           setPaddle(paddle);
           // One subscription per purchase: the offer has no seats, so there is no quantity to choose.

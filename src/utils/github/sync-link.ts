@@ -73,7 +73,7 @@ async function syncGithubLink(): Promise<SyncResult> {
     return { linked: false, granted: false, reason: 'incomplete-identity' };
   }
 
-  const service = await createServiceClient();
+  const service = createServiceClient();
 
   // Only purchasers have a customer row; until then there is nothing to link to.
   const { data: customer } = await service.from('customers').select('customer_id').eq('email', email).maybeSingle();
@@ -87,7 +87,7 @@ async function syncGithubLink(): Promise<SyncResult> {
 
 // Records the link and grants access if the customer is entitled. Runs holding the customer's lease.
 async function linkAndGrant(customerId: string, login: string, githubId: number): Promise<SyncResult> {
-  const service = await createServiceClient();
+  const service = createServiceClient();
 
   const [{ data: previous, error: previousError }, { data: holder, error: holderError }] = await Promise.all([
     service.from('github_links').select('github_login,github_id').eq('customer_id', customerId).maybeSingle(),

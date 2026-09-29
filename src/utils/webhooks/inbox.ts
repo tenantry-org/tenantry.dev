@@ -51,7 +51,7 @@ export function eventKeys(event: PaddleEventJson): { customerId: string | null; 
  * delivery, even a concurrent one, into a no-op (`INSERT … ON CONFLICT DO NOTHING`).
  */
 export async function enqueueEvent(event: PaddleEventJson): Promise<boolean> {
-  const supabase = await createClient();
+  const supabase = createClient();
   const { customerId, subscriptionId } = eventKeys(event);
 
   const { data, error } = await supabase
@@ -76,7 +76,7 @@ export async function enqueueEvent(event: PaddleEventJson): Promise<boolean> {
 
 /** Claims up to `limit` due events, at most one per customer, locking them for `lockSeconds`. */
 export async function claimEvents(limit: number, lockSeconds: number): Promise<InboxEvent[]> {
-  const supabase = await createClient();
+  const supabase = createClient();
   const { data, error } = await supabase.rpc('claim_webhook_events', { p_limit: limit, p_lock_seconds: lockSeconds });
 
   if (error) throw error;
@@ -91,7 +91,7 @@ export async function claimEvents(limit: number, lockSeconds: number): Promise<I
 }
 
 export async function completeEvent(eventId: string): Promise<void> {
-  const supabase = await createClient();
+  const supabase = createClient();
   const { error } = await supabase
     .from('webhook_inbox')
     .update({ status: 'done', processed_at: new Date().toISOString(), locked_until: null, last_error: null })
@@ -106,7 +106,7 @@ export async function retryEvent(
   failure: unknown,
   now: Date = new Date(),
 ): Promise<'retrying' | 'failed'> {
-  const supabase = await createClient();
+  const supabase = createClient();
   const giveUp = event.attempts >= MAX_ATTEMPTS;
   const nextAttemptAt = new Date(now.getTime() + retryDelayMinutes(event.attempts) * 60_000);
 
@@ -130,7 +130,7 @@ export async function retryEvent(
  * customer.created, needed by their subscription events) has just been processed.
  */
 export async function releaseWaitingEvents(customerId: string): Promise<void> {
-  const supabase = await createClient();
+  const supabase = createClient();
   const now = new Date().toISOString();
   const { error } = await supabase
     .from('webhook_inbox')
