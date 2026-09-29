@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
 import { ArrowUpRight } from 'lucide-react';
+import { cacheLife } from 'next/cache';
+import { LegalEntity, legalEntityIncomplete } from '@/constants/legal-entity';
 
 const resourceLinks = [
   { label: 'Docs', href: '/docs' },
@@ -47,9 +49,19 @@ export function PoweredByPaddle() {
           ))}
         </div>
         <div className={'flex justify-center items-center gap-1 text-xs'}>
-          <span>© {new Date().getFullYear()} Tenantry · Payments &amp; billing handled by Paddle.com</span>
+          <span>
+            © <CopyrightYear /> {legalEntityIncomplete() ? 'Tenantry' : LegalEntity.name} · Payments &amp; billing
+            handled by Paddle.com
+          </span>
         </div>
       </div>
     </>
   );
+}
+
+// Cached so the footer prerenders with the page; it refreshes daily, so the year turns over on its own.
+async function CopyrightYear() {
+  'use cache';
+  cacheLife('days');
+  return new Date().getFullYear();
 }

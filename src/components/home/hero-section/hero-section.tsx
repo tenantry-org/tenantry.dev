@@ -11,14 +11,15 @@ export function HeroSection() {
           done properly.
         </h1>
         <p className={'mx-auto mt-6 max-w-2xl text-[18px] leading-[27px] md:text-[20px] md:leading-[30px]'}>
-          Tenantry gives ASP.NET Core apps real tenant isolation — from a shared database with row-level scoping to a
-          database (or schema) per tenant, with provisioning, lifecycle management, and migration orchestration across
-          tenant databases built in.
+          Tenantry gives .NET apps real tenant isolation — a shared database with row-level scoping, a database per
+          tenant, or a schema per tenant — with provisioning, lifecycle management, and migration orchestration across
+          tenant databases.
         </p>
         <p className={'mx-auto mt-4 max-w-2xl text-base text-muted-foreground'}>
-          <span className={'text-primary font-medium'}>Core</span> is open source and free.{' '}
-          <span className={'text-primary font-medium'}>Pro</span> adds isolation strategies, provisioning, and
-          first-class EF Core, Hangfire, MassTransit, Quartz &amp; Rebus integrations.
+          <span className={'text-primary font-medium'}>Core</span> is open source and free: tenant resolution and EF
+          Core isolation in a shared database or a database per tenant.{' '}
+          <span className={'text-primary font-medium'}>Pro</span> adds schema-per-tenant and mixed mode, provisioning
+          and migrations across tenant databases, and Hangfire, MassTransit, Quartz &amp; Rebus integrations.
         </p>
         <div className={'mt-8 flex flex-wrap items-center justify-center gap-3'}>
           <Button asChild>

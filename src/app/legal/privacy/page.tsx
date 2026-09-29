@@ -1,13 +1,14 @@
 import { LegalPage } from '@/components/legal/legal-page';
+import { LegalEntity } from '@/constants/legal-entity';
 
 export const metadata = { title: 'Privacy Policy — Tenantry' };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" lastUpdated="2026-06-28">
+    <LegalPage title="Privacy Policy" lastUpdated="2026-09-29">
       <p>
-        This Privacy Policy explains how [COMPANY LEGAL NAME] (&quot;Tenantry&quot;) collects, uses, and protects
-        personal data when you use our website and Services.
+        This Privacy Policy explains how {LegalEntity.name} (&quot;Tenantry&quot;, &quot;we&quot;) collects, uses, and
+        protects personal data when you use our website and Services.
       </p>
 
       <h2>1. Data we collect</h2>
@@ -17,48 +18,63 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>GitHub identity:</strong> when you connect GitHub, your GitHub username and numeric id, used solely to
-          provision repository and package-feed access.
+          give you access to the private package feed.
         </li>
         <li>
           <strong>Billing data:</strong> processed by Paddle.com as merchant of record. We receive subscription status
-          and customer identifiers, not full payment-card details.
+          and customer identifiers, not payment-card details.
         </li>
         <li>
-          <strong>Entitlement records:</strong> subscription status and issued licence tokens associated with your
-          account.
+          <strong>Entitlement records:</strong> subscription status and the licence keys issued to your account.
+        </li>
+        <li>
+          <strong>Usage and performance data:</strong> pages visited, referring site, country, browser, device type and
+          page-load measurements, collected by Vercel Web Analytics and Speed Insights without cookies and without
+          identifying you (see section 4).
         </li>
       </ul>
 
       <h2>2. How we use data</h2>
       <ul>
-        <li>To provide and provision the Services (access grants, licence issuance).</li>
+        <li>To provide the Services: package-feed access and licence keys.</li>
         <li>To manage subscriptions and respond to support requests.</li>
-        <li>To send transactional emails (receipts, onboarding, expiry notices).</li>
+        <li>To send service emails: when your access starts and when it ends. Paddle sends receipts and invoices.</li>
+        <li>To understand, in aggregate, how the website is used and how fast it is, so we can improve it.</li>
       </ul>
 
       <h2>3. Processors</h2>
       <p>
-        We share data with sub-processors that operate the Services: Paddle (billing), Supabase (auth and database),
-        GitHub (access provisioning), our hosting provider, and our email provider. Each processes data on our behalf
-        under its own terms.
+        We share data with sub-processors that operate the Services on our behalf, each under its own terms: Paddle
+        (billing, as merchant of record), Supabase (authentication and database), GitHub (package-feed access), Vercel
+        (hosting, Web Analytics and Speed Insights) and Resend (email). Some of them process data outside the UK and the
+        EEA, under appropriate safeguards such as standard contractual clauses.
       </p>
 
-      <h2>4. Data retention</h2>
+      <h2>4. Cookies and analytics</h2>
+      <p>
+        We set only the cookies needed to keep you signed in. Paddle sets its own cookies when it shows prices or takes
+        a payment, to prevent fraud and complete the checkout. Our analytics set no cookies: Vercel Web Analytics counts
+        visits using a hash of the request that is discarded within 24 hours and cannot be used to identify you, and
+        Speed Insights records how quickly pages load. Neither follows you across other websites.
+      </p>
+
+      <h2>5. Data retention</h2>
       <p>
         We retain account and entitlement data for as long as your account is active and as required for legal and
         accounting purposes. You may request deletion subject to those obligations.
       </p>
 
-      <h2>5. Your rights</h2>
+      <h2>6. Your rights</h2>
       <p>
-        Depending on your jurisdiction you may have rights to access, correct, export, or delete your personal data.
-        Contact us to exercise them.
+        Depending on your jurisdiction you may have rights to access, correct, export, or delete your personal data, and
+        to complain to a data-protection authority (in the UK, the Information Commissioner&apos;s Office). Contact us
+        to exercise them.
       </p>
 
-      <h2>6. Contact</h2>
+      <h2>7. Contact</h2>
       <p>
-        Privacy enquiries: <a href="mailto:privacy@tenantry.dev">privacy@tenantry.dev</a>. Data controller: [COMPANY
-        LEGAL NAME], [REGISTERED ADDRESS].
+        Privacy enquiries: <a href="mailto:privacy@tenantry.dev">privacy@tenantry.dev</a>. Data controller:{' '}
+        {LegalEntity.name}, {LegalEntity.address}.
       </p>
 
       <p className="text-sm text-muted-foreground">

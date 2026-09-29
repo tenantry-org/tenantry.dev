@@ -1,4 +1,5 @@
 import { LegalPage } from '@/components/legal/legal-page';
+import { LegalEntity } from '@/constants/legal-entity';
 
 export const metadata = { title: 'Terms of Service — Tenantry' };
 
@@ -8,8 +9,8 @@ export default function TermsPage() {
       <p>
         These Terms of Service (&quot;Terms&quot;) govern your access to and use of the Tenantry website, the Tenantry
         Pro software, the private package feed, and related services (collectively, the &quot;Services&quot;) provided
-        by [COMPANY LEGAL NAME] (&quot;Tenantry&quot;, &quot;we&quot;, &quot;us&quot;). By using the Services you agree
-        to these Terms.
+        by {LegalEntity.name}, {LegalEntity.registration} (&quot;Tenantry&quot;, &quot;we&quot;, &quot;us&quot;). By
+        using the Services you agree to these Terms.
       </p>
 
       <h2>1. Tenantry Core vs Tenantry Pro</h2>
@@ -21,9 +22,9 @@ export default function TermsPage() {
 
       <h2>2. Subscriptions and billing</h2>
       <p>
-        Paid plans are billed through our merchant of record, Paddle.com. By subscribing you also agree to Paddle&apos;s
-        buyer terms. Subscriptions renew automatically until cancelled. Pricing and plan features are described on our
-        pricing page and may change on a prospective basis.
+        Tenantry Pro is billed through our merchant of record, Paddle.com. By subscribing you also agree to
+        Paddle&apos;s buyer terms. Subscriptions renew automatically until cancelled. The price and what Pro includes
+        are described on our pricing page and may change on a prospective basis.
       </p>
 
       <h2>3. Access provisioning</h2>

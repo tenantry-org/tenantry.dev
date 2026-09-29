@@ -9,8 +9,7 @@ interface Props {
 
 /**
  * Shared shell for legal documents. The content of each page is a TEMPLATE and must be reviewed by
- * legal counsel before launch — bracketed [PLACEHOLDERS] need real values (the legal entity and its
- * registered address, plan item 4.7).
+ * legal counsel before launch. The legal entity comes from constants/legal-entity.ts (plan item 4.7).
  */
 export function LegalPage({ title, lastUpdated, children }: Props) {
   return (

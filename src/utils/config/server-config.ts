@@ -1,5 +1,6 @@
 import { createPrivateKey, createPublicKey } from 'node:crypto';
 import { parseProProductId } from '@/constants/pro-product';
+import { LegalEntity, legalEntityIncomplete } from '@/constants/legal-entity';
 
 /**
  * Tenantry.Pro's embedded licence public key (SubjectPublicKeyInfo, base64). Production licences must be
@@ -38,6 +39,7 @@ type Env = Record<string, string | undefined>;
 export function validateServerConfig(
   env: Env = process.env,
   productionLicencePublicKey: string = PRODUCTION_LICENCE_PUBLIC_KEY,
+  legalEntity: Record<string, string> = LegalEntity,
 ): { paddleEnvironment: PaddleEnvironment } {
   const problems: string[] = [];
   const value = (name: string) => env[name]?.trim() || undefined;
@@ -112,6 +114,13 @@ export function validateServerConfig(
     required(
       'ALERT_EMAIL',
       'failures that need the operator, such as a licence that cannot be issued, would go unnoticed',
+    );
+  }
+
+  if (value('NEXT_PUBLIC_CHECKOUT_ENABLED') === 'true' && legalEntityIncomplete(legalEntity)) {
+    problems.push(
+      'NEXT_PUBLIC_CHECKOUT_ENABLED is on but the legal entity (src/constants/legal-entity.ts) still has placeholders: ' +
+        'customers would buy under Terms that name no one',
     );
   }
 

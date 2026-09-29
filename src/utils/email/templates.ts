@@ -18,7 +18,7 @@ export function welcomeProEmail(to: string): EmailMessage {
     html: layout(
       `<h1 style="font-size:20px">Welcome to Tenantry Pro 🎉</h1>
 <p>Thanks for subscribing. One step to unlock everything:</p>
-<p><strong>Connect your GitHub account</strong> so we can add you to the private repository and package feed.</p>
+<p><strong>Connect your GitHub account</strong> so we can give you access to the private package feed.</p>
 <p><a href="${SITE_URL}/dashboard/pro" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Open your Pro dashboard</a></p>
 <p>From there you can copy your licence key and the <code>nuget.config</code> to start restoring packages.</p>`,
     ),
@@ -32,8 +32,8 @@ export function accessRevokedEmail(to: string): EmailMessage {
     subject: 'Your Tenantry Pro subscription has ended',
     html: layout(
       `<h1 style="font-size:20px">Your Tenantry Pro access has ended</h1>
-<p>You no longer have an active Tenantry Pro subscription, so access to the private repository and package feed has been removed.</p>
-<p>Already-installed builds keep working, but you won't receive new Pro package versions. You can resubscribe any time:</p>
+<p>You no longer have an active Tenantry Pro subscription, so your access to the private package feed has been removed.</p>
+<p>The versions of Tenantry Pro you already have keep working with your licence key, as the licence agreement allows, but you won't receive new versions. You can resubscribe any time:</p>
 <p><a href="${SITE_URL}/#pricing" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">View pricing</a></p>`,
     ),
   };

@@ -1,3 +1,5 @@
+'use client';
+
 import { Toggle } from '@/components/shared/toggle/toggle';
 import { PriceCards } from '@/components/home/pricing/price-cards';
 import { useEffect, useState } from 'react';

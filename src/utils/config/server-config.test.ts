@@ -158,6 +158,18 @@ describe('validateServerConfig', () => {
     ]);
   });
 
+  it('refuses to enable checkout while the legal entity has placeholders', () => {
+    const placeholder = { name: '[COMPANY LEGAL NAME]', address: 'London', registration: 'England' };
+    const complete = { name: 'Example Software Ltd', address: 'London', registration: 'England' };
+    const checkout = environment('production', { NEXT_PUBLIC_CHECKOUT_ENABLED: 'true' });
+
+    expect(() => validateServerConfig(checkout, productionKey.spki, placeholder)).toThrow(/legal entity/);
+    expect(validateServerConfig(checkout, productionKey.spki, complete)).toEqual({ paddleEnvironment: 'production' });
+    expect(validateServerConfig(environment('production'), productionKey.spki, placeholder)).toEqual({
+      paddleEnvironment: 'production',
+    });
+  });
+
   it('checks the real key by default', () => {
     expect(PRODUCTION_LICENCE_PUBLIC_KEY).toMatch(/^MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/);
   });

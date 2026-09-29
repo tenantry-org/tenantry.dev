@@ -17,11 +17,12 @@ export interface Offer {
 export const ProOffer: Offer = {
   name: 'Tenantry Pro',
   icon: '/assets/icons/price-tiers/basic-icon.svg',
-  description: 'Physical tenant isolation and the tooling to run it in production.',
+  description: 'The tooling to run many tenant databases in production.',
   features: [
-    'Database-per-tenant, plus schema-per-tenant on SQL Server & PostgreSQL',
     'Tenant provisioning, lifecycle & migration orchestration across tenant databases',
-    'EF Core providers (SQL Server, Npgsql, MySQL)',
+    'Provisioning on SQL Server, PostgreSQL & MySQL',
+    'Schema-per-tenant (SQL Server & PostgreSQL) and mixed mode',
+    'Connection-string caching & at-rest encryption',
     'Hangfire, MassTransit, Quartz & Rebus integrations',
     'Audit logging, health checks & OpenTelemetry',
     'Private NuGet package feed',

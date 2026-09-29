@@ -1,4 +1,5 @@
 import { LegalPage } from '@/components/legal/legal-page';
+import { LegalEntity } from '@/constants/legal-entity';
 
 export const metadata = { title: 'End User Licence Agreement — Tenantry Pro' };
 
@@ -6,9 +7,10 @@ export default function EulaPage() {
   return (
     <LegalPage title="End User Licence Agreement (Tenantry Pro)" lastUpdated="2026-09-29">
       <p>
-        This End User Licence Agreement (&quot;EULA&quot;) is between you (or the entity you represent) and [COMPANY
-        LEGAL NAME] (&quot;Tenantry&quot;) and governs your use of the Tenantry Pro software packages (the
-        &quot;Software&quot;). Tenantry Core is licensed separately under Apache 2.0 and is not covered by this EULA.
+        This End User Licence Agreement (&quot;EULA&quot;) is between you (or the entity you represent) and{' '}
+        {LegalEntity.name}, {LegalEntity.registration} (&quot;Tenantry&quot;) and governs your use of the Tenantry Pro
+        software packages (the &quot;Software&quot;). Tenantry Core is licensed separately under Apache 2.0 and is not
+        covered by this EULA.
       </p>
 
       <h2>1. Licence grant</h2>

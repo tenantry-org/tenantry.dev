@@ -43,4 +43,12 @@ describe('email templates', () => {
     expect(msg.to).toBe('cust@example.com');
     expect(msg.html).toMatch(/ended|removed/i);
   });
+
+  it('promises only the package feed, not repository access', () => {
+    // A subscription gives access to the private package feed only (D10); neither email may claim more.
+    for (const msg of [welcomeProEmail('cust@example.com'), accessRevokedEmail('cust@example.com')]) {
+      expect(msg.html).toContain('package feed');
+      expect(msg.html).not.toMatch(/repositor|source code/i);
+    }
+  });
 });

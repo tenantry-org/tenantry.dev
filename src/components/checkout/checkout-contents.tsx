@@ -4,20 +4,15 @@ import { PriceSection } from '@/components/checkout/price-section';
 import { CheckoutFormGradients } from '@/components/gradients/checkout-form-gradients';
 import { type Environments, initializePaddle, type Paddle } from '@paddle/paddle-js';
 import type { CheckoutEventsData } from '@paddle/paddle-js/types/checkout/events';
-import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-
-interface PathParams {
-  priceId: string;
-  [key: string]: string | string[];
-}
+import { track } from '@vercel/analytics';
 
 interface Props {
+  priceId: string;
   userEmail?: string;
 }
 
-export function CheckoutContents({ userEmail }: Props) {
-  const { priceId } = useParams<PathParams>();
+export function CheckoutContents({ priceId, userEmail }: Props) {
   const [paddle, setPaddle] = useState<Paddle | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutEventsData | null>(null);
 
@@ -34,6 +29,9 @@ export function CheckoutContents({ userEmail }: Props) {
           if (event.data && event.name) {
             handleCheckoutEvents(event.data);
           }
+          // The purchase funnel in Vercel Analytics: which plan was opened, and which were paid for.
+          if (event.name === 'checkout.loaded') track('Checkout opened', { priceId });
+          if (event.name === 'checkout.completed') track('Checkout completed', { priceId });
         },
         checkout: {
           settings: {
