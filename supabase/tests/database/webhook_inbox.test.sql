@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(17);
+select plan(19);
 
 -- Deduplication: the primary key makes a second delivery of an event a no-op.
 insert into public.webhook_inbox (event_id, event_type, occurred_at, customer_id, payload)
@@ -61,24 +61,32 @@ select is_empty(
 insert into public.customers (customer_id, email) values ('ctm_sub', 'sub@example.com');
 
 select is(
-  public.record_subscription_event('sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, '2026-09-28 11:00:00+00'),
+  public.record_subscription_event('sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, null, '2026-09-28 11:00:00+00'),
   true, 'the first event for a subscription is applied');
 select is(
-  public.record_subscription_event('sub_1', 'ctm_sub', 'canceled', 'pri_1', 'pro_1', null, '2026-09-28 12:00:00+00'),
+  public.record_subscription_event('sub_1', 'ctm_sub', 'canceled', 'pri_1', 'pro_1', null, null, '2026-09-28 12:00:00+00'),
   true, 'a newer event is applied');
 select is(
-  public.record_subscription_event('sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, '2026-09-28 11:30:00+00'),
+  public.record_subscription_event('sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, null, '2026-09-28 11:30:00+00'),
   false, 'an update that occurred before the cancellation, delivered after it, is not applied');
 select results_eq(
   $$select subscription_status, last_event_at from public.subscriptions where subscription_id = 'sub_1'$$,
   $$values ('canceled'::text, '2026-09-28 12:00:00+00'::timestamptz)$$,
   'so the subscription stays cancelled');
 select is(
-  public.record_subscription_event('sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, '2026-09-28 12:00:00+00'),
+  public.record_subscription_event('sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, null, '2026-09-28 12:00:00+00'),
   true, 'an event at the same instant as the last one is applied');
+select is(
+  public.record_subscription_event(
+    'sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', '2026-10-28T12:00:00Z', 'cancel', '2026-09-28 13:00:00+00'),
+  true, 'an event with a scheduled cancellation is applied');
+select results_eq(
+  $$select scheduled_change, scheduled_change_action from public.subscriptions where subscription_id = 'sub_1'$$,
+  $$values ('2026-10-28T12:00:00Z'::text, 'cancel'::text)$$,
+  'the scheduled change records when it takes effect and what it is');
 
 select throws_ok(
-  $$select public.record_subscription_event('sub_2', 'ctm_unknown', 'active', 'pri_1', 'pro_1', null, now())$$,
+  $$select public.record_subscription_event('sub_2', 'ctm_unknown', 'active', 'pri_1', 'pro_1', null, null, now())$$,
   '23503', null,
   'a subscription event for a customer that does not exist yet fails, so it is retried');
 
@@ -86,7 +94,7 @@ select throws_ok(
 set local role authenticated;
 select throws_ok($$select * from public.claim_webhook_events(1, 60)$$, '42501', null, 'signed-in users cannot claim events');
 select throws_ok(
-  $$select public.record_subscription_event('sub_1', 'ctm_sub', 'active', null, null, null, now())$$,
+  $$select public.record_subscription_event('sub_1', 'ctm_sub', 'active', null, null, null, null, now())$$,
   '42501', null,
   'signed-in users cannot record subscription events');
 set local role postgres;

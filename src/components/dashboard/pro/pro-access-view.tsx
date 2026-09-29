@@ -2,13 +2,28 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, Copy, Download, Github } from 'lucide-react';
+import { Check, Copy, Download } from 'lucide-react';
+import { GithubIcon } from '@/components/icons/github-icon';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { connectGithub } from '@/app/dashboard/pro/actions';
 import type { ProAccess } from '@/utils/entitlements/get-entitlement';
 import type { GithubState } from '@/utils/entitlements/entitlements-store';
-import { ProOffer } from '@/constants/pro-offer';
+import { BillingCard } from '@/components/dashboard/pro/billing-card';
+import {
+  CREATE_TOKEN_URL,
+  FEED_TOKEN_VARIABLE,
+  FEED_USERNAME_VARIABLE,
+  LICENCE_CONFIG_KEY,
+  LICENCE_ENV_VARIABLE,
+  ciWorkflow,
+  feedCredentials,
+  licenceRegistration,
+  licenceUserSecret,
+  nugetConfig,
+} from '@/utils/pro/install-snippets';
+
+const INSTALL_GUIDE = '/docs/pro/installation';
 
 interface Props {
   access: ProAccess;
@@ -46,6 +61,17 @@ function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }
       {copied ? <Check className={'mr-2 h-4 w-4'} /> : <Copy className={'mr-2 h-4 w-4'} />}
       {copied ? 'Copied' : label}
     </Button>
+  );
+}
+
+function Snippet({ value, label, maxHeight = 'max-h-48' }: { value: string; label?: string; maxHeight?: string }) {
+  return (
+    <div className={'flex flex-col gap-2'}>
+      <code className={`block ${maxHeight} overflow-auto rounded-xs bg-muted/40 p-3 text-xs whitespace-pre`}>
+        {value}
+      </code>
+      {label && <CopyButton value={value} label={label} />}
+    </div>
   );
 }
 
@@ -95,53 +121,10 @@ function GithubStatus({
   return <p className={'text-secondary text-sm'}>Link saved. Access is being provisioned: refresh in a moment.</p>;
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const tone =
-    status === 'active'
-      ? 'bg-green-500/15 text-green-400'
-      : status === 'grace'
-        ? 'bg-yellow-500/15 text-yellow-400'
-        : 'bg-red-500/15 text-red-400';
-
-  return <span className={`rounded-xs px-2 py-1 text-xs font-medium ${tone}`}>{status}</span>;
-}
-
 const cardClass = 'bg-background/50 backdrop-blur-[24px] border-border p-6';
-
-function GraceNotice({ grace }: Readonly<{ grace: { endsAt: string; ended: boolean } | null }>) {
-  const updatePaymentMethod = <Link href={'/dashboard/subscriptions'}>Update your payment method</Link>;
-  const ends = grace ? new Date(grace.endsAt).toLocaleDateString() : null;
-
-  if (grace?.ended) {
-    return (
-      <p className={'text-secondary text-sm'}>
-        Your last payment failed, and the 30-day grace period ended on {ends}. {updatePaymentMethod} to restore access.
-      </p>
-    );
-  }
-
-  return (
-    <p className={'text-secondary text-sm'}>
-      Your last payment failed. Your access to the package feed continues{ends ? ` until ${ends}` : ''} while Paddle
-      retries it. {updatePaymentMethod} to keep it.
-    </p>
-  );
-}
 
 export function ProAccessView({ access, githubOrg, linkError, accountEmail }: Props) {
   const { entitlement, licence, githubLogin } = access;
-
-  const nugetConfig = `<configuration>
-  <packageSources>
-    <add key="github" value="https://nuget.pkg.github.com/${githubOrg}/index.json" />
-  </packageSources>
-  <packageSourceCredentials>
-    <github>
-      <add key="Username" value="YOUR_GITHUB_USERNAME" />
-      <add key="ClearTextPassword" value="%GITHUB_PAT%" />
-    </github>
-  </packageSourceCredentials>
-</configuration>`;
 
   if (!entitlement || entitlement.status === 'revoked') {
     return (
@@ -171,21 +154,7 @@ export function ProAccessView({ access, githubOrg, linkError, accountEmail }: Pr
 
   return (
     <div className={'grid gap-6 lg:grid-cols-2'}>
-      {/* Entitlement status */}
-      <Card className={cardClass}>
-        <CardHeader className={'p-0'}>
-          <CardTitle className={'flex items-center justify-between'}>
-            <span>Subscription</span>
-            <StatusBadge status={entitlement.status} />
-          </CardTitle>
-        </CardHeader>
-        <CardContent className={'p-0 pt-4 flex flex-col gap-3'}>
-          <p className={'text-secondary'}>
-            Plan: <span className={'text-primary font-medium'}>{ProOffer.name}</span>
-          </p>
-          {entitlement.status === 'grace' && <GraceNotice grace={entitlement.grace} />}
-        </CardContent>
-      </Card>
+      <BillingCard entitlement={entitlement} subscriptions={access.subscriptions} cardClass={cardClass} />
 
       {/* GitHub connection */}
       <Card className={cardClass}>
@@ -210,7 +179,7 @@ export function ProAccessView({ access, githubOrg, linkError, accountEmail }: Pr
               />
               <form action={connectGithub}>
                 <Button type={'submit'} variant={'secondary'} size={'sm'}>
-                  <Github className={'mr-2 h-4 w-4'} /> Refresh access
+                  <GithubIcon className={'mr-2 h-4 w-4'} /> Refresh access
                 </Button>
               </form>
             </>
@@ -222,7 +191,7 @@ export function ProAccessView({ access, githubOrg, linkError, accountEmail }: Pr
               </p>
               <form action={connectGithub}>
                 <Button type={'submit'}>
-                  <Github className={'mr-2 h-4 w-4'} /> Connect GitHub
+                  <GithubIcon className={'mr-2 h-4 w-4'} /> Connect GitHub
                 </Button>
               </form>
             </>
@@ -239,8 +208,8 @@ export function ProAccessView({ access, githubOrg, linkError, accountEmail }: Pr
           {licence ? (
             <>
               <p className={'text-secondary text-sm'}>
-                Set it as <code>Tenantry:Licence</code> in your app configuration, and as a secret in CI. It does not
-                expire: renewals keep the same key.
+                It does not expire: renewals keep the same key. Keep it out of source control and pass it to{' '}
+                <code>pro.WithLicence</code>, here from the configuration key <code>{LICENCE_CONFIG_KEY}</code>:
               </p>
               <code className={'block max-h-24 overflow-auto rounded-xs bg-muted/40 p-3 text-xs break-all'}>
                 {licence.jwt}
@@ -264,6 +233,12 @@ export function ProAccessView({ access, githubOrg, linkError, accountEmail }: Pr
                   <Download className={'mr-2 h-4 w-4'} /> Download
                 </Button>
               </div>
+              <Snippet value={licenceRegistration} maxHeight={'max-h-32'} />
+              <p className={'text-secondary text-sm'}>
+                Locally, store it with user secrets. In CI and other environments, set the environment variable{' '}
+                <code>{LICENCE_ENV_VARIABLE}</code>.
+              </p>
+              <Snippet value={licenceUserSecret} />
             </>
           ) : (
             <p className={'text-secondary'}>
@@ -275,19 +250,101 @@ export function ProAccessView({ access, githubOrg, linkError, accountEmail }: Pr
       </Card>
 
       {/* Feed setup */}
-      <Card className={cardClass}>
+      <Card className={`${cardClass} lg:col-span-2`}>
         <CardHeader className={'p-0'}>
           <CardTitle>Install the packages</CardTitle>
         </CardHeader>
-        <CardContent className={'p-0 pt-4 flex flex-col gap-3'}>
+        <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
           <p className={'text-secondary text-sm'}>
-            Create a GitHub PAT with the <code>read:packages</code> scope, then add this <code>nuget.config</code> to
-            your solution (the PAT goes in the <code>GITHUB_PAT</code> env var):
+            Tenantry Pro&apos;s packages are on a private GitHub Packages feed; Tenantry core and everything else stay
+            on nuget.org. The full guide, including Docker builds and troubleshooting, is{' '}
+            <Link className={'text-primary underline underline-offset-4'} href={INSTALL_GUIDE}>
+              Installation
+            </Link>
+            .
           </p>
-          <code className={'block max-h-48 overflow-auto rounded-xs bg-muted/40 p-3 text-xs whitespace-pre'}>
-            {nugetConfig}
-          </code>
-          <CopyButton value={nugetConfig} label={'Copy nuget.config'} />
+
+          <div className={'flex flex-col gap-2'}>
+            <h3 className={'text-primary text-sm font-medium'}>1. Create a token</h3>
+            <p className={'text-secondary text-sm'}>
+              {githubLogin ? (
+                <>
+                  Signed in to GitHub as <span className={'text-primary'}>@{githubLogin}</span>,{' '}
+                </>
+              ) : (
+                <>Once GitHub is connected above, and signed in to GitHub as that account, </>
+              )}
+              <Link
+                className={'text-primary underline underline-offset-4'}
+                href={CREATE_TOKEN_URL}
+                target={'_blank'}
+                rel={'noopener noreferrer'}
+              >
+                create a personal access token (classic)
+              </Link>{' '}
+              with only the <code>read:packages</code> scope, and give it an expiry date. GitHub Packages accepts
+              classic tokens only, and only from an account with access to the feed.
+            </p>
+          </div>
+
+          <div className={'flex flex-col gap-2'}>
+            <h3 className={'text-primary text-sm font-medium'}>2. Add this nuget.config next to your solution</h3>
+            <p className={'text-secondary text-sm'}>
+              It holds no secrets, so commit it. It sends <code>Tenantry.Pro</code> and <code>Tenantry.Pro.*</code> to
+              the private feed and everything else to nuget.org, and reads the credentials from two environment
+              variables.
+            </p>
+            <Snippet value={nugetConfig(githubOrg)} label={'Copy nuget.config'} />
+          </div>
+
+          <div className={'flex flex-col gap-2'}>
+            <h3 className={'text-primary text-sm font-medium'}>3. Set the credentials</h3>
+            <p className={'text-secondary text-sm'}>
+              On your machine (shell profile or user environment), then restart your terminal and IDE:
+            </p>
+            <Snippet value={feedCredentials(githubLogin)} label={'Copy'} />
+          </div>
+
+          <div className={'flex flex-col gap-2'}>
+            <h3 className={'text-primary text-sm font-medium'}>4. CI</h3>
+            <p className={'text-secondary text-sm'}>
+              Store the token and the licence key as secrets. In GitHub Actions the workflow&apos;s own{' '}
+              <code>GITHUB_TOKEN</code> cannot read another organisation&apos;s private packages, so pass your token:
+            </p>
+            <Snippet value={ciWorkflow} label={'Copy workflow'} />
+            <p className={'text-secondary text-sm'}>
+              Other CI systems work the same way: <code>{FEED_USERNAME_VARIABLE}</code> and{' '}
+              <code>{FEED_TOKEN_VARIABLE}</code> for the restore, <code>{LICENCE_ENV_VARIABLE}</code> for anything that
+              starts the application.
+            </p>
+          </div>
+
+          <div className={'flex flex-col gap-2'}>
+            <h3 className={'text-primary text-sm font-medium'}>Rotating credentials</h3>
+            <ul className={'text-secondary text-sm list-disc pl-5 flex flex-col gap-1'}>
+              <li>
+                When the token nears its expiry, create a new one the same way and update the environment variable and
+                CI secret. Nothing else changes.
+              </li>
+              <li>
+                If it may have leaked,{' '}
+                <Link
+                  className={'text-primary underline underline-offset-4'}
+                  href={'https://github.com/settings/tokens'}
+                  target={'_blank'}
+                  rel={'noopener noreferrer'}
+                >
+                  revoke it on GitHub
+                </Link>{' '}
+                straight away and create another.
+              </li>
+              <li>
+                To move access to another GitHub account, connect it above and accept its invitation; the previous
+                account loses access, so create the token from the new one.
+              </li>
+              <li>The licence key never needs rotating.</li>
+            </ul>
+          </div>
         </CardContent>
       </Card>
     </div>

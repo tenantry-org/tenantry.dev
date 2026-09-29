@@ -8,9 +8,13 @@ interface Props {
   description: ReactNode;
   onClose: (open: boolean) => void;
   onConfirm: () => void;
+  /** The confirm button's text: what confirming does. */
+  confirmLabel: string;
+  /** Destructive for an action that ends something, such as cancelling. */
+  destructive?: boolean;
 }
 
-export function Confirmation({ isOpen, onClose, title, description, onConfirm }: Props) {
+export function Confirmation({ isOpen, onClose, title, description, onConfirm, confirmLabel, destructive }: Props) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
@@ -23,8 +27,8 @@ export function Confirmation({ isOpen, onClose, title, description, onConfirm }:
             <Button onClick={() => onClose(false)} variant={'outline'}>
               Close
             </Button>
-            <Button onClick={() => onConfirm()} variant={'destructive'}>
-              Cancel subscription
+            <Button onClick={() => onConfirm()} variant={destructive ? 'destructive' : 'default'}>
+              {confirmLabel}
             </Button>
           </div>
         </div>

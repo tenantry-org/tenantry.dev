@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   lastEventAt: new Map<string, string>(),
   customerEmails: new Map<string, string>(),
   rpcError: null as { code: string; message: string } | null,
+  scheduledChanges: new Map<string, { at: string | null; action: string | null }>(),
 }));
 
 // Stands in for record_subscription_event and record_customer_event (supabase/tests/database): each applies
@@ -22,6 +23,11 @@ vi.mock('@/utils/supabase/server-internal', () => ({
       if (last && new Date(last) > new Date(args.p_occurred_at)) return { data: false, error: null };
       state.lastEventAt.set(key, args.p_occurred_at);
       if (name === 'record_customer_event') state.customerEmails.set(args.p_customer_id, args.p_email);
+      else
+        state.scheduledChanges.set(args.p_subscription_id, {
+          at: args.p_scheduled_change,
+          action: args.p_scheduled_change_action,
+        });
       return { data: true, error: null };
     },
   }),
@@ -86,6 +92,7 @@ describe('ProcessWebhook', () => {
     vi.clearAllMocks();
     vi.stubEnv('PADDLE_PRO_PRODUCT_ID', 'pro_01');
     state.lastEventAt.clear();
+    state.scheduledChanges.clear();
     state.customerEmails.clear();
     state.rpcError = null;
     memory.reset();
@@ -240,6 +247,22 @@ describe('ProcessWebhook', () => {
     expect(effects.revokeAccess).toHaveBeenCalledOnce();
     expect(memory.state.licences).toHaveLength(1);
     expect(emailSubjects()).toEqual([WELCOME, ENDED]);
+  });
+
+  it('records a scheduled cancellation with when it takes effect, for the billing card', async () => {
+    await processor.processEvent(delivered(created));
+    await processor.processEvent(
+      delivered(
+        subscriptionEvent({
+          eventId: 'evt_cancel_scheduled',
+          occurredAt: '2026-09-28T11:15:00Z',
+          status: 'active',
+          cancelsAt: '2026-10-01T00:00:00Z',
+        }),
+      ),
+    );
+
+    expect(state.scheduledChanges.get('sub_01')).toEqual({ at: '2026-10-01T00:00:00Z', action: 'cancel' });
   });
 
   it('applies the same events in order: access granted, then revoked', async () => {

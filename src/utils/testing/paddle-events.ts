@@ -11,6 +11,8 @@ export function subscriptionEvent(options: {
   customerId?: string;
   productId?: string;
   periodEndsAt?: string;
+  /** When set, the subscription is scheduled to cancel then. */
+  cancelsAt?: string;
 }): PaddleEventJson {
   const { eventId, occurredAt, status } = options;
   const productId = options.productId ?? 'pro_01';
@@ -41,7 +43,9 @@ export function subscriptionEvent(options: {
       current_billing_period:
         status === 'canceled' ? null : { starts_at: '2026-09-01T00:00:00Z', ends_at: periodEndsAt },
       billing_cycle: { interval: 'month', frequency: 1 },
-      scheduled_change: null,
+      scheduled_change: options.cancelsAt
+        ? { action: 'cancel', effective_at: options.cancelsAt, resume_at: null }
+        : null,
       items: [
         {
           status: 'active',

@@ -24,7 +24,7 @@ interface SubscriptionEventData {
   customerId: string;
   items: { price?: { id?: string | null; productId?: string | null } | null }[];
   currentBillingPeriod: { endsAt: string } | null;
-  scheduledChange: { effectiveAt?: string } | null;
+  scheduledChange: { action?: string; effectiveAt?: string } | null;
 }
 
 // Structural view of the bits of AdjustmentNotification this handler needs.
@@ -159,6 +159,7 @@ export class ProcessWebhook {
       p_price_id: data.items[0]?.price?.id ?? '',
       p_product_id: data.items[0]?.price?.productId ?? '',
       p_scheduled_change: data.scheduledChange?.effectiveAt ?? null,
+      p_scheduled_change_action: data.scheduledChange?.action ?? null,
       p_occurred_at: occurredAt,
     });
 
