@@ -45,9 +45,19 @@ and fill in the values for the services you need.
 ## Docs pipeline
 
 `/docs` is rendered by Fumadocs from MDX under `content/docs/` (gitignored, generated). `pnpm sync:docs`
-(`scripts/sync-docs.mjs`) reads the source markdown — from sibling checkouts (`../tenantry-core/docs`,
-`../tenantry-pro/docs`) in dev, or git submodules at `content/_src/{core,pro}` in CI — and transforms
-it (injects frontmatter, rewrites links, `.md`→`.mdx`). It runs automatically before `dev`/`build`.
+(`scripts/sync-docs.mjs`) reads the source markdown from the git submodules at `content/_src/{core,pro}`
+and transforms it (injects frontmatter, rewrites links, `.md`→`.mdx`). It runs automatically before
+`dev`/`build`. Run `git submodule update --init` after cloning.
+
+The submodules pin **released** docs, so the site describes the published packages: Core's repository at
+a release tag, and the public `tenantry-pro-docs` repository, which each Pro release publishes and tags.
+Every build reads the pins, local ones included.
+
+- **Preview unreleased docs** locally with an override, for example
+  `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or `CORE_DOCS_DIR`). Vercel and CI builds refuse overrides.
+- **On each release**, pin the docs to the new tag and commit the site: `pnpm docs:pin core v0.4.0` or
+  `pnpm docs:pin pro v0.1.0` (a Pro tag exists once that release's publish-docs job has run).
+- **`pnpm docs:check`** fails unless both submodules are checked out at release tags.
 
 ## Configuration
 
