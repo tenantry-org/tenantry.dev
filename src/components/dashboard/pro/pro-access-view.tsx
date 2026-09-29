@@ -410,9 +410,7 @@ function ProTabs({
       <TabsList aria-label={'Tenantry Pro'}>
         <TabsTrigger value={'access'}>
           <KeyRound /> Access
-          {accessNeedsAction && (
-            <span className={'h-2 w-2 rounded-full bg-primary dark:bg-link'} aria-label={'needs attention'} />
-          )}
+          {accessNeedsAction && <span className={'h-2 w-2 rounded-full bg-link'} aria-label={'needs attention'} />}
         </TabsTrigger>
         <TabsTrigger value={'install'}>
           <Package /> Install

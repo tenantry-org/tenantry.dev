@@ -82,7 +82,7 @@ function Edition({
       <ul className={'mt-6 flex flex-1 flex-col gap-3 text-sm'}>
         {items.map((item) => (
           <li key={item} className={'flex gap-3'}>
-            <Check className={'mt-0.5 h-4 w-4 shrink-0 text-primary dark:text-link'} aria-hidden={true} />
+            <Check className={'mt-0.5 h-4 w-4 shrink-0 text-link'} aria-hidden={true} />
             <span>{item}</span>
           </li>
         ))}

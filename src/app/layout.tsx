@@ -19,10 +19,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0b1120' },
-  ],
+  themeColor: '#0b1120',
+  colorScheme: 'dark',
 };
 
 export default function RootLayout({
@@ -31,11 +29,11 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    // The theme provider sets the light or dark class before the page paints, so the server's markup differs.
+    // The site is dark only: the theme provider forces the dark class before the page paints.
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className={'min-h-screen font-sans'}>
-        {/* Fumadocs' provider (search, theme) for the whole site: the docs and the other pages share a theme. */}
-        <RootProvider theme={{ defaultTheme: 'system', enableSystem: true }}>
+        {/* Fumadocs' provider (search, theme) for the whole site, so the docs share the forced dark theme. */}
+        <RootProvider theme={{ forcedTheme: 'dark', defaultTheme: 'dark', enableSystem: false }}>
           {children}
           <Toaster />
         </RootProvider>

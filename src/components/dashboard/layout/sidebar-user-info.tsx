@@ -1,5 +1,4 @@
 import { Suspense } from 'react';
-import { ThemeSwitch } from 'fumadocs-ui/layouts/shared/slots/theme-switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LogoutButton } from '@/components/dashboard/layout/logout-button';
 import { getCurrentUser } from '@/utils/supabase/current-user';
@@ -7,7 +6,6 @@ import { getCurrentUser } from '@/utils/supabase/current-user';
 export function SidebarUserInfo() {
   return (
     <div className={'flex flex-col gap-4 border-t border-border px-4 py-5 text-sm'}>
-      <ThemeSwitch mode={'light-dark-system'} className={'w-fit'} />
       <div className={'flex w-full flex-row items-center justify-between gap-3'}>
         <Suspense fallback={<Skeleton className={'h-10 w-40'} />}>
           <UserDetails />

@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { ThemeSwitch } from 'fumadocs-ui/layouts/shared/slots/theme-switch';
 import { AccountButton, SignInButton } from '@/components/home/header/account-button';
 import { Logo } from '@/components/brand/logo';
 
@@ -39,7 +38,6 @@ export default function Header() {
           >
             Docs
           </Link>
-          <ThemeSwitch mode={'light-dark-system'} className={'hidden sm:flex'} />
           <Suspense fallback={<SignInButton />}>
             <AccountButton />
           </Suspense>

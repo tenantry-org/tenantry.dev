@@ -25,9 +25,7 @@ async function highlightedSnippet() {
   'use cache';
   return highlight(SNIPPET, {
     lang: 'csharp',
-    themes: { light: 'github-light', dark: 'github-dark-default' },
-    // Colours as CSS variables only (no inline colour), so the site's stylesheet picks the light or dark one.
-    defaultColor: false,
+    theme: 'github-dark-default',
   });
 }
 
@@ -60,7 +58,7 @@ export async function HeroSection() {
               'mt-6 text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-[3.25rem] lg:leading-[1.08]'
             }
           >
-            Multi-tenancy for .NET, <span className={'text-primary dark:text-link'}>done properly.</span>
+            Multi-tenancy for .NET, <span className={'text-link'}>done properly.</span>
           </h1>
           <p className={'mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground'}>
             Tenantry gives .NET apps real tenant isolation — a shared database with row-level scoping, a database per
@@ -90,7 +88,7 @@ export async function HeroSection() {
 
         <figure
           className={
-            'min-w-0 overflow-hidden rounded-xl border border-border bg-code shadow-[0_24px_48px_-24px_rgb(15_23_42/0.25)]'
+            'min-w-0 overflow-hidden rounded-xl border border-border bg-code shadow-[0_24px_48px_-24px_rgb(0_0_0/0.6)]'
           }
         >
           <figcaption

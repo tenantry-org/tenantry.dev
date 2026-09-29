@@ -10,7 +10,7 @@ export function FeaturesList({ offer }: Props) {
     <ul className={'flex flex-col gap-3 text-sm'}>
       {offer.features.map((feature: string) => (
         <li key={feature} className={'flex gap-3'}>
-          <Check className={'mt-0.5 h-4 w-4 shrink-0 text-primary dark:text-link'} aria-hidden={true} />
+          <Check className={'mt-0.5 h-4 w-4 shrink-0 text-link'} aria-hidden={true} />
           <span>{feature}</span>
         </li>
       ))}

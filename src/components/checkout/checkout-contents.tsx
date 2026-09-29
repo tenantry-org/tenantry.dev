@@ -1,7 +1,6 @@
 'use client';
 
 import { PriceSection } from '@/components/checkout/price-section';
-import { useTheme } from 'fumadocs-ui/provider/base';
 import { type Environments, initializePaddle, type Paddle } from '@paddle/paddle-js';
 import type { CheckoutEventsData } from '@paddle/paddle-js/types/checkout/events';
 import { useEffect, useState } from 'react';
@@ -15,20 +14,13 @@ interface Props {
 export function CheckoutContents({ priceId, userEmail }: Props) {
   const [paddle, setPaddle] = useState<Paddle | null>(null);
   const [checkoutData, setCheckoutData] = useState<CheckoutEventsData | null>(null);
-  // Paddle's frame takes its theme when it opens, so it matches the site's theme at that moment.
-  const { resolvedTheme } = useTheme();
 
   const handleCheckoutEvents = (event: CheckoutEventsData) => {
     setCheckoutData(event);
   };
 
   useEffect(() => {
-    if (
-      resolvedTheme &&
-      !paddle?.Initialized &&
-      process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN &&
-      process.env.NEXT_PUBLIC_PADDLE_ENV
-    ) {
+    if (!paddle?.Initialized && process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN && process.env.NEXT_PUBLIC_PADDLE_ENV) {
       initializePaddle({
         token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
         environment: process.env.NEXT_PUBLIC_PADDLE_ENV as Environments,
@@ -44,7 +36,7 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
           settings: {
             variant: 'one-page',
             displayMode: 'inline',
-            theme: resolvedTheme === 'dark' ? 'dark' : 'light',
+            theme: 'dark',
             allowLogout: !userEmail,
             frameTarget: 'paddle-checkout-frame',
             frameInitialHeight: 450,
@@ -64,7 +56,7 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
         }
       });
     }
-  }, [paddle?.Initialized, priceId, userEmail, resolvedTheme]);
+  }, [paddle?.Initialized, priceId, userEmail]);
 
   return (
     <div className={'rounded-xl border border-border bg-card p-6 shadow-sm md:p-10'}>
