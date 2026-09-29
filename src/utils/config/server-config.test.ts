@@ -158,7 +158,7 @@ describe('validateServerConfig', () => {
     ]);
   });
 
-  it('refuses to enable checkout while the legal entity has placeholders', () => {
+  it('refuses to enable checkout in production while the legal entity has placeholders', () => {
     const placeholder = { name: '[COMPANY LEGAL NAME]', address: 'London', registration: 'England' };
     const complete = { name: 'Example Software Ltd', address: 'London', registration: 'England' };
     const checkout = environment('production', { NEXT_PUBLIC_CHECKOUT_ENABLED: 'true' });
@@ -167,6 +167,11 @@ describe('validateServerConfig', () => {
     expect(validateServerConfig(checkout, productionKey.spki, complete)).toEqual({ paddleEnvironment: 'production' });
     expect(validateServerConfig(environment('production'), productionKey.spki, placeholder)).toEqual({
       paddleEnvironment: 'production',
+    });
+    // The sandbox sells test transactions only, so it may run checkout before the entity is set.
+    const sandboxCheckout = environment('sandbox', { NEXT_PUBLIC_CHECKOUT_ENABLED: 'true' });
+    expect(validateServerConfig(sandboxCheckout, productionKey.spki, placeholder)).toEqual({
+      paddleEnvironment: 'sandbox',
     });
   });
 

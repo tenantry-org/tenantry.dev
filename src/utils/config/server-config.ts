@@ -117,7 +117,12 @@ export function validateServerConfig(
     );
   }
 
-  if (value('NEXT_PUBLIC_CHECKOUT_ENABLED') === 'true' && legalEntityIncomplete(legalEntity)) {
+  // Production only: sandbox purchases are test transactions, so the sandbox can sell before the entity is set.
+  if (
+    paddleEnvironment === 'production' &&
+    value('NEXT_PUBLIC_CHECKOUT_ENABLED') === 'true' &&
+    legalEntityIncomplete(legalEntity)
+  ) {
     problems.push(
       'NEXT_PUBLIC_CHECKOUT_ENABLED is on but the legal entity (src/constants/legal-entity.ts) still has placeholders: ' +
         'customers would buy under Terms that name no one',
