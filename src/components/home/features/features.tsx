@@ -36,7 +36,7 @@ const CORE = [
 
 const PRO = [
   'A schema per tenant (SQL Server, PostgreSQL) and mixed mode',
-  'Provisioning of tenant databases and schemas on SQL Server, PostgreSQL and MySQL',
+  'Provisioning of tenant databases on SQL Server, PostgreSQL and MySQL, and of schemas on SQL Server and PostgreSQL',
   'Migration orchestration across every tenant database, and the provision → migrate → seed lifecycle',
   'Caching and at-rest encryption of connection strings',
   'Tenant context in Hangfire, MassTransit, Quartz.NET and Rebus, health checks, audit logging and telemetry',

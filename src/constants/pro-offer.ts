@@ -22,7 +22,7 @@ export const ProOffer: Offer = {
     'Schema-per-tenant (SQL Server & PostgreSQL) and mixed mode',
     'Connection-string caching & at-rest encryption',
     'Hangfire, MassTransit, Quartz & Rebus integrations',
-    'Audit logging, health checks & OpenTelemetry',
+    'Audit logging, health checks & OpenTelemetry metrics',
     'Private NuGet package feed',
     'Email support',
   ],
