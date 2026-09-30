@@ -3,8 +3,9 @@
  * Core and Pro release tags its docs come from: Core's repository and the public tenantry-pro-docs repository, which
  * each Pro release publishes to and tags. The newest is served at /docs, each older one at /docs/v<version>.
  *
- * A patch release moves its line's tags (`pnpm docs:pin pro v0.4.1`); a new minor adds a line (the first tag pinned
- * for it), which is complete once both groups are pinned.
+ * The list is derived from the release tags (resolveVersions), not written by hand: a line is published once both
+ * Core and Pro have a stable release in it, with the newest patch of each. The docs-versions workflow updates the
+ * file when a release changes it.
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { dirname, resolve } from 'path';
@@ -12,6 +13,8 @@ import { fileURLToPath } from 'url';
 
 export const GROUPS = ['core', 'pro'];
 export const RELEASE_TAG = /^v(\d+)\.(\d+)\.\d+(-[0-9A-Za-z.-]+)?$/;
+// A release without a pre-release suffix: the only kind whose docs the site publishes.
+const STABLE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 export const CONFIG_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs-versions.json');
 
 /** The release line a tag belongs to: v0.4.1 → 0.4. */
@@ -66,13 +69,22 @@ export function writeVersions(versions) {
   writeFileSync(CONFIG_PATH, JSON.stringify({ versions }, null, 2) + '\n');
 }
 
-/** The list with `tag` pinned for `group`: its line's entry updated, or a new line added in order. */
-export function pinVersion(versions, group, tag) {
-  if (!GROUPS.includes(group)) throw new Error(`unknown docs group "${group}"; use one of ${GROUPS.join(', ')}.`);
-  const version = lineOf(tag);
-  if (!version) throw new Error(`"${tag ?? ''}" is not a release tag (vMAJOR.MINOR.PATCH[-prerelease]).`);
+/** The versions to publish, given each group's tags: every line both groups released, the newest patch of each. */
+export function resolveVersions(tagsByGroup) {
+  const newest = {};
+  for (const group of GROUPS) {
+    newest[group] = new Map();
+    for (const tag of tagsByGroup[group] ?? []) {
+      const match = STABLE_TAG.exec(tag);
+      if (!match) continue;
+      const line = `${match[1]}.${match[2]}`;
+      const current = newest[group].get(line);
+      if (!current || Number(match[3]) > Number(STABLE_TAG.exec(current)[3])) newest[group].set(line, tag);
+    }
+  }
 
-  const existing = versions.find((entry) => entry.version === version);
-  if (existing) return versions.map((entry) => (entry === existing ? { ...entry, [group]: tag } : entry));
-  return [...versions, { version, [group]: tag }].sort((a, b) => compareLines(b.version, a.version));
+  return [...newest.core.keys()]
+    .filter((line) => newest.pro.has(line))
+    .sort((a, b) => compareLines(b, a))
+    .map((line) => ({ version: line, core: newest.core.get(line), pro: newest.pro.get(line) }));
 }

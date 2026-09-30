@@ -1,0 +1,44 @@
+name: docs-versions
+
+# Publishes each release's docs without anyone pinning them: works out the docs versions from Core's and Pro's
+# release tags (scripts/docs-versions-update.mjs) and, when they differ from docs-versions.json, commits the new list
+# to master and staging, which redeploys the site. A new line appears once both Core and Pro have released in it;
+# a patch release updates its line. Hourly, so a release's docs are live within the hour; on demand as well.
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: docs-versions
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    name: Docs follow the releases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: master
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+      # Plain Node and git; nothing is installed.
+      - run: node scripts/docs-versions-update.mjs update
+      - name: Commit and deploy a change
+        run: |
+          if git diff --quiet -- docs-versions.json; then
+            echo "No change."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -q -m 'Docs: publish the docs of the latest releases' -m "$(cat docs-versions.json)" -- docs-versions.json
+          staging="$(git ls-remote origin refs/heads/staging | cut -f1)"
+          git push origin HEAD:master
+          # The sandbox follows production (staging is master).
+          git push --force-with-lease="staging:$staging" origin HEAD:staging

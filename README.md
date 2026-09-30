@@ -55,10 +55,10 @@ repository, which each Pro release publishes and tags). The newest is served at 
 the version being read. The tags are read from partial clones kept in `content/_src/` (gitignored), so every
 build, local ones included, shows what the released packages do.
 
-- **On each release**, pin its tags and commit `docs-versions.json`: `pnpm docs:pin core v0.5.0` and
-  `pnpm docs:pin pro v0.5.0` (a Pro tag exists once that release's publish-docs job has run). A patch moves its
-  line's tag; a new minor adds a version, and the previous one moves under `/docs/v<version>`.
-- **`pnpm docs:check`** fails unless every version has both tags and they exist.
+- **Releases publish their docs by themselves.** The versions are worked out from the release tags: a line is
+  listed once both Core and Pro have a stable release in it, with the newest patch of each. The `docs-versions`
+  workflow checks hourly (or on demand) and commits any change to master and staging, which redeploys the site.
+  `pnpm docs:update` does the same locally; `pnpm docs:check` fails unless the file matches the tags.
 - **Preview unreleased docs** locally with an override, for example
   `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or `CORE_DOCS_DIR`); it replaces the newest version's docs.
   Vercel and CI builds refuse overrides.

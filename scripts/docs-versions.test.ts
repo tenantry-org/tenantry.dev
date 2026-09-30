@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lineOf, pinVersion, versionProblems } from './docs-versions.mjs';
+import { lineOf, resolveVersions, versionProblems } from './docs-versions.mjs';
 
 const v04 = { version: '0.4', core: 'v0.4.0', pro: 'v0.4.0' };
 
@@ -27,17 +27,28 @@ describe('docs versions', () => {
     expect(versionProblems([v04, v04])).toEqual(['0.4 is listed twice.', '0.4 is out of order (newest first).']);
   });
 
-  it('pins a patch release on its line and a new minor as a new version', () => {
-    expect(pinVersion([v04], 'pro', 'v0.4.1')).toEqual([{ ...v04, pro: 'v0.4.1' }]);
-    expect(pinVersion([v04], 'core', 'v0.5.0')).toEqual([{ version: '0.5', core: 'v0.5.0' }, v04]);
-    expect(pinVersion([{ version: '0.5', core: 'v0.5.0' }, v04], 'pro', 'v0.5.0')).toEqual([
-      { version: '0.5', core: 'v0.5.0', pro: 'v0.5.0' },
-      v04,
+  it('publishes each line both groups released, with the newest stable patch of each', () => {
+    expect(
+      resolveVersions({
+        core: ['v0.3.0-alpha.1', 'v0.4.0', 'v0.4.2', 'v0.4.10', 'v0.5.0', 'v0.6.0-rc.1', 'not-a-release'],
+        pro: ['v0.4.0', 'v0.4.1', 'v0.5.0', 'v0.5.1', 'v0.6.0-rc.1'],
+      }),
+    ).toEqual([
+      { version: '0.5', core: 'v0.5.0', pro: 'v0.5.1' },
+      { version: '0.4', core: 'v0.4.10', pro: 'v0.4.1' },
     ]);
   });
 
-  it('refuses unknown groups and tags that are not releases', () => {
-    expect(() => pinVersion([v04], 'docs', 'v0.4.1')).toThrow('unknown docs group');
-    expect(() => pinVersion([v04], 'core', 'master')).toThrow('not a release tag');
+  it('waits for both groups before publishing a new line', () => {
+    expect(resolveVersions({ core: ['v0.4.0', 'v0.5.0'], pro: ['v0.4.0'] })).toEqual([v04]);
+    expect(resolveVersions({ core: [], pro: ['v0.4.0'] })).toEqual([]);
+  });
+
+  it('orders lines numerically, newest first', () => {
+    expect(
+      resolveVersions({ core: ['v0.9.0', 'v0.10.0', 'v1.0.0'], pro: ['v0.9.0', 'v0.10.0', 'v1.0.0'] }).map(
+        (v) => v.version,
+      ),
+    ).toEqual(['1.0', '0.10', '0.9']);
   });
 });

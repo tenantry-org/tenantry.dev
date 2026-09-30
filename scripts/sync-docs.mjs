@@ -14,7 +14,7 @@
  * in `content/_src/{core,pro}` (gitignored), so the site shows what each release's packages do. The newest
  * version is written to `content/docs/(latest)` and served at /docs; each older one to `content/docs/v<version>`,
  * served at /docs/v<version>. Each is a Fumadocs root folder, which the sidebar offers as a version dropdown.
- * `pnpm docs:pin <core|pro> <tag>` pins a release; `pnpm docs:check` checks the list.
+ * The list follows the release tags by itself (docs-versions-update.mjs and the docs-versions workflow).
  *
  * To preview unreleased docs locally, point CORE_DOCS_DIR / PRO_DOCS_DIR at a docs folder (for example
  * `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev`); it replaces the newest version's docs. Vercel and CI refuse these
