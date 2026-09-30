@@ -37,6 +37,8 @@ interface Props {
 const LINK_ERROR_TEXT: Record<string, ReactNode> = {
   'github-account-linked-elsewhere':
     'That GitHub account is already connected to another Tenantry customer. Connect a different account, or contact support@tenantry.dev.',
+  'github-account-deleted':
+    'The GitHub account connected to this login no longer exists on GitHub. Use another GitHub account.',
   'relink-failed':
     'We could not remove your previous GitHub account from the Tenantry org, so the new one was not connected. Try again in a moment.',
   'link-busy': 'Your access is being updated right now, so GitHub was not connected. Try again in a minute.',

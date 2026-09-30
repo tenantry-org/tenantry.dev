@@ -25,7 +25,13 @@ import { CUSTOMER_BUSY, withCustomerLease } from '@/utils/webhooks/customer-leas
  * failures are logged and returned as a reason, which the portal shows.
  */
 /** Link outcomes the portal explains to the customer (`/dashboard/pro?error=<reason>`). */
-export const LINK_ERRORS = ['github-account-linked-elsewhere', 'relink-failed', 'link-busy', 'sync-failed'] as const;
+export const LINK_ERRORS = [
+  'github-account-linked-elsewhere',
+  'github-account-deleted',
+  'relink-failed',
+  'link-busy',
+  'sync-failed',
+] as const;
 
 export function isLinkError(reason: string | undefined): reason is (typeof LINK_ERRORS)[number] {
   return (LINK_ERRORS as readonly string[]).includes(reason ?? '');
@@ -63,13 +69,12 @@ async function syncGithubLink(): Promise<SyncResult> {
   const githubIdentity = user.identities?.find((identity) => identity.provider === 'github');
   if (!githubIdentity) return { linked: false, granted: false, reason: 'no-github-identity' };
 
-  const login = (githubIdentity.identity_data?.user_name ?? githubIdentity.identity_data?.preferred_username) as
-    string | undefined;
+  // Only the durable id is taken from the identity; the login is looked up from it (linkAndGrant).
   const githubId = Number(
     githubIdentity.identity_data?.provider_id ?? githubIdentity.identity_data?.sub ?? githubIdentity.id,
   );
 
-  if (!login || !Number.isFinite(githubId)) {
+  if (!Number.isFinite(githubId)) {
     return { linked: false, granted: false, reason: 'incomplete-identity' };
   }
 
@@ -81,15 +86,18 @@ async function syncGithubLink(): Promise<SyncResult> {
 
   if (!customerId) return { linked: false, granted: false, reason: 'no-customer' };
 
-  const result = await withCustomerLease(customerId, () => linkAndGrant(customerId, login, githubId));
+  const result = await withCustomerLease(customerId, () => linkAndGrant(customerId, githubId));
   return result === CUSTOMER_BUSY ? { linked: false, granted: false, reason: 'link-busy' } : result;
 }
 
 // Records the link and grants access if the customer is entitled. Runs holding the customer's lease.
-async function linkAndGrant(customerId: string, identityLogin: string, githubId: number): Promise<SyncResult> {
+async function linkAndGrant(customerId: string, githubId: number): Promise<SyncResult> {
   const service = createServiceClient();
-  // The identity's login is as of the user's last GitHub sign-in; the account may have been renamed since.
-  const login = (await currentLogin(githubId)) ?? identityLogin;
+  // The identity's login is as of the user's last GitHub sign-in: the account may have been renamed since, or
+  // deleted, and its name then taken by someone else. So the login comes from the id, and a deleted account is
+  // neither linked nor granted.
+  const login = await currentLogin(githubId);
+  if (login === null) return { linked: false, granted: false, reason: 'github-account-deleted' };
 
   const [{ data: previous, error: previousError }, { data: holder, error: holderError }] = await Promise.all([
     service.from('github_links').select('github_login,github_id').eq('customer_id', customerId).maybeSingle(),

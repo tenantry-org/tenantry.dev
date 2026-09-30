@@ -167,6 +167,19 @@ describe('syncGithubLinkForCurrentUser', () => {
     );
   });
 
+  it('neither links nor grants a deleted account, whose login someone else may have taken', async () => {
+    process.env.PROVISIONING_MODE = 'auto';
+    github.currentLogin.mockImplementation(async () => null);
+
+    await expect(syncGithubLinkForCurrentUser()).resolves.toEqual({
+      linked: false,
+      granted: false,
+      reason: 'github-account-deleted',
+    });
+    expect(github.grantAccess).not.toHaveBeenCalled();
+    expect(state.calls.some((call) => call.table === 'github_links' && call.method === 'upsert')).toBe(false);
+  });
+
   describe('account linking', () => {
     beforeEach(() => {
       process.env.PROVISIONING_MODE = 'auto';
