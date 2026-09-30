@@ -11,6 +11,10 @@ import { requireEnv } from '@/utils/config/env';
  * team membership — so source access can be added to the team later without any code change.
  * Revocation is removal from the team, and cancelling the org invitation if it was never accepted.
  *
+ * GitHub users can rename themselves, and a freed name can be taken by someone else, so the stored login is
+ * never trusted: callers resolve the current login from the account's durable id (`currentLogin`) before
+ * granting, checking or removing access.
+ *
  * Adding someone who is not yet an org member sends them an org invitation: their membership is 'pending'
  * until they accept, and GitHub drops the invitation after 7 days. Callers record the outcome
  * (`customer_access.github_state`), and reconcile promotes or re-sends invitations (reconcile-customer.ts).
@@ -53,9 +57,15 @@ export interface OrgInvitationApi {
   cancelInvitation(params: { org: string; invitation_id: number }): Promise<unknown>;
 }
 
+/** The subset of the GitHub users API this module uses: a user by their durable id. */
+export interface UserApi {
+  getById(params: { account_id: number }): Promise<{ data: { login: string } }>;
+}
+
 export interface ProvisioningDeps {
   api: TeamMembershipApi;
   invitations: OrgInvitationApi;
+  users: UserApi;
   org: string;
   team: string;
 }
@@ -77,9 +87,20 @@ export function defaultDeps(): ProvisioningDeps {
   return {
     api: octokit.rest.teams as unknown as TeamMembershipApi,
     invitations: octokit.rest.orgs as unknown as OrgInvitationApi,
+    users: { getById: ({ account_id }) => octokit.request('GET /user/{account_id}', { account_id }) },
     org: requireEnv('GITHUB_ORG'),
     team: requireEnv('GITHUB_TEAM'),
   };
+}
+
+/** The account's login now, or null once the account has been deleted. */
+export async function currentLogin(githubId: number, deps: ProvisioningDeps = defaultDeps()): Promise<string | null> {
+  try {
+    return (await deps.users.getById({ account_id: githubId })).data.login;
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
+  }
 }
 
 /**

@@ -55,7 +55,8 @@ export const licenceRegistration = `tenant.UsePro(pro =>
     // …
 });`;
 
-export const licenceUserSecret = `dotnet user-secrets set "${LICENCE_CONFIG_KEY}" "<your licence key>"`;
+export const licenceUserSecret = `dotnet user-secrets init
+dotnet user-secrets set "${LICENCE_CONFIG_KEY}" "<your licence key>"`;
 
 /** A GitHub Actions job restoring from the feed and running the tests with the licence key. */
 export const ciWorkflow = `jobs:

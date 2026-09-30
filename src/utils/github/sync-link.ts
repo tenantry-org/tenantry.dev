@@ -4,7 +4,7 @@ import { automatedProvisioningEnabled } from '@/utils/provisioning-guard';
 import { confirmedEmail } from '@/utils/customers/email';
 import { grantAndRecord, isEntitled } from '@/utils/entitlements/customer-access';
 import { resetGithubState } from '@/utils/entitlements/entitlements-store';
-import { revokeAccess } from '@/utils/github/provisioning';
+import { currentLogin, revokeAccess } from '@/utils/github/provisioning';
 import { CUSTOMER_BUSY, withCustomerLease } from '@/utils/webhooks/customer-lease';
 
 /**
@@ -86,8 +86,10 @@ async function syncGithubLink(): Promise<SyncResult> {
 }
 
 // Records the link and grants access if the customer is entitled. Runs holding the customer's lease.
-async function linkAndGrant(customerId: string, login: string, githubId: number): Promise<SyncResult> {
+async function linkAndGrant(customerId: string, identityLogin: string, githubId: number): Promise<SyncResult> {
   const service = createServiceClient();
+  // The identity's login is as of the user's last GitHub sign-in; the account may have been renamed since.
+  const login = (await currentLogin(githubId)) ?? identityLogin;
 
   const [{ data: previous, error: previousError }, { data: holder, error: holderError }] = await Promise.all([
     service.from('github_links').select('github_login,github_id').eq('customer_id', customerId).maybeSingle(),
@@ -101,10 +103,12 @@ async function linkAndGrant(customerId: string, login: string, githubId: number)
   }
 
   // A different GitHub account than before (not a renamed one: the id is stable across renames). Remove
-  // the previous account first; if that fails, keep the old link so the user can retry.
+  // the previous account first, under its current name (it may have been renamed since); if that fails,
+  // keep the old link so the user can retry.
   if (previous && Number(previous.github_id) !== githubId) {
     try {
-      await revokeAccess(previous.github_login as string);
+      const previousLogin = await currentLogin(Number(previous.github_id));
+      if (previousLogin) await revokeAccess(previousLogin); // a deleted account's access went with it
       await resetGithubState(customerId);
     } catch (error) {
       console.error(`Could not remove the previous GitHub account of customer ${customerId}:`, error);

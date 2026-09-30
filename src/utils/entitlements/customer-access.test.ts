@@ -10,10 +10,14 @@ const effects = vi.hoisted(() => ({
   automatedProvisioningEnabled: vi.fn(),
   issueLicence: vi.fn(),
 }));
-vi.mock('@/utils/github/provisioning', () => ({
-  grantAccess: effects.grantAccess,
-  revokeAccess: effects.revokeAccess,
-}));
+vi.mock('@/utils/github/provisioning', async () => {
+  const { memory } = await import('@/utils/testing/memory-entitlements');
+  return {
+    grantAccess: effects.grantAccess,
+    revokeAccess: effects.revokeAccess,
+    currentLogin: memory.currentLogin,
+  };
+});
 vi.mock('@/utils/entitlements/entitlements-store', async () => {
   const { memory } = await import('@/utils/testing/memory-entitlements');
   return memory.store;
@@ -77,7 +81,7 @@ describe('syncCustomerAccess', () => {
     effects.issueLicence.mockImplementation(signLicence);
     memory.reset();
     memory.state.emails.set('ctm_1', 'buyer@example.com');
-    memory.state.githubLogins.set('ctm_1', 'octocat');
+    memory.linkGithub('ctm_1', 'octocat');
   });
 
   it('grants access, issues a licence and welcomes the customer when access starts', async () => {
@@ -91,6 +95,24 @@ describe('syncCustomerAccess', () => {
     });
     expect(memory.liveLicences('ctm_1')).toHaveLength(1);
     expect(emailSubjects()).toEqual(['Welcome to Tenantry Pro — connect GitHub to get access']);
+  });
+
+  it('removes a renamed GitHub account under its new login when access ends, and records the new login', async () => {
+    await entitle();
+    memory.state.githubUsers.set(1, 'octocat-renamed'); // renamed on GitHub; github_links still says octocat
+
+    await expect(entitle({ status: 'revoked' })).resolves.toBe('ended');
+
+    expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat-renamed');
+    expect(memory.state.githubAccounts.get('ctm_1')).toEqual({ id: 1, login: 'octocat-renamed' });
+  });
+
+  it('grants nothing to whoever takes the login of a deleted GitHub account', async () => {
+    memory.state.githubUsers.delete(1);
+
+    await expect(entitle()).resolves.toBe('started');
+
+    expect(effects.grantAccess).not.toHaveBeenCalled();
   });
 
   it('keeps the one licence through repeated events, renewals and other subscriptions: it does not expire', async () => {
@@ -156,7 +178,7 @@ describe('syncCustomerAccess', () => {
   });
 
   it('leaves the grant pending for a customer who has not linked GitHub, but issues the licence', async () => {
-    memory.state.githubLogins.clear();
+    memory.state.githubAccounts.clear();
 
     await expect(entitle()).resolves.toBe('started');
 
@@ -227,7 +249,7 @@ describe('licence issuance failures', () => {
     effects.issueLicence.mockImplementation(signLicence);
     memory.reset();
     memory.state.emails.set('ctm_1', 'buyer@example.com');
-    memory.state.githubLogins.set('ctm_1', 'octocat');
+    memory.linkGithub('ctm_1', 'octocat');
   });
 
   afterEach(() => {
@@ -345,7 +367,7 @@ describe('grace period', () => {
     effects.issueLicence.mockImplementation(signLicence);
     memory.reset();
     memory.state.emails.set('ctm_1', 'buyer@example.com');
-    memory.state.githubLogins.set('ctm_1', 'octocat');
+    memory.linkGithub('ctm_1', 'octocat');
   });
 
   afterEach(() => {

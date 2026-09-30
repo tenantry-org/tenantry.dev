@@ -27,6 +27,46 @@ export async function connectGithub() {
     return;
   }
 
+  await startGithubLink(supabase);
+}
+
+/**
+ * Moves the customer's access to another GitHub account. The login's GitHub identity is disconnected and a new
+ * one linked through GitHub, which signs in whichever account the browser is signed in to there. Access stays
+ * with the previous account until the new one is linked: /auth/callback then removes the previous account and
+ * grants the new one (sync-link.ts). If the customer abandons the switch, the previous account keeps access and
+ * the Access page offers Connect GitHub again.
+ *
+ * A login that signs in only with GitHub cannot disconnect it (Supabase keeps at least one identity), so it is
+ * asked to set a password first.
+ */
+export async function switchGithubAccount() {
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.getUserIdentities();
+
+  if (error) {
+    console.error('Failed to read the identities of the login:', error);
+    redirect('/dashboard/pro?error=github-link');
+  }
+
+  const identities = data?.identities ?? [];
+  const github = identities.find((identity) => identity.provider === 'github');
+
+  if (github) {
+    if (identities.length < 2) redirect('/dashboard/pro?error=github-only-sign-in');
+
+    const { error: unlinkError } = await supabase.auth.unlinkIdentity(github);
+    if (unlinkError) {
+      console.error('Failed to disconnect the GitHub identity:', unlinkError);
+      redirect('/dashboard/pro?error=github-link');
+    }
+  }
+
+  await startGithubLink(supabase);
+}
+
+// Starts a GitHub OAuth identity link, which returns through /auth/callback.
+async function startGithubLink(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data, error } = await supabase.auth.linkIdentity({
     provider: 'github',
     options: { redirectTo: `${await siteOrigin()}/auth/callback?next=/dashboard/pro` },

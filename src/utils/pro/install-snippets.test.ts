@@ -2,11 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ciWorkflow, licenceRegistration, licenceUserSecret, nugetConfig } from './install-snippets';
 
-// Tenantry.Pro's installation guide: the docs submodule, or a sibling checkout when working locally. The
-// submodule carries the guide once it is pinned to a Pro release that has it.
-const GUIDE = ['content/_src/pro/docs/installation.md', '../tenantry-pro/docs/installation.md'].find((path) =>
-  existsSync(path),
-);
+// Tenantry.Pro's installation guide, from a sibling checkout when working locally (the synced docs are those of
+// the latest release, which may predate a change made on both sides).
+const GUIDE = ['../tenantry-pro/docs/installation.md'].find((path) => existsSync(path));
 
 function codeBlocks(markdown: string, language: string): string[] {
   return [...markdown.matchAll(new RegExp('```' + language + '\\n([\\s\\S]*?)```', 'g'))].map((match) => match[1]);

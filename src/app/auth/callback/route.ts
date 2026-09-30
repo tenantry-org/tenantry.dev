@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { isLinkError, syncGithubLinkForCurrentUser } from '@/utils/github/sync-link';
 
+// Linking GitHub holds the customer's lease, which must outlast this function (customer-lease.ts).
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');

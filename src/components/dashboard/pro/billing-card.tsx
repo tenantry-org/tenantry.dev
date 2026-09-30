@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { CircleAlert, CircleCheck, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,8 @@ import type { BillingSubscription, ProAccess } from '@/utils/entitlements/get-en
 import { ProOffer } from '@/constants/pro-offer';
 
 interface Props {
-  entitlement: NonNullable<ProAccess['entitlement']>;
+  /** The customer's access; null for a customer who never had any. */
+  entitlement: ProAccess['entitlement'];
   subscriptions: BillingSubscription[];
   cardClass: string;
 }
@@ -21,7 +23,8 @@ type Pending = { kind: 'cancel' | 'keep'; subscriptionId: string } | null;
 /**
  * The customer's subscription and billing (6.17). Invoices, invoice details (company and tax ID), payment
  * methods and cancelling are Paddle's hosted customer portal, reached through one-time links. A scheduled
- * cancellation can be undone here (Keep subscription) or in the portal (Don't cancel).
+ * cancellation can be undone here (Keep subscription) or in the portal (Don't cancel). Shown to former customers
+ * too: one whose grace period ended updates the failed payment method here, and invoices stay available.
  */
 export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
   const { toast } = useToast();
@@ -36,8 +39,9 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
       : subscription,
   );
   // When every Pro subscription is set to end, access ends with the last of them.
+  const status = entitlement?.status ?? 'revoked';
   const endsAt =
-    entitlement.status === 'active' && shown.length > 0 && shown.every((subscription) => subscription.endsAt)
+    status === 'active' && shown.length > 0 && shown.every((subscription) => subscription.endsAt)
       ? shown
           .map((subscription) => subscription.endsAt!)
           .sort((a, b) => a.localeCompare(b))
@@ -96,11 +100,14 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
       <CardHeader className={'p-0'}>
         <CardTitle className={'flex items-center justify-between'}>
           <span>Subscription and billing</span>
-          <StatusBadge status={entitlement.status} endsAt={endsAt} />
+          <StatusBadge status={status} endsAt={endsAt} />
         </CardTitle>
       </CardHeader>
       <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
-        {entitlement.status === 'grace' && <GraceNotice grace={entitlement.grace} />}
+        {status === 'grace' && <GraceNotice grace={entitlement?.grace ?? null} />}
+        {status === 'revoked' && (
+          <EndedNotice paymentFailed={shown.some((subscription) => subscription.status === 'past_due')} />
+        )}
 
         {shown.map((subscription) => (
           <div
@@ -193,6 +200,14 @@ function StatusBadge({ status, endsAt }: Readonly<{ status: string; endsAt: stri
     );
   }
 
+  if (status === 'revoked') {
+    return (
+      <span className={'rounded-full bg-destructive-surface px-2.5 py-0.5 text-xs font-medium text-destructive'}>
+        Ended
+      </span>
+    );
+  }
+
   const tone =
     status === 'active'
       ? 'bg-success-surface text-success'
@@ -219,6 +234,28 @@ function GraceNotice({ grace }: Readonly<{ grace: { endsAt: string; ended: boole
     <p className={'rounded-md bg-warning-surface px-3 py-2 text-sm text-warning'}>
       Your last payment failed. Your access to the package feed continues{ends ? ` until ${ends}` : ''} while Paddle
       retries it. Update your payment method to keep it.
+    </p>
+  );
+}
+
+// Access has ended: the grace period of a failed payment ran out, or every subscription ended.
+function EndedNotice({ paymentFailed }: Readonly<{ paymentFailed: boolean }>) {
+  if (paymentFailed) {
+    return (
+      <p className={'rounded-md bg-warning-surface px-3 py-2 text-sm text-warning'}>
+        Your last payment failed and the 30-day grace period is over, so your access to the package feed has ended.
+        Update your payment method so Paddle can collect it: access returns when it does.
+      </p>
+    );
+  }
+
+  return (
+    <p className={'text-muted-foreground'}>
+      Your Tenantry Pro subscription has ended. Your invoices stay available below, and you can{' '}
+      <Link className={'text-link underline underline-offset-4'} href={'/#pricing'}>
+        subscribe again
+      </Link>{' '}
+      at any time.
     </p>
   );
 }

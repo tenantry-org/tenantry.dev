@@ -18,7 +18,10 @@ interface Licence {
 
 const state = {
   emails: new Map<string, string>(),
-  githubLogins: new Map<string, string>(),
+  /** Each customer's linked GitHub account, as github_links records it. */
+  githubAccounts: new Map<string, EntitlementsStore.GithubAccount>(),
+  /** GitHub itself: each account's current login, by id. Renaming an account changes only this. */
+  githubUsers: new Map<number, string>(),
   entitlements: new Map<string, EntitlementRecord>(),
   access: new Map<string, CustomerAccessRecord>(),
   licences: [] as Licence[],
@@ -36,11 +39,23 @@ export const memory = {
 
   reset() {
     state.emails.clear();
-    state.githubLogins.clear();
+    state.githubAccounts.clear();
+    state.githubUsers.clear();
     state.entitlements.clear();
     state.access.clear();
     state.licences.length = 0;
     state.licenceFailures.clear();
+  },
+
+  /** Links a GitHub account to the customer, as connecting it on the dashboard does. */
+  linkGithub(customerId: string, login: string, id = 1) {
+    state.githubAccounts.set(customerId, { id, login });
+    state.githubUsers.set(id, login);
+  },
+
+  /** Stands in for provisioning.ts's currentLogin: the account's login on GitHub now. */
+  async currentLogin(githubId: number) {
+    return state.githubUsers.get(githubId) ?? null;
   },
 
   store: {
@@ -48,8 +63,14 @@ export const memory = {
       return state.emails.get(customerId) ?? null;
     },
 
-    async getGithubLogin(customerId: string) {
-      return state.githubLogins.get(customerId) ?? null;
+    async getGithubAccount(customerId: string) {
+      const account = state.githubAccounts.get(customerId);
+      return account ? { ...account } : null;
+    },
+
+    async setGithubLogin(customerId: string, login: string) {
+      const account = state.githubAccounts.get(customerId);
+      if (account) account.login = login;
     },
 
     async upsertEntitlement(record: EntitlementRecord) {

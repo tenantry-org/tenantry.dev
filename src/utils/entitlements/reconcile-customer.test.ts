@@ -12,12 +12,16 @@ const effects = vi.hoisted(() => ({
   sendEmail: vi.fn(),
   automatedProvisioningEnabled: vi.fn(),
 }));
-vi.mock('@/utils/github/provisioning', () => ({
-  grantAccess: effects.grantAccess,
-  revokeAccess: effects.revokeAccess,
-  membershipOf: effects.membershipOf,
-  hasPendingInvitation: effects.hasPendingInvitation,
-}));
+vi.mock('@/utils/github/provisioning', async () => {
+  const { memory } = await import('@/utils/testing/memory-entitlements');
+  return {
+    grantAccess: effects.grantAccess,
+    revokeAccess: effects.revokeAccess,
+    membershipOf: effects.membershipOf,
+    hasPendingInvitation: effects.hasPendingInvitation,
+    currentLogin: memory.currentLogin,
+  };
+});
 vi.mock('@/utils/entitlements/entitlements-store', async () => {
   const { memory } = await import('@/utils/testing/memory-entitlements');
   return memory.store;
@@ -63,7 +67,7 @@ describe('reconcileCustomer', () => {
     effects.hasPendingInvitation.mockResolvedValue(false);
     memory.reset();
     memory.state.emails.set('ctm_1', 'buyer@example.com');
-    memory.state.githubLogins.set('ctm_1', 'octocat');
+    memory.linkGithub('ctm_1', 'octocat');
   });
 
   afterEach(() => {
@@ -168,6 +172,16 @@ describe('reconcileCustomer', () => {
       expect(effects.revokeAccess).toHaveBeenCalledWith('octocat');
     });
 
+    it('removes a lapsed customer whose GitHub account was renamed, under its new login', async () => {
+      await record({ status: 'revoked' });
+      await syncCustomerAccess('ctm_1');
+      memory.state.githubUsers.set(1, 'octocat-renamed');
+      effects.membershipOf.mockImplementation(async (login: string) => (login === 'octocat-renamed' ? 'active' : null));
+
+      await expect(reconcileCustomer('ctm_1')).resolves.toMatchObject({ github: 'removed' });
+      expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat-renamed');
+    });
+
     it('does nothing for a lapsed customer with neither a membership nor an invitation', async () => {
       await record({ status: 'revoked' });
       await syncCustomerAccess('ctm_1');
@@ -179,9 +193,9 @@ describe('reconcileCustomer', () => {
   });
 
   it('grants access to a customer who linked GitHub after their access started, only in automated mode', async () => {
-    memory.state.githubLogins.clear();
+    memory.state.githubAccounts.clear();
     await startAccess();
-    memory.state.githubLogins.set('ctm_1', 'octocat');
+    memory.linkGithub('ctm_1', 'octocat');
 
     effects.automatedProvisioningEnabled.mockReturnValue(false);
     await expect(reconcileCustomer('ctm_1')).resolves.toMatchObject({ github: 'withheld' });

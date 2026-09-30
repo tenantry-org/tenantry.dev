@@ -6,6 +6,9 @@ import { AccessView } from '@/components/dashboard/pro/pro-access-view';
 import { requireEnv } from '@/utils/config/env';
 import { getCurrentUser } from '@/utils/supabase/current-user';
 
+// The Connect GitHub action runs here and holds the customer's lease, which must outlast it (customer-lease.ts).
+export const maxDuration = 60;
+
 interface Props {
   searchParams: Promise<{ error?: string }>;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  currentLogin,
   grantAccess,
   hasPendingInvitation,
   membershipOf,
@@ -7,6 +8,7 @@ import {
   ProvisioningDeps,
   revokeAccess,
   TeamMembershipApi,
+  UserApi,
 } from './provisioning';
 
 function mockDeps(
@@ -25,8 +27,34 @@ function mockDeps(
     ...invitationOverrides,
   };
 
-  return { api, invitations, deps: { api, invitations, org: 'tenantry-org', team: 'pro-customers' } };
+  const users: UserApi = { getById: vi.fn().mockResolvedValue({ data: { login: 'octocat' } }) };
+
+  return { api, invitations, deps: { api, invitations, users, org: 'tenantry-org', team: 'pro-customers' } };
 }
+
+describe('currentLogin', () => {
+  it('looks the account up by its id, so a renamed account is found under its new name', async () => {
+    const { deps } = mockDeps();
+    vi.mocked(deps.users.getById).mockResolvedValue({ data: { login: 'octocat-renamed' } });
+
+    await expect(currentLogin(583231, deps)).resolves.toBe('octocat-renamed');
+    expect(deps.users.getById).toHaveBeenCalledWith({ account_id: 583231 });
+  });
+
+  it('returns null for a deleted account', async () => {
+    const { deps } = mockDeps();
+    vi.mocked(deps.users.getById).mockRejectedValue({ status: 404 });
+
+    await expect(currentLogin(583231, deps)).resolves.toBeNull();
+  });
+
+  it('rethrows other failures', async () => {
+    const { deps } = mockDeps();
+    vi.mocked(deps.users.getById).mockRejectedValue({ status: 500 });
+
+    await expect(currentLogin(583231, deps)).rejects.toMatchObject({ status: 500 });
+  });
+});
 
 describe('grantAccess', () => {
   it('adds the user to the configured org team', async () => {

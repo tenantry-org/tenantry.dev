@@ -42,10 +42,14 @@ const effects = vi.hoisted(() => ({
 }));
 vi.mock('@/utils/paddle/cancel-subscription', () => ({ cancelSubscriptionNow: effects.cancelSubscriptionNow }));
 vi.mock('@/utils/email/alerts', () => ({ alertOperator: effects.alertOperator }));
-vi.mock('@/utils/github/provisioning', () => ({
-  grantAccess: effects.grantAccess,
-  revokeAccess: effects.revokeAccess,
-}));
+vi.mock('@/utils/github/provisioning', async () => {
+  const { memory } = await import('@/utils/testing/memory-entitlements');
+  return {
+    grantAccess: effects.grantAccess,
+    revokeAccess: effects.revokeAccess,
+    currentLogin: memory.currentLogin,
+  };
+});
 vi.mock('@/utils/entitlements/entitlements-store', async () => {
   const { memory } = await import('@/utils/testing/memory-entitlements');
   return memory.store;
@@ -97,7 +101,7 @@ describe('ProcessWebhook', () => {
     state.rpcError = null;
     memory.reset();
     memory.state.emails.set('ctm_01', 'buyer@example.com');
-    memory.state.githubLogins.set('ctm_01', 'octocat');
+    memory.linkGithub('ctm_01', 'octocat');
   });
 
   it('keeps a cancelled subscription revoked when an older update is delivered after the cancellation', async () => {

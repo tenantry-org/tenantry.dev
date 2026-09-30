@@ -4,7 +4,6 @@ import {
   CustomerAccessRecord,
   hasLiveLicence,
   getCustomerAccess,
-  getGithubLogin,
   revokeLicences,
   setGithubState,
 } from '@/utils/entitlements/entitlements-store';
@@ -13,6 +12,7 @@ import {
   grantAndRecord,
   isEntitled,
   LicenceOutcome,
+  linkedGithubLogin,
   syncCustomerAccess,
 } from '@/utils/entitlements/customer-access';
 
@@ -62,7 +62,7 @@ export async function reconcileCustomer(customerId: string): Promise<CustomerRec
   const { change, licence } = await syncCustomerAccess(customerId);
   const access = await getCustomerAccess(customerId);
   const entitled = access !== null && isEntitled(access.status);
-  const githubLogin = await getGithubLogin(customerId);
+  const githubLogin = await linkedGithubLogin(customerId);
   const result: CustomerReconciliation = { access: change, licence, github: 'unchanged', licencesRevoked: false };
 
   if (githubLogin) {

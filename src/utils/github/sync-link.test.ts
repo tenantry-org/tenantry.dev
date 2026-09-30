@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall } from '@/utils/testing/fake-supabase';
 import { syncGithubLinkForCurrentUser } from './sync-link';
 
-const github = vi.hoisted(() => ({ grantAccess: vi.fn(), revokeAccess: vi.fn() }));
+const github = vi.hoisted(() => ({ grantAccess: vi.fn(), revokeAccess: vi.fn(), currentLogin: vi.fn() }));
 vi.mock('@/utils/github/provisioning', () => github);
 
 const state = vi.hoisted(() => ({
@@ -69,6 +69,8 @@ describe('syncGithubLinkForCurrentUser', () => {
     state.linkWriteError = undefined;
     state.failLookup = false;
     state.customerBusy = false;
+    // GitHub's current logins, by account id.
+    github.currentLogin.mockImplementation(async (id: number) => ({ 42: 'octocat', 7: 'old-account' })[id] ?? null);
   });
 
   afterEach(() => {
@@ -148,6 +150,23 @@ describe('syncGithubLinkForCurrentUser', () => {
     });
   });
 
+  it('grants the account under its current login when it was renamed since the user last signed in', async () => {
+    process.env.PROVISIONING_MODE = 'auto';
+    github.grantAccess.mockResolvedValueOnce('active');
+    github.currentLogin.mockImplementation(async () => 'octocat-renamed');
+
+    await syncGithubLinkForCurrentUser();
+
+    expect(github.grantAccess).toHaveBeenCalledWith('octocat-renamed');
+    expect(state.calls).toContainEqual(
+      expect.objectContaining({
+        table: 'github_links',
+        method: 'upsert',
+        args: [expect.objectContaining({ github_login: 'octocat-renamed', github_id: 42 }), expect.anything()],
+      }),
+    );
+  });
+
   describe('account linking', () => {
     beforeEach(() => {
       process.env.PROVISIONING_MODE = 'auto';
@@ -220,6 +239,23 @@ describe('syncGithubLinkForCurrentUser', () => {
         }),
       );
       expect(linkWrites()).toHaveLength(1);
+    });
+
+    it('removes the previous account under its current login when it was renamed since it was linked', async () => {
+      state.previousLink = { github_login: 'old-account', github_id: 7 };
+      github.currentLogin.mockImplementation(async (id: number) => (id === 7 ? 'old-account-renamed' : 'octocat'));
+
+      await syncGithubLinkForCurrentUser();
+
+      expect(github.revokeAccess).toHaveBeenCalledExactlyOnceWith('old-account-renamed');
+    });
+
+    it('links the new account when the previous one has been deleted, which took its access with it', async () => {
+      state.previousLink = { github_login: 'old-account', github_id: 7 };
+      github.currentLogin.mockImplementation(async (id: number) => (id === 7 ? null : 'octocat'));
+
+      await expect(syncGithubLinkForCurrentUser()).resolves.toMatchObject({ linked: true, granted: true });
+      expect(github.revokeAccess).not.toHaveBeenCalled();
     });
 
     it('keeps access for a renamed account: same GitHub id, new login', async () => {

@@ -40,18 +40,32 @@ export async function getCustomerEmail(customerId: string): Promise<string | nul
   return data?.email ?? null;
 }
 
-/** Returns the linked GitHub login for a customer, or null if they have not connected GitHub yet. */
-export async function getGithubLogin(customerId: string): Promise<string | null> {
+/** A linked GitHub account: its durable id, and its login when it was linked or last looked up. */
+export interface GithubAccount {
+  id: number;
+  login: string;
+}
+
+/** Returns the customer's linked GitHub account, or null if they have not connected GitHub yet. */
+export async function getGithubAccount(customerId: string): Promise<GithubAccount | null> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('github_links')
-    .select('github_login')
+    .select('github_id,github_login')
     .eq('customer_id', customerId)
     .maybeSingle();
 
   if (error) throw error;
 
-  return data?.github_login ?? null;
+  return data ? { id: Number(data.github_id), login: data.github_login as string } : null;
+}
+
+/** Records the linked account's new login after it was renamed on GitHub. */
+export async function setGithubLogin(customerId: string, login: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from('github_links').update({ github_login: login }).eq('customer_id', customerId);
+
+  if (error) throw error;
 }
 
 /** Inserts or updates the entitlement for a subscription (idempotent on subscription_id). */

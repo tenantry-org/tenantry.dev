@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import Link from 'next/link';
 import { Check, Copy, Download } from 'lucide-react';
 import { GithubIcon } from '@/components/icons/github-icon';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { connectGithub } from '@/app/dashboard/pro/actions';
+import { connectGithub, switchGithubAccount } from '@/app/dashboard/pro/actions';
 import type { ProAccess } from '@/utils/entitlements/get-entitlement';
 import type { GithubState } from '@/utils/entitlements/entitlements-store';
 import { BillingCard } from '@/components/dashboard/pro/billing-card';
@@ -34,7 +34,7 @@ interface Props {
   accountEmail: string | null;
 }
 
-const LINK_ERROR_TEXT: Record<string, string> = {
+const LINK_ERROR_TEXT: Record<string, ReactNode> = {
   'github-account-linked-elsewhere':
     'That GitHub account is already connected to another Tenantry customer. Connect a different account, or contact support@tenantry.dev.',
   'relink-failed':
@@ -42,6 +42,15 @@ const LINK_ERROR_TEXT: Record<string, string> = {
   'link-busy': 'Your access is being updated right now, so GitHub was not connected. Try again in a minute.',
   'sync-failed': 'Connecting GitHub failed. Try again in a moment; if it keeps failing, contact support@tenantry.dev.',
   'github-link': 'GitHub did not complete the connection. Try again in a moment.',
+  'github-only-sign-in': (
+    <>
+      You sign in to Tenantry with GitHub only, so that account cannot be disconnected.{' '}
+      <Link className={'underline underline-offset-4'} href={'/reset-password'}>
+        Set a password
+      </Link>{' '}
+      first, then use another GitHub account.
+    </>
+  ),
 };
 
 function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
@@ -153,6 +162,15 @@ function NoSubscription({ access, accountEmail }: Readonly<{ access: ProAccess; 
             .
           </p>
         )}
+        {access.customerId && (
+          <p className={'text-muted-foreground'}>
+            Your invoices, and the payment method of a subscription whose payment failed, are in{' '}
+            <Link className={'text-link underline underline-offset-4'} href={'/dashboard/pro/billing'}>
+              Billing
+            </Link>
+            .
+          </p>
+        )}
         <Button asChild className={'w-fit'}>
           <Link href={'/#pricing'}>View pricing</Link>
         </Button>
@@ -189,11 +207,22 @@ export function AccessView({ access, githubOrg, linkError, accountEmail }: Props
                 invitationExpiresAt={entitlement.invitationExpiresAt}
                 githubOrg={githubOrg}
               />
-              <form action={connectGithub}>
-                <Button type={'submit'} variant={'outline'} size={'sm'}>
-                  <GithubIcon className={'h-4 w-4'} /> Refresh access
-                </Button>
-              </form>
+              <div className={'flex flex-wrap gap-2'}>
+                <form action={connectGithub}>
+                  <Button type={'submit'} variant={'outline'} size={'sm'}>
+                    <GithubIcon className={'h-4 w-4'} /> Refresh access
+                  </Button>
+                </form>
+                <form action={switchGithubAccount}>
+                  <Button type={'submit'} variant={'outline'} size={'sm'}>
+                    Use another GitHub account
+                  </Button>
+                </form>
+              </div>
+              <p className={'text-sm text-muted-foreground'}>
+                To use another account, sign in to it on github.com first: GitHub connects whichever account you are
+                signed in to. @{githubLogin} keeps access until the new account is connected.
+              </p>
             </>
           ) : (
             <>
@@ -251,7 +280,8 @@ export function AccessView({ access, githubOrg, linkError, accountEmail }: Props
               </div>
               <Snippet value={licenceRegistration} maxHeight={'max-h-32'} />
               <p className={'text-sm text-muted-foreground'}>
-                Locally, store it with user secrets. In CI and other environments, set the environment variable{' '}
+                Locally, store it with user secrets, from your project&apos;s directory (they are read in the
+                Development environment). In CI and other environments, set the environment variable{' '}
                 <code>{LICENCE_ENV_VARIABLE}</code>.
               </p>
               <Snippet value={licenceUserSecret} />
@@ -368,8 +398,9 @@ export function InstallView({ access, githubOrg, accountEmail }: Omit<Props, 'li
                 straight away and create another.
               </li>
               <li>
-                To move access to another GitHub account, connect it on the Access page and accept its invitation; the
-                previous account loses access, so create the token from the new one.
+                To move access to another GitHub account, choose Use another GitHub account on the Access page and
+                accept the new account&apos;s invitation; the previous account loses access, so create the token from
+                the new one.
               </li>
               <li>The licence key never needs rotating.</li>
             </ul>
@@ -380,9 +411,12 @@ export function InstallView({ access, githubOrg, accountEmail }: Omit<Props, 'li
   );
 }
 
-/** Billing (/dashboard/pro/billing): the subscription card. */
+/**
+ * Billing (/dashboard/pro/billing): the subscription card, for anyone with a billing account, entitled or not. A
+ * customer whose access ended still needs it: to update the payment method that failed, or for their invoices.
+ */
 export function BillingView({ access, accountEmail }: Pick<Props, 'access' | 'accountEmail'>) {
-  if (!isEntitled(access)) return <NoSubscription access={access} accountEmail={accountEmail} />;
+  if (!access.customerId) return <NoSubscription access={access} accountEmail={accountEmail} />;
 
   return (
     <div className={'max-w-3xl'}>

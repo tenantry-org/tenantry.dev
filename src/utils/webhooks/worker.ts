@@ -6,8 +6,11 @@ import { CUSTOMER_LEASE_EVENT } from '@/utils/webhooks/customer-lease';
 import { alertOperator } from '@/utils/email/alerts';
 import { errorMessage } from '@/utils/errors';
 
-/** How long a claimed event stays locked: longer than processing one event can take. */
-const LOCK_SECONDS = 120;
+/**
+ * How long a claimed event stays locked: longer than processing one event can take, since every route that
+ * drains the inbox stops at its `maxDuration`, which is shorter (lease-deadlines.test.ts).
+ */
+export const LOCK_SECONDS = 120;
 const BATCH_SIZE = 5;
 
 export interface DrainResult {

@@ -5,17 +5,18 @@ import {
   hasLiveLicence,
   getCustomerAccess,
   getCustomerEmail,
-  getGithubLogin,
+  getGithubAccount,
   clearLicenceFailure,
   listEntitlements,
   recordLicence,
   recordLicenceFailure,
   revokeLicences,
   setCustomerAccess,
+  setGithubLogin,
   setGithubState,
 } from '@/utils/entitlements/entitlements-store';
 import { issueLicence } from '@/utils/licensing/licence-issuer';
-import { grantAccess, revokeAccess } from '@/utils/github/provisioning';
+import { currentLogin, grantAccess, revokeAccess } from '@/utils/github/provisioning';
 import { sendEmail } from '@/utils/email/send';
 import { accessRevokedEmail, welcomeProEmail } from '@/utils/email/templates';
 import { automatedProvisioningEnabled } from '@/utils/provisioning-guard';
@@ -122,10 +123,29 @@ export async function syncCustomerAccess(customerId: string): Promise<AccessSync
   return { change: 'started', licence };
 }
 
+/**
+ * The current login of the customer's linked GitHub account, looked up by its id: after a rename the stored
+ * login names nobody, or someone else. Records a new login. Null when the customer has not linked GitHub, or
+ * the account has since been deleted (its team membership and invitations went with it).
+ */
+export async function linkedGithubLogin(customerId: string): Promise<string | null> {
+  const account = await getGithubAccount(customerId);
+  if (!account) return null;
+
+  const login = await currentLogin(account.id);
+  if (login === null) {
+    console.warn(`Customer access: the GitHub account linked to customer ${customerId} (id ${account.id}) is deleted.`);
+    return null;
+  }
+
+  if (login !== account.login) await setGithubLogin(customerId, login);
+  return login;
+}
+
 async function grantGithubAccess(customerId: string) {
   let githubLogin: string | null;
   try {
-    githubLogin = await getGithubLogin(customerId);
+    githubLogin = await linkedGithubLogin(customerId);
   } catch (error) {
     console.error(
       `Customer access: could not read the GitHub link of customer ${customerId}; reconcile retries:`,
@@ -243,7 +263,7 @@ async function forgetLicenceFailures(customerId: string) {
 
 async function endAccess(customerId: string, email: string | null) {
   try {
-    const githubLogin = await getGithubLogin(customerId);
+    const githubLogin = await linkedGithubLogin(customerId);
     if (githubLogin) await revokeAccess(githubLogin);
   } catch (error) {
     console.error(

@@ -9,6 +9,13 @@ import { createClient } from '@/utils/supabase/server-internal';
 /** The inbox event type of a lease row. The worker completes one it claims (an expired lease) as a no-op. */
 export const CUSTOMER_LEASE_EVENT = 'tenantry.customer_lease';
 
+/**
+ * How long a lease lasts if it is never released. The work it protects cannot outlast it: every route that
+ * takes a lease stops at its `maxDuration`, which is shorter (lease-deadlines.test.ts). Otherwise a slow
+ * relink could go on after the lease expired and another event for the customer had started.
+ */
+export const LEASE_SECONDS = 120;
+
 /** Returned by withCustomerLease when the customer stayed busy for the whole wait. */
 export const CUSTOMER_BUSY = Symbol('customer-busy');
 
@@ -30,7 +37,7 @@ export async function withCustomerLease<T>(
   customerId: string,
   work: () => Promise<T>,
   {
-    seconds = 120,
+    seconds = LEASE_SECONDS,
     waitMs = 10_000,
     pollMs = 500,
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
