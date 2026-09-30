@@ -49,7 +49,9 @@ export function feedCredentials(githubLogin: string | null): string {
 export ${FEED_TOKEN_VARIABLE}=ghp_your_token`;
 }
 
-export const licenceRegistration = `tenant.UsePro(pro =>
+export const licenceRegistration = `using Tenantry.Pro;
+
+tenant.UsePro(pro =>
 {
     pro.WithLicence(builder.Configuration["${LICENCE_CONFIG_KEY}"]!);
     // …
