@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { ciWorkflow, licenceRegistration, licenceUserSecret, nugetConfig } from './install-snippets';
+import { ciWorkflow, LICENCE_CONFIG_KEY, licenceUserSecret, nugetConfig } from './install-snippets';
 
 // Tenantry.Pro's installation guide, from a sibling checkout when working locally (the synced docs are those of
 // the latest release, which may predate a change made on both sides).
@@ -22,7 +22,7 @@ describe('install snippets', () => {
 
     expect(codeBlocks(guide, 'xml')).toContain(nugetConfig('tenantry-org'));
     expect(codeBlocks(guide, 'yaml').map((block) => block.trimEnd())).toContain(ciWorkflow);
-    expect(codeBlocks(guide, 'csharp').map((block) => block.trimEnd())).toContain(licenceRegistration);
+    expect(guide).toContain(`configuration key \`${LICENCE_CONFIG_KEY}\``);
     expect(guide).toContain(licenceUserSecret);
   });
 });

@@ -8,7 +8,7 @@ import {
 } from 'crypto';
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { jwtVerify } from 'jose';
+import { calculateJwkThumbprint, exportJWK, jwtVerify } from 'jose';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { issueLicence, type LicenceClaims } from './licence-issuer';
 
@@ -17,8 +17,9 @@ import { issueLicence, type LicenceClaims } from './licence-issuer';
  *
  * `licence-contract.json` holds a token signed by `issueLicence` with a TEST key, the claims it was signed
  * with, and the test public key. An identical copy lives in the Pro repo
- * (tests/Tenantry.Pro.Tests/Licensing/Fixtures/licence-contract.json), where the real LicenseValidator must
- * accept the token and reject the same signature DER-encoded. The token is a standard ES256 JWT (the
+ * (tests/Tenantry.Pro.Tests/Licensing/Fixtures/licence-contract.json), where Tenantry.Pro's validator must
+ * accept the token (finding the key by its `kid`, and checking `iss`, `aud` and `ver`) and reject the same
+ * signature DER-encoded. The token is a standard ES256 JWT (the
  * signature is r‖s, as RFC 7518 §3.4 requires), which a JWT library verifies here. So a format change on
  * either side breaks a test:
  *   - here, if `issueLicence` changes its header, claims, serialisation or signature encoding;
@@ -140,10 +141,17 @@ describe('licence format contract with Tenantry.Pro', () => {
     const { payload } = await jwtVerify(contract.token, contractTestKey().publicKey, {
       algorithms: ['ES256'],
       issuer: 'Tenantry',
+      audience: 'tenantry-pro',
       currentDate: new Date(contract.issuedAt),
     });
 
-    expect(payload).toMatchObject({ sub: contract.claims.customerId });
+    expect(payload).toMatchObject({ sub: contract.claims.customerId, ver: 1 });
+  });
+
+  it('names the test key by its JWK thumbprint, as Pro looks it up', async () => {
+    const header = JSON.parse(base64UrlDecode(contract.token.split('.')[0]).toString());
+
+    expect(header.kid).toBe(await calculateJwkThumbprint(await exportJWK(contractTestKey().publicKey), 'sha256'));
   });
 
   it('does not produce a DER-encoded signature, which a JWT library and Pro reject', async () => {

@@ -5,5 +5,5 @@
   "claims": {
     "customerId": "ctm_contract"
   },
-  "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJUZW5hbnRyeSIsInN1YiI6ImN0bV9jb250cmFjdCIsImlhdCI6MTc5MDQ2NzIwMH0._AkI-legWKRPMawd6jFyN1M5ahLhixeVh7w2gK-adiR7jbX2bK0yLWPGEwbWTTC1eR8RFrxvMt_HTLv4skuf9w"
+  "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IlV5UGd1aGszZmgwZkhCUmgyN3dyQURoTzA1b2NWc0dFVWJ6VmFTOXJoQ3MifQ.eyJpc3MiOiJUZW5hbnRyeSIsImF1ZCI6InRlbmFudHJ5LXBybyIsInZlciI6MSwic3ViIjoiY3RtX2NvbnRyYWN0IiwiaWF0IjoxNzkwNDY3MjAwfQ.upa5HTUfbNzq0xQ2MwtudHnzlVS8jD7k6jh5SlpZztNKc1HfSHRue2Cl70f19LRtRKFprG91aHcdAkuPJbfUEw"
 }

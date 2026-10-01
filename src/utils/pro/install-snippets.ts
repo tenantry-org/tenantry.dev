@@ -12,9 +12,9 @@ export const FEED_TOKEN_VARIABLE = 'TENANTRY_GITHUB_PAT';
 export const CREATE_TOKEN_URL =
   'https://github.com/settings/tokens/new?scopes=read:packages&description=Tenantry%20Pro%20packages';
 
-/** Where the licence key is read from: the configuration key, and its environment-variable form. */
-export const LICENCE_CONFIG_KEY = 'Tenantry:Licence';
-export const LICENCE_ENV_VARIABLE = 'Tenantry__Licence';
+/** Where Tenantry.Pro reads the licence key from: the configuration key, and its environment-variable form. */
+export const LICENCE_CONFIG_KEY = 'Tenantry:License';
+export const LICENCE_ENV_VARIABLE = 'Tenantry__License';
 
 export function nugetConfig(githubOrg: string): string {
   return `<?xml version="1.0" encoding="utf-8"?>
@@ -49,14 +49,6 @@ export function feedCredentials(githubLogin: string | null): string {
 export ${FEED_TOKEN_VARIABLE}=ghp_your_token`;
 }
 
-export const licenceRegistration = `using Tenantry.Pro;
-
-tenant.UsePro(pro =>
-{
-    pro.WithLicence(builder.Configuration["${LICENCE_CONFIG_KEY}"]!);
-    // …
-});`;
-
 export const licenceUserSecret = `dotnet user-secrets init
 dotnet user-secrets set "${LICENCE_CONFIG_KEY}" "<your licence key>"`;
 
@@ -76,4 +68,4 @@ export const ciWorkflow = `jobs:
       - run: dotnet build --no-restore
       - run: dotnet test --no-build
         env:
-          ${LICENCE_ENV_VARIABLE}: \${{ secrets.TENANTRY_LICENCE }}`;
+          ${LICENCE_ENV_VARIABLE}: \${{ secrets.TENANTRY_LICENSE }}`;

@@ -18,7 +18,6 @@ import {
   LICENCE_ENV_VARIABLE,
   ciWorkflow,
   feedCredentials,
-  licenceRegistration,
   licenceUserSecret,
   nugetConfig,
 } from '@/utils/pro/install-snippets';
@@ -251,8 +250,8 @@ export function AccessView({ access, githubOrg, linkError, accountEmail }: Props
           {licence ? (
             <>
               <p className={'text-sm text-muted-foreground'}>
-                It does not expire: renewals keep the same key. Keep it out of source control and pass it to{' '}
-                <code>pro.WithLicence</code>, here from the configuration key <code>{LICENCE_CONFIG_KEY}</code>:
+                It does not expire: renewals keep the same key. Keep it out of source control: Tenantry.Pro reads it
+                from the configuration key <code>{LICENCE_CONFIG_KEY}</code>.
               </p>
               <code
                 className={
@@ -280,7 +279,6 @@ export function AccessView({ access, githubOrg, linkError, accountEmail }: Props
                   <Download className={'h-4 w-4'} /> Download
                 </Button>
               </div>
-              <Snippet value={licenceRegistration} maxHeight={'max-h-32'} />
               <p className={'text-sm text-muted-foreground'}>
                 Locally, store it with user secrets, from your project&apos;s directory (they are read in the
                 Development environment). In CI and other environments, set the environment variable{' '}
