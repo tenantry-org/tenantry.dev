@@ -20,7 +20,7 @@ export const ProOffer: Offer = {
     'Tenant provisioning, lifecycle & migration orchestration across tenant databases',
     'Provisioning on SQL Server, PostgreSQL & MySQL',
     'Schema-per-tenant (SQL Server & PostgreSQL) and mixed mode',
-    'Connection-string caching & at-rest encryption',
+    'Connection-string caching',
     'Hangfire, MassTransit, Quartz & Rebus integrations',
     'Audit logging, health checks & OpenTelemetry metrics',
     'Private NuGet package feed',
