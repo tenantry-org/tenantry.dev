@@ -8,15 +8,10 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { Confirmation } from '@/components/shared/confirmation/confirmation';
 import { keepSubscription, openBillingPortal, type BillingPortalTarget } from '@/app/dashboard/pro/billing-actions';
-import type { BillingSubscription, ProAccess } from '@/server/billing/pro-access';
+import type { BillingView } from '@/server/billing/pro-pages';
 import { ProOffer } from '@/constants/pro-offer';
 
-interface Props {
-  /** The customer's access; null for a customer who never had any. */
-  entitlement: ProAccess['entitlement'];
-  subscriptions: BillingSubscription[];
-  cardClass: string;
-}
+type Props = Pick<BillingView, 'access' | 'subscriptions'>;
 
 type Pending = { kind: 'cancel' | 'keep'; subscriptionId: string } | null;
 
@@ -26,7 +21,7 @@ type Pending = { kind: 'cancel' | 'keep'; subscriptionId: string } | null;
  * cancellation can be undone here (Keep subscription) or in the portal (Don't cancel). Shown to former customers
  * too: one whose grace period ended updates the failed payment method here, and invoices stay available.
  */
-export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
+export function BillingCard({ access, subscriptions }: Readonly<Props>) {
   const { toast } = useToast();
   const [busy, startTransition] = useTransition();
   const [confirming, setConfirming] = useState<Pending>(null);
@@ -39,7 +34,7 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
       : subscription,
   );
   // When every Pro subscription is set to end, access ends with the last of them.
-  const status = entitlement?.status ?? 'revoked';
+  const status = access?.status ?? 'revoked';
   const endsAt =
     status === 'active' && shown.length > 0 && shown.every((subscription) => subscription.endsAt)
       ? shown
@@ -96,7 +91,7 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
   }
 
   return (
-    <Card className={cardClass}>
+    <Card className={'p-6'}>
       <CardHeader className={'p-0'}>
         <CardTitle className={'flex items-center justify-between'}>
           <span>Subscription and billing</span>
@@ -104,7 +99,7 @@ export function BillingCard({ entitlement, subscriptions, cardClass }: Props) {
         </CardTitle>
       </CardHeader>
       <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
-        {status === 'grace' && <GraceNotice grace={entitlement?.grace ?? null} />}
+        {status === 'grace' && <GraceNotice grace={access?.grace ?? null} />}
         {status === 'revoked' && (
           <EndedNotice paymentFailed={shown.some((subscription) => subscription.status === 'past_due')} />
         )}

@@ -4,6 +4,28 @@ import { CUSTOMER_BUSY } from '@/server/jobs/customer-lease';
 import { grantAndRecord } from '@/server/billing/customer-access';
 import { isEntitled } from '@/server/billing/access-policy';
 import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
+import type { LinkErrorCode } from '@/lib/link-errors';
+
+export interface SyncResult {
+  linked: boolean;
+  /** Added to the team, or sent an org invitation to accept (`invited`). */
+  granted: boolean;
+  invited?: boolean;
+  /** Why it was not linked, or not granted: the Access page explains the link errors among these. */
+  reason?: LinkErrorCode | NotGranted;
+}
+
+/** Outcomes the Access page shows no error for: there is nothing to link yet, or its GitHub card shows what follows. */
+type NotGranted =
+  | 'not-authenticated'
+  | 'no-email'
+  | 'email-not-confirmed'
+  | 'no-github-identity'
+  | 'incomplete-identity'
+  | 'no-customer'
+  | 'no-active-entitlement'
+  | 'provisioning-disabled'
+  | 'grant-failed';
 
 /**
  * Reconciles the signed-in user's GitHub identity into `github_links` and, if their customer is entitled
@@ -22,27 +44,6 @@ import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
  * otherwise a reconcile could read the previous link and add the previous account back. Never throws:
  * failures are logged and returned as a reason, which the portal shows.
  */
-/** Link outcomes the portal explains to the customer (`/dashboard/pro?error=<reason>`). */
-export const LINK_ERRORS = [
-  'github-account-linked-elsewhere',
-  'github-account-deleted',
-  'relink-failed',
-  'link-busy',
-  'sync-failed',
-] as const;
-
-export function isLinkError(reason: string | undefined): reason is (typeof LINK_ERRORS)[number] {
-  return (LINK_ERRORS as readonly string[]).includes(reason ?? '');
-}
-
-export interface SyncResult {
-  linked: boolean;
-  /** Added to the team, or sent an org invitation to accept (`invited`). */
-  granted: boolean;
-  invited?: boolean;
-  reason?: string;
-}
-
 export async function syncGithubLinkForCurrentUser(deps: BillingDeps = defaultBillingDeps): Promise<SyncResult> {
   try {
     return await syncGithubLink(deps);

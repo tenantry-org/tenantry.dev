@@ -1,16 +1,16 @@
 import { Suspense } from 'react';
 import { DashboardPageHeader } from '@/components/dashboard/layout/dashboard-page-header';
 import { LoadingScreen } from '@/components/dashboard/layout/loading-screen';
-import { getProAccess } from '@/server/billing/pro-access';
-import { AccessView } from '@/components/dashboard/pro/pro-access-view';
+import { AccessPanel } from '@/components/dashboard/pro/access/access-panel';
+import { getAccessView } from '@/server/billing/pro-pages';
 import { serverConfig } from '@/server/config/server-config';
-import { getCurrentUser } from '@/server/db/current-user';
+import { isLinkErrorCode } from '@/lib/link-errors';
 
 // The Connect GitHub action runs here and holds the customer's lease, which must outlast it (customer-lease.ts).
 export const maxDuration = 60;
 
 interface Props {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string | string[] }>;
 }
 
 export default function AccessPage({ searchParams }: Props) {
@@ -25,13 +25,12 @@ export default function AccessPage({ searchParams }: Props) {
 }
 
 async function Access({ searchParams }: Props) {
-  const [{ error }, access, user] = await Promise.all([searchParams, getProAccess(), getCurrentUser()]);
+  const [{ error }, view] = await Promise.all([searchParams, getAccessView()]);
   return (
-    <AccessView
-      access={access}
+    <AccessPanel
+      view={view}
       githubOrg={serverConfig().github.org}
-      linkError={error}
-      accountEmail={user?.email ?? null}
+      linkError={isLinkErrorCode(error) ? error : undefined}
     />
   );
 }

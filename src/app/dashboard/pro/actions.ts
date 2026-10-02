@@ -3,7 +3,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createUserClient } from '@/server/db/user-client';
-import { isLinkError, syncGithubLinkForCurrentUser } from '@/server/billing/sync-github-link';
+import { syncGithubLinkForCurrentUser } from '@/server/billing/sync-github-link';
+import { isLinkErrorCode, linkErrorPage } from '@/lib/link-errors';
 import { serverConfig } from '@/server/config/server-config';
 
 /**
@@ -22,7 +23,7 @@ export async function connectGithub() {
 
   if (alreadyHasGithub) {
     const { reason } = await syncGithubLinkForCurrentUser();
-    if (isLinkError(reason)) redirect(`/dashboard/pro?error=${reason}`);
+    if (isLinkErrorCode(reason)) redirect(linkErrorPage(reason));
     revalidatePath('/dashboard/pro', 'layout'); // Access, Install and Billing all show this customer's state
     return;
   }
@@ -46,19 +47,19 @@ export async function switchGithubAccount() {
 
   if (error) {
     console.error('Failed to read the identities of the login:', error);
-    redirect('/dashboard/pro?error=github-link');
+    redirect(linkErrorPage('github-link'));
   }
 
   const identities = data?.identities ?? [];
   const github = identities.find((identity) => identity.provider === 'github');
 
   if (github) {
-    if (identities.length < 2) redirect('/dashboard/pro?error=github-only-sign-in');
+    if (identities.length < 2) redirect(linkErrorPage('github-only-sign-in'));
 
     const { error: unlinkError } = await supabase.auth.unlinkIdentity(github);
     if (unlinkError) {
       console.error('Failed to disconnect the GitHub identity:', unlinkError);
-      redirect('/dashboard/pro?error=github-link');
+      redirect(linkErrorPage('github-link'));
     }
   }
 
@@ -74,7 +75,7 @@ async function startGithubLink(supabase: Awaited<ReturnType<typeof createUserCli
 
   if (error) {
     console.error('Failed to start GitHub identity link:', error);
-    redirect('/dashboard/pro?error=github-link');
+    redirect(linkErrorPage('github-link'));
   }
 
   if (data?.url) redirect(data.url);

@@ -1,9 +1,8 @@
 import { Suspense } from 'react';
 import { DashboardPageHeader } from '@/components/dashboard/layout/dashboard-page-header';
 import { LoadingScreen } from '@/components/dashboard/layout/loading-screen';
-import { getProAccess } from '@/server/billing/pro-access';
-import { BillingView } from '@/components/dashboard/pro/pro-access-view';
-import { getCurrentUser } from '@/server/db/current-user';
+import { BillingPanel } from '@/components/dashboard/pro/billing/billing-panel';
+import { getBillingView } from '@/server/billing/pro-pages';
 
 export default function BillingPage() {
   return (
@@ -17,6 +16,5 @@ export default function BillingPage() {
 }
 
 async function Billing() {
-  const [access, user] = await Promise.all([getProAccess(), getCurrentUser()]);
-  return <BillingView access={access} accountEmail={user?.email ?? null} />;
+  return <BillingPanel view={await getBillingView()} />;
 }

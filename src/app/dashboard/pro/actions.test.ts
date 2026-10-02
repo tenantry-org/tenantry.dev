@@ -8,10 +8,7 @@ const auth = vi.hoisted(() => ({
   getUser: vi.fn(),
 }));
 vi.mock('@/server/db/user-client', () => ({ createUserClient: async () => ({ auth }) }));
-vi.mock('@/server/billing/sync-github-link', () => ({
-  isLinkError: () => false,
-  syncGithubLinkForCurrentUser: vi.fn(),
-}));
+vi.mock('@/server/billing/sync-github-link', () => ({ syncGithubLinkForCurrentUser: vi.fn() }));
 // This environment's site URL is https://sandbox.example.com.
 vi.mock('@/server/config/server-config', async () => ({
   serverConfig: (await import('@/test/server-config')).testServerConfig,

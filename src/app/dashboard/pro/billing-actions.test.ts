@@ -4,7 +4,7 @@ import { keepSubscription, openBillingPortal } from './billing-actions';
 const paddle = vi.hoisted(() => ({
   subscriptions: { get: vi.fn(), update: vi.fn() },
   customerPortalSessions: { create: vi.fn() },
-  customerId: 'ctm_mine',
+  customerId: 'ctm_mine' as string | null,
   signedIn: true,
 }));
 vi.mock('@/server/db/user-client', () => ({
@@ -72,7 +72,7 @@ describe('openBillingPortal', () => {
   });
 
   it('refuses a login with no customer, and no session', async () => {
-    paddle.customerId = '';
+    paddle.customerId = null;
     await expect(openBillingPortal({ kind: 'overview' })).resolves.toMatchObject({ error: expect.any(String) });
 
     paddle.customerId = 'ctm_mine';
@@ -98,7 +98,7 @@ describe('keepSubscription', () => {
   it("refuses another customer's subscription, and a signed-in user who is not a customer", async () => {
     await expect(keepSubscription('sub_theirs')).resolves.toEqual({ error: 'Subscription not found' });
 
-    paddle.customerId = '';
+    paddle.customerId = null;
     await expect(keepSubscription('sub_mine')).resolves.toEqual({ error: 'Subscription not found' });
     expect(paddle.subscriptions.update).not.toHaveBeenCalled();
   });

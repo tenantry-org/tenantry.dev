@@ -28,7 +28,7 @@ Key code is in `src/server`, in layers whose imports point only down this list (
 - `billing/` — the rules and services: who is entitled, and until when (`access-policy.ts`); keeping a customer's
   access, GitHub membership, licence and emails in line with their entitlements (`customer-access.ts`); applying
   Paddle's notifications (`apply-paddle-event.ts`); linking a GitHub account (`sync-github-link.ts`); the reconcile
-  run; and the Pro pages' read model (`pro-access.ts`).
+  run; and the Pro pages' read models, one per page, each reading only what its page shows (`pro-pages.ts`).
 - `jobs/` — the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order, and
   the per-customer leases.
 - `integrations/` — Paddle, GitHub team provisioning (a GitHub App), email (Resend) and the licence issuer.
@@ -42,7 +42,7 @@ Modules in `src/server` import `server-only` (except `db/update-session.ts`, whi
 component that pulls one in fails the build. The services that change a customer's access (`customer-access.ts`,
 `reconcile-customer.ts`, `apply-paddle-event.ts`, `sync-github-link.ts`) take what they use from the layers below as
 their last argument (`billing/deps.ts`), defaulting to the real modules, so their tests pass an in-memory billing store
-and fakes instead of replacing modules; the read model is tested against a fake Supabase client. `src/lib` holds
+and fakes instead of replacing modules; the read models are tested against a fake Supabase client. `src/lib` holds
 helpers for both sides, and `src/test` the fakes the tests share.
 
 The database schema, with its RLS policies and functions, is one file,

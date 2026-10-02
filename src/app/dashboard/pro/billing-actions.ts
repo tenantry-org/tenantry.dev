@@ -68,7 +68,7 @@ export async function keepSubscription(subscriptionId: string): Promise<Result<{
 
 async function sessionCustomerId(): Promise<string | null> {
   await validateUserSession();
-  return (await getCustomerId()) || null;
+  return getCustomerId();
 }
 
 // The subscription, if it belongs to the customer (its id comes from the browser), else null.
