@@ -1,0 +1,38 @@
+name: devto
+
+# Copies the blog's published posts to dev.to (scripts/devto-sync.mjs) after each successful production deployment,
+# which Vercel reports to GitHub, or on demand. The script waits until tenantry.dev serves the deployed commit's posts,
+# then creates or updates each post's article, found by its canonical URL, so a run that fails is made good by the next.
+# It needs the DEVTO_API_KEY secret (dev.to → Settings → Extensions), and does nothing without it;
+# DEVTO_ORGANIZATION_ID, a repository variable, publishes new articles under that dev.to organisation.
+on:
+  deployment_status:
+  workflow_dispatch:
+
+concurrency:
+  group: devto
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Copy the posts to dev.to
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment.environment == 'Production' && github.event.deployment_status.state == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The deployed commit, whose posts the site must serve before they are copied.
+          ref: ${{ github.event.deployment.sha || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+      # Plain Node; nothing is installed.
+      - run: node scripts/devto-sync.mjs
+        env:
+          DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
+          DEVTO_ORGANIZATION_ID: ${{ vars.DEVTO_ORGANIZATION_ID }}

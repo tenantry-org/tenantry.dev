@@ -15,6 +15,9 @@ const securityHeaders = [
 const nextConfig = {
   // Pages prerender a static shell and stream their dynamic parts into Suspense boundaries (Partial Prerendering).
   cacheComponents: true,
+  // The blog's posts.json reads the posts' files when it is requested (src/app/blog/posts.json/route.ts), so they
+  // ship with its function.
+  outputFileTracingIncludes: { '/blog/posts.json': ['./content/blog/**/*'] },
   reactCompiler: true,
   experimental: {
     // The Rust port of the React Compiler, which runs inside Turbopack instead of through Babel.

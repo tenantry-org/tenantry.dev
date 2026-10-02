@@ -110,6 +110,36 @@ tag's `CHANGELOG.md`, with a link to the rest (`scripts/docs-changelog.mjs`); te
   `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or `CORE_DOCS_DIR`); it replaces the newest version's docs.
   Vercel and CI builds refuse overrides.
 
+## Blog
+
+Posts are Markdown files in `content/blog/` (`<slug>.md`, served at `/blog/<slug>`), a fumadocs-mdx collection
+whose frontmatter `source.config.ts` checks:
+
+```yaml
+---
+title: Running EF Core migrations across tenant databases
+description: One sentence, for the index, search results and link previews.
+date: 2026-10-10 # published; `updated:` too, when it changes in substance
+author: Oliver McNally
+versions: Tenantry 0.5, .NET 10, EF Core 10 # what its examples were checked against
+tags: [dotnet, efcore, multitenancy] # dev.to's: at most four, lowercase letters and digits
+next: { label: Read the migration guide, href: /docs/pro/migration-orchestration }
+draft: true # until it is ready; then remove the line
+---
+```
+
+Write plain Markdown, without MDX components: dev.to gets the same text. A generic type outside a code span
+(`List<T>`) is read as HTML and disappears, as it would on dev.to. Merging a post to `master` publishes it. A draft
+has a page locally and in the sandbox, marked as one, but is never in production, the RSS feed (`/blog/rss.xml`), the
+sitemap or on dev.to.
+
+**dev.to.** After each production deployment, the `devto` workflow (`scripts/devto-sync.mjs`) waits until
+tenantry.dev serves the deployed commit's posts (`/blog/posts.json`), then creates each published post's dev.to
+article, or updates it when the post changed. It finds the article by its canonical URL, the post's address here, so
+dev.to links back and search engines credit the site. It needs the `DEVTO_API_KEY` secret (dev.to → Settings →
+Extensions) and does nothing without it; the `DEVTO_ORGANIZATION_ID` variable publishes new articles under that
+dev.to organisation. Run it from the Actions tab to retry.
+
 ## Configuration
 
 See [`.env.example`](.env.example) for the full list of environment variables (Supabase, Paddle,
