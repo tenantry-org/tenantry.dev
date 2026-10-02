@@ -2,10 +2,10 @@ import type { MetadataRoute } from 'next';
 import { absoluteUrl, publishedPosts } from '@/lib/blog';
 import { source } from '@/lib/source';
 
-// The public pages: the home page, the blog, the latest docs (an older version's pages name the latest as canonical)
+// The public pages: the home page, the Pro page, the blog, the latest docs (an older version's pages name the latest as canonical)
 // and the legal pages. Account, checkout and dashboard pages are not for search engines.
 export default function sitemap(): MetadataRoute.Sitemap {
-  const pages = ['/', '/blog', '/legal/terms', '/legal/privacy', '/legal/refunds', '/legal/eula'];
+  const pages = ['/', '/pro', '/blog', '/legal/terms', '/legal/privacy', '/legal/refunds', '/legal/eula'];
   const docs = source
     .getPages()
     .map((page) => page.url)

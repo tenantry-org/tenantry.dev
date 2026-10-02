@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
   title: 'Tenantry — Multi-tenancy for .NET',
   description:
-    'Tenantry is a production-grade multi-tenancy toolkit for .NET. Core is open source and isolates tenants in a shared database or a database per tenant. Pro adds schema-per-tenant and mixed mode, provisioning, migration orchestration across tenant databases, tenant lifecycle management, and background-job and messaging integrations.',
+    'Tenantry brings multi-tenancy to your .NET application. Open-source Tenantry Core resolves tenants and isolates their data in EF Core, in a shared database or a database per tenant. Tenantry Pro adds provisioning, migrations across tenant databases, schema per tenant, and the tenant in background jobs and messages.',
 };
 
 export const viewport: Viewport = {

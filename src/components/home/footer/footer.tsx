@@ -8,7 +8,9 @@ const COLUMNS = [
     title: 'Product',
     links: [
       { label: 'Docs', href: '/docs' },
+      { label: 'Tenantry Pro', href: '/pro' },
       { label: 'Pricing', href: '/#pricing' },
+      { label: 'Blog', href: '/blog' },
       { label: 'Core on GitHub', href: 'https://github.com/tenantry-org/tenantry-core', external: true },
     ],
   },
@@ -31,7 +33,7 @@ export function Footer() {
           <Link href={'/'} aria-label={'Tenantry home'} className={'w-fit text-foreground'}>
             <Logo className={'h-6'} />
           </Link>
-          <p className={'max-w-xs text-sm text-muted-foreground'}>Multi-tenancy for .NET, done properly.</p>
+          <p className={'max-w-xs text-sm text-muted-foreground'}>Modern multi-tenancy for .NET.</p>
         </div>
         {COLUMNS.map((column) => (
           <div key={column.title} className={'flex flex-col gap-3 text-sm'}>

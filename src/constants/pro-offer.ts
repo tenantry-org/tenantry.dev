@@ -13,7 +13,7 @@ export interface Offer {
  */
 export const ProOffer: Offer = {
   name: 'Tenantry Pro',
-  description: 'The tooling to run many tenant databases in production.',
+  description: 'Provisioning, migrations across tenant databases, and tenant-aware operations.',
   features: [
     'Tenant provisioning, lifecycle & migration orchestration across tenant databases',
     'Provisioning on SQL Server, PostgreSQL & MySQL',

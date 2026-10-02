@@ -1,29 +1,30 @@
 import Link from 'next/link';
 import { ArrowRight, Check, Layers, ServerCog, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { LogoMark } from '@/components/brand/logo';
+import { ProOffer } from '@/constants/pro-offer';
 import { cn } from '@/lib/utils';
 
-// From Tenantry Core's README ("Why Tenantry?" and "Tenantry and Tenantry.Pro").
+// From Tenantry Core's README ("Why Tenantry?" and "Tenantry and Tenantry.Pro"), for the release the docs show.
 const PRINCIPLES = [
   {
-    icon: SlidersHorizontal,
-    title: 'Unopinionated',
-    text: 'A Guid, int, string or any parsable tenant key. Resolve tenants from a header, subdomain, route, claim or query string, and store them anywhere.',
+    icon: Layers,
+    title: 'Your DbContext stays yours',
+    text: 'One call, options.UseTenantry(), isolates any DbContext: no base class, no interface, no SaveChanges override. Pooled contexts too, with a database per tenant.',
   },
   {
     icon: ShieldCheck,
     title: 'Fails closed',
-    text: 'With no tenant resolved, queries match nothing. Updates and deletes of another tenant’s rows are rejected before saving.',
+    text: 'With no tenant, queries match nothing. Writes to another tenant’s rows are rejected before saving, and the stored tenant is part of every UPDATE and DELETE, so a forged key changes nothing.',
   },
   {
-    icon: Layers,
-    title: 'No base class required',
-    text: 'Stamping and cross-tenant write protection work on any DbContext through EF Core interceptors and query filters.',
+    icon: SlidersHorizontal,
+    title: 'Your keys, your registry',
+    text: 'A Guid, int, string or any parsable tenant key. Resolve it from a header, subdomain, route, claim or query string, and keep your tenants where they already are.',
   },
   {
     icon: ServerCog,
     title: 'HTTP and beyond',
-    text: 'Resolution middleware and access validation for ASP.NET Core, and the same isolation in console, worker and desktop hosts.',
+    text: 'ASP.NET Core middleware and access validation, and the same isolation in workers, console and desktop apps. .NET 8, 9 and 10; Native AOT for the core and ASP.NET Core packages.',
   },
 ];
 
@@ -35,11 +36,11 @@ const CORE = [
 ];
 
 const PRO = [
-  'A schema per tenant (SQL Server, PostgreSQL) and mixed mode',
   'Provisioning of tenant databases on SQL Server, PostgreSQL and MySQL, and of schemas on SQL Server and PostgreSQL',
-  'Migration orchestration across every tenant database, and the provision → migrate → seed lifecycle',
-  'Caching of connection strings',
-  'Tenant context in Hangfire, MassTransit, Quartz.NET and Rebus, health checks, audit logging and telemetry',
+  'Migrations across every tenant database or schema, as a deployment step, and the provision → migrate → seed lifecycle',
+  'A schema per tenant (SQL Server, PostgreSQL), and mixed mode: a database, a schema or the shared one per tenant',
+  'The tenant carried through Hangfire, MassTransit, Quartz.NET and Rebus',
+  'Audit logging, tenant health checks, per-tenant metrics and connection-string caching',
 ];
 
 function Edition({
@@ -114,9 +115,10 @@ export function Features() {
       </div>
 
       <div className={'mt-24 max-w-2xl'}>
-        <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>Open-source Core. Pro for many databases.</h2>
+        <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>Open-source Core. Pro for running tenants.</h2>
         <p className={'mt-4 text-lg text-muted-foreground'}>
-          Core covers identifying tenants and isolating their data. Pro adds what running many tenant databases takes.
+          Core identifies tenants and isolates their data, free and complete on its own. Pro adds the work around them:
+          creating and migrating their databases, the tenant in jobs and messages, and auditing and monitoring.
         </p>
       </div>
       <div className={'mt-10 grid gap-6 lg:grid-cols-2'}>
@@ -133,11 +135,11 @@ export function Features() {
         <Edition
           name={'Tenantry Pro'}
           badge={'Subscription'}
-          summary={'The tooling to run many tenant databases in production.'}
+          summary={ProOffer.description}
           items={PRO}
           links={[
+            { label: 'What Pro adds', href: '/pro' },
             { label: 'Pro docs', href: '/docs/pro' },
-            { label: 'Pricing', href: '/#pricing' },
           ]}
           featured={true}
         />

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
+import { TrackedLink } from '@/components/shared/tracked-link';
 import { highlight } from 'fumadocs-core/highlight';
 import { Button } from '@/components/ui/button';
 import { GithubIcon } from '@/components/icons/github-icon';
@@ -51,28 +52,30 @@ export async function HeroSection() {
               'inline-flex items-center gap-2 rounded-full border border-accent-foreground/15 bg-accent px-3 py-1 text-xs font-medium text-accent-foreground'
             }
           >
-            Multi-tenancy toolkit for .NET
+            Modern multi-tenancy for .NET
           </span>
           <h1
             className={
               'mt-6 text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-[3.25rem] lg:leading-[1.08]'
             }
           >
-            Multi-tenancy for .NET, <span className={'text-link'}>done properly.</span>
+            Multi-tenancy for .NET, <span className={'text-link'}>built around your application.</span>
           </h1>
           <p className={'mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground'}>
-            Tenantry gives .NET apps real tenant isolation — a shared database with row-level scoping, a database per
-            tenant, or a schema per tenant — with provisioning, lifecycle management, and migration orchestration across
-            tenant databases.
+            Resolve tenants and isolate their data with open-source Tenantry Core, keeping your DbContext, your tenant
+            registry and your key type. Add Tenantry Pro to provision tenant databases, migrate them all, and carry the
+            tenant through your jobs and messages.
           </p>
           <div className={'mt-8 flex flex-wrap items-center gap-3'}>
             <Button asChild size={'lg'}>
-              <Link href={'/docs'}>
-                Read the docs <ArrowRight className={'h-4 w-4'} />
-              </Link>
+              <TrackedLink href={'/docs/core/getting-started'} event={'Get started with Core'} data={{ from: 'home' }}>
+                Get started with Core <ArrowRight className={'h-4 w-4'} />
+              </TrackedLink>
             </Button>
             <Button asChild size={'lg'} variant={'outline'}>
-              <Link href={'/#pricing'}>See Pro pricing</Link>
+              <TrackedLink href={'/pro'} event={'Explore Pro'} data={{ from: 'home' }}>
+                Explore Tenantry Pro
+              </TrackedLink>
             </Button>
             <Button asChild size={'lg'} variant={'ghost'}>
               <Link
@@ -80,7 +83,7 @@ export async function HeroSection() {
                 target={'_blank'}
                 rel={'noopener noreferrer'}
               >
-                <GithubIcon className={'h-4 w-4'} /> Star Core on GitHub
+                <GithubIcon className={'h-4 w-4'} /> View Core on GitHub
               </Link>
             </Button>
           </div>

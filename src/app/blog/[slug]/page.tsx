@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { PostByline } from '@/components/blog/post-byline';
+import { PostLink } from '@/components/blog/post-link';
+import { TrackedLink } from '@/components/shared/tracked-link';
 import { getMDXComponents } from '@/mdx-components';
 import { getPost, postsWithPages } from '@/lib/blog';
 
@@ -37,15 +39,17 @@ export default async function PostPage(props: Readonly<{ params: Promise<{ slug:
         <p className={'mt-4 text-sm text-muted-foreground'}>Checked against {post.versions}.</p>
       </header>
       <div className={'prose mt-10 max-w-none'}>
-        <MDX components={getMDXComponents()} />
+        <MDX components={getMDXComponents({ a: (props) => <PostLink post={post.slug} {...props} /> })} />
       </div>
       <aside className={'mt-14 rounded-xl border border-border bg-card p-6'}>
-        <Link
+        <TrackedLink
           href={post.next.href}
+          event={'Blog next step'}
+          data={{ post: post.slug, to: post.next.href }}
           className={'inline-flex items-center gap-1.5 font-semibold text-link hover:underline'}
         >
           {post.next.label} <ArrowRight className={'h-4 w-4'} aria-hidden={true} />
-        </Link>
+        </TrackedLink>
       </aside>
     </article>
   );

@@ -5,7 +5,9 @@ import { Logo } from '@/components/brand/logo';
 
 const NAV = [
   { label: 'Docs', href: '/docs' },
+  { label: 'Pro', href: '/pro' },
   { label: 'Pricing', href: '/#pricing' },
+  { label: 'Blog', href: '/blog' },
   { label: 'GitHub', href: 'https://github.com/tenantry-org/tenantry-core', external: true },
 ];
 

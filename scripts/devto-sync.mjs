@@ -75,14 +75,10 @@ export function plan(posts, articles, organizationId) {
   const creates = [];
   const updates = [];
   for (const post of posts) {
-    const wanted = articleFor(post, organizationId);
     const existing = byUrl.get(post.url);
-    if (!existing) creates.push({ post, article: wanted });
-    else if (differs(existing, wanted)) {
-      // The organisation is chosen when an article is created; an update leaves it as it is.
-      const { organization_id: _organization, ...update } = wanted;
-      updates.push({ post, id: existing.id, article: update });
-    }
+    // The organisation is chosen when an article is created; an update leaves it as it is.
+    if (!existing) creates.push({ post, article: articleFor(post, organizationId) });
+    else if (differs(existing, articleFor(post))) updates.push({ post, id: existing.id, article: articleFor(post) });
   }
   return { creates, updates };
 }
