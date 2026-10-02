@@ -19,6 +19,15 @@ const supabaseClients = [
   },
 ];
 
+// Only these modules query the database, each mapping rows to its own types: the service-role store, the webhook
+// inbox, and the dashboard's read model, which reads with the user's session.
+const databaseModules = [
+  'src/utils/entitlements/entitlements-store.ts',
+  'src/utils/webhooks/inbox.ts',
+  'src/utils/entitlements/get-entitlement.ts',
+];
+const queryElsewhere = 'Only the database modules (eslint.config.mjs) query Supabase: add a function to one of them.';
+
 // Next 16 removes `next lint`; we run the ESLint CLI directly against the native flat configs.
 const eslintConfig = [
   { ignores: ['.next/**', '.source/**', 'content/**', 'node_modules/**'] },
@@ -59,6 +68,22 @@ const eslintConfig = [
             },
           ],
         },
+      ],
+    },
+  },
+  {
+    // A table query is `.from('<table>')` (not Array.from or Buffer.from); a function call is `.rpc(…)`.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: [...databaseModules, 'src/**/*.test.{ts,tsx}', 'src/utils/testing/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.property.name='from'][arguments.0.type='Literal']:not([callee.object.name=/^(Array|Buffer)$/])",
+          message: queryElsewhere,
+        },
+        { selector: "CallExpression[callee.property.name='rpc']", message: queryElsewhere },
       ],
     },
   },

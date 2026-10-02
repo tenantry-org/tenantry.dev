@@ -1,9 +1,16 @@
 import 'server-only';
 import { Webhooks } from '@paddle/paddle-node-sdk';
 import { ProcessWebhook } from '@/utils/paddle/process-webhook';
-import { claimEvents, completeEvent, type InboxEvent, releaseWaitingEvents, retryEvent } from '@/utils/webhooks/inbox';
-import { RECONCILE_CUSTOMER_EVENT, reconcileCustomer } from '@/utils/entitlements/reconcile-customer';
-import { CUSTOMER_LEASE_EVENT } from '@/utils/webhooks/customer-lease';
+import {
+  claimEvents,
+  completeEvent,
+  CUSTOMER_LEASE_EVENT,
+  type InboxEvent,
+  RECONCILE_CUSTOMER_EVENT,
+  releaseWaitingEvents,
+  retryEvent,
+} from '@/utils/webhooks/inbox';
+import { reconcileCustomer } from '@/utils/entitlements/reconcile-customer';
 import { alertOperator } from '@/utils/email/alerts';
 import { errorMessage } from '@/utils/errors';
 

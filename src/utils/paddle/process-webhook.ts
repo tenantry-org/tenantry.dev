@@ -9,9 +9,13 @@ import {
   EventName,
   SubscriptionStatus,
 } from '@paddle/paddle-node-sdk';
-import { createServiceRoleClient } from '@/utils/supabase/service-role-client';
 import { isProProduct } from '@/constants/pro-product';
-import { getEntitlement, upsertEntitlement } from '@/utils/entitlements/entitlements-store';
+import {
+  getEntitlement,
+  recordCustomerEvent,
+  recordSubscriptionEvent,
+  upsertEntitlement,
+} from '@/utils/entitlements/entitlements-store';
 import { entitlementFor } from '@/utils/entitlements/grace';
 import { syncCustomerAccess } from '@/utils/entitlements/customer-access';
 import { normaliseEmail } from '@/utils/customers/email';
@@ -60,7 +64,7 @@ export class ProcessWebhook {
         break;
       case EventName.CustomerCreated:
       case EventName.CustomerUpdated:
-        await this.recordCustomerEvent(eventData);
+        await this.handleCustomer(eventData);
         break;
       case EventName.AdjustmentCreated:
       case EventName.AdjustmentUpdated:
@@ -72,8 +76,21 @@ export class ProcessWebhook {
   // Records the subscription and its entitlement, then brings the customer's access (GitHub, licence,
   // emails) in line with all their entitlements. Changes nothing if a newer event for this subscription
   // has already been applied (Paddle does not guarantee delivery order).
+  // Recording the subscription throws a foreign-key error if the customer has not been recorded yet, so the
+  // worker retries once customer.created arrives.
   private async handleSubscription(data: SubscriptionEventData, occurredAt: string) {
-    if (!(await this.recordSubscriptionEvent(data, occurredAt))) {
+    const applied = await recordSubscriptionEvent({
+      subscriptionId: data.id,
+      customerId: data.customerId,
+      status: data.status,
+      priceId: data.items[0]?.price?.id ?? '',
+      productId: data.items[0]?.price?.productId ?? '',
+      scheduledChangeAt: data.scheduledChange?.effectiveAt ?? null,
+      scheduledChangeAction: data.scheduledChange?.action ?? null,
+      occurredAt,
+    });
+
+    if (!applied) {
       console.info(`Paddle webhook: ignoring a ${data.status} event for ${data.id} older than the last one applied.`);
       return;
     }
@@ -149,40 +166,17 @@ export class ProcessWebhook {
     }
   }
 
-  // Returns false if a newer event for this subscription has already been applied. Throws a foreign-key
-  // error if the customer has not been recorded yet, so the worker retries once customer.created arrives.
-  private async recordSubscriptionEvent(data: SubscriptionEventData, occurredAt: string): Promise<boolean> {
-    const supabase = createServiceRoleClient();
-    const { data: applied, error } = await supabase.rpc('record_subscription_event', {
-      p_subscription_id: data.id,
-      p_customer_id: data.customerId,
-      p_status: data.status,
-      p_price_id: data.items[0]?.price?.id ?? '',
-      p_product_id: data.items[0]?.price?.productId ?? '',
-      p_scheduled_change: data.scheduledChange?.effectiveAt ?? null,
-      p_scheduled_change_action: data.scheduledChange?.action ?? null,
-      p_occurred_at: occurredAt,
-    });
-
-    if (error) throw error;
-
-    return applied === true;
-  }
-
   // Records the customer's email unless a newer customer event has already been applied: the email decides
   // which account owns the customer, so a delayed event must not restore an older one.
-  private async recordCustomerEvent(eventData: CustomerCreatedEvent | CustomerUpdatedEvent) {
-    const supabase = createServiceRoleClient();
-    const { data: applied, error } = await supabase.rpc('record_customer_event', {
-      p_customer_id: eventData.data.id,
+  private async handleCustomer(eventData: CustomerCreatedEvent | CustomerUpdatedEvent) {
+    const applied = await recordCustomerEvent({
+      customerId: eventData.data.id,
       // Stored normalised, as the database also enforces, so it matches the buyer's account in any case.
-      p_email: normaliseEmail(eventData.data.email),
-      p_occurred_at: eventData.occurredAt,
+      email: normaliseEmail(eventData.data.email),
+      occurredAt: eventData.occurredAt,
     });
 
-    if (error) throw error;
-
-    if (applied !== true) {
+    if (!applied) {
       console.info(
         `Paddle webhook: ignoring a customer event for ${eventData.data.id} older than the last one applied.`,
       );

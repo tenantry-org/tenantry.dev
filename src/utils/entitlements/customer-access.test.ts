@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
-import type { EntitlementRecord } from '@/utils/entitlements/entitlements-store';
+import type { SubscriptionEntitlement } from '@/utils/entitlements/entitlements-store';
 import { memory } from '@/utils/testing/memory-entitlements';
 import { aggregateAccess, grantAndRecord, syncCustomerAccess } from './customer-access';
 
@@ -36,7 +36,7 @@ const OCTOBER = new Date('2026-10-01T00:00:00Z');
 const NOVEMBER = new Date('2026-11-01T00:00:00Z');
 const DECEMBER = new Date('2026-12-01T00:00:00Z');
 
-function entitlement(overrides: Partial<EntitlementRecord> = {}): EntitlementRecord {
+function entitlement(overrides: Partial<SubscriptionEntitlement> = {}): SubscriptionEntitlement {
   return {
     customerId: 'ctm_1',
     subscriptionId: 'sub_1',
@@ -48,7 +48,7 @@ function entitlement(overrides: Partial<EntitlementRecord> = {}): EntitlementRec
 }
 
 /** Records an entitlement change and syncs the customer, as the webhook worker does; returns the change. */
-async function entitle(overrides: Partial<EntitlementRecord> = {}) {
+async function entitle(overrides: Partial<SubscriptionEntitlement> = {}) {
   await memory.store.upsertEntitlement(entitlement(overrides));
   return (await syncCustomerAccess('ctm_1')).change;
 }

@@ -1,10 +1,16 @@
 import 'server-only';
 import { createUserClient } from '@/utils/supabase/user-client';
-import { createServiceRoleClient } from '@/utils/supabase/service-role-client';
 import { automatedProvisioningEnabled } from '@/utils/provisioning-guard';
 import { confirmedEmail } from '@/utils/customers/email';
 import { grantAndRecord, isEntitled } from '@/utils/entitlements/customer-access';
-import { resetGithubState } from '@/utils/entitlements/entitlements-store';
+import {
+  findCustomerIdByEmail,
+  getCustomerAccess,
+  getGithubAccount,
+  getGithubAccountHolder,
+  linkGithubAccount,
+  resetGithubState,
+} from '@/utils/entitlements/entitlements-store';
 import { currentLogin, revokeAccess } from '@/utils/github/provisioning';
 import { CUSTOMER_BUSY, withCustomerLease } from '@/utils/webhooks/customer-lease';
 
@@ -14,7 +20,7 @@ import { CUSTOMER_BUSY, withCustomerLease } from '@/utils/webhooks/customer-leas
  * loop between "customer connected GitHub" and "customer can restore Tenantry.Pro".
  *
  * Safe to call repeatedly (idempotent): from the OAuth callback and from the "Connect GitHub" action.
- * Reads identity with the user-scoped client; writes with the service-role client (RLS has no
+ * Reads identity with the user-scoped client; records the link through the service-role store (RLS has no
  * INSERT/UPDATE policy for authenticated users). The user is matched to a customer by their confirmed
  * email only: anyone can sign up with a purchaser's address, but only the purchaser can confirm it.
  *
@@ -79,11 +85,8 @@ async function syncGithubLink(): Promise<SyncResult> {
     return { linked: false, granted: false, reason: 'incomplete-identity' };
   }
 
-  const service = createServiceRoleClient();
-
   // Only purchasers have a customer row; until then there is nothing to link to.
-  const { data: customer } = await service.from('customers').select('customer_id').eq('email', email).maybeSingle();
-  const customerId = customer?.customer_id as string | undefined;
+  const customerId = await findCustomerIdByEmail(email);
 
   if (!customerId) return { linked: false, granted: false, reason: 'no-customer' };
 
@@ -93,30 +96,24 @@ async function syncGithubLink(): Promise<SyncResult> {
 
 // Records the link and grants access if the customer is entitled. Runs holding the customer's lease.
 async function linkAndGrant(customerId: string, githubId: number): Promise<SyncResult> {
-  const service = createServiceRoleClient();
   // The identity's login is as of the user's last GitHub sign-in: the account may have been renamed since, or
   // deleted, and its name then taken by someone else. So the login comes from the id, and a deleted account is
   // neither linked nor granted.
   const login = await currentLogin(githubId);
   if (login === null) return { linked: false, granted: false, reason: 'github-account-deleted' };
 
-  const [{ data: previous, error: previousError }, { data: holder, error: holderError }] = await Promise.all([
-    service.from('github_links').select('github_login,github_id').eq('customer_id', customerId).maybeSingle(),
-    service.from('github_links').select('customer_id').eq('github_id', githubId).maybeSingle(),
-  ]);
+  const [previous, holder] = await Promise.all([getGithubAccount(customerId), getGithubAccountHolder(githubId)]);
 
-  if (previousError) throw previousError;
-  if (holderError) throw holderError;
-  if (holder && holder.customer_id !== customerId) {
+  if (holder && holder !== customerId) {
     return { linked: false, granted: false, reason: 'github-account-linked-elsewhere' };
   }
 
   // A different GitHub account than before (not a renamed one: the id is stable across renames). Remove
   // the previous account first, under its current name (it may have been renamed since); if that fails,
   // keep the old link so the user can retry.
-  if (previous && Number(previous.github_id) !== githubId) {
+  if (previous && previous.id !== githubId) {
     try {
-      const previousLogin = await currentLogin(Number(previous.github_id));
+      const previousLogin = await currentLogin(previous.id);
       if (previousLogin) await revokeAccess(previousLogin); // a deleted account's access went with it
       await resetGithubState(customerId);
     } catch (error) {
@@ -125,22 +122,13 @@ async function linkAndGrant(customerId: string, githubId: number): Promise<SyncR
     }
   }
 
-  const { error: linkError } = await service
-    .from('github_links')
-    .upsert({ customer_id: customerId, github_login: login, github_id: githubId }, { onConflict: 'customer_id' });
-
   // A concurrent link of the same account to another customer loses the race on github_id's unique index.
-  if (linkError?.code === '23505') return { linked: false, granted: false, reason: 'github-account-linked-elsewhere' };
-  if (linkError) throw linkError;
+  if (!(await linkGithubAccount(customerId, { id: githubId, login }))) {
+    return { linked: false, granted: false, reason: 'github-account-linked-elsewhere' };
+  }
 
   // Grant immediately if the customer is entitled (by any of their subscriptions).
-  const { data: access, error: accessError } = await service
-    .from('customer_access')
-    .select('status')
-    .eq('customer_id', customerId)
-    .maybeSingle();
-
-  if (accessError) throw accessError;
+  const access = await getCustomerAccess(customerId);
   if (!access || !isEntitled(access.status)) return { linked: true, granted: false, reason: 'no-active-entitlement' };
 
   // Same gate as the webhook and reconcile paths: manual mode links the account but leaves the grant to

@@ -28,10 +28,13 @@ Key code:
 - `src/utils/licensing/` — ES256 (DER) licence issuer.
 - `src/utils/paddle/process-webhook.ts` — subscription → entitlement/licence/access + lifecycle email.
 - `src/utils/github/` — App-authenticated provisioning + link sync.
-- `src/utils/entitlements/` — entitlement/licence data access + reconciliation.
+- `src/utils/entitlements/` — data access and reconciliation. With the webhook inbox (`src/utils/webhooks/inbox.ts`),
+  the service-role store (`entitlements-store.ts`) and the dashboard's read model (`get-entitlement.ts`) are the
+  only modules that query the database (ESLint enforces it).
 - `src/utils/email/` — transactional onboarding/lifecycle email (Resend).
 - `src/utils/supabase/` — `createUserClient` (the signed-in user's session; RLS applies) and
-  `createServiceRoleClient` (bypasses RLS; only server modules under `src/utils` import it). The server's
+  `createServiceRoleClient` (bypasses RLS; only server modules under `src/utils` import it), both typed by
+  `database.types.ts`, which is generated from the migrations. The server's
   modules (Supabase, licensing, GitHub, Paddle, email, webhooks, config) import `server-only`, so a client
   component that pulls one in fails the build.
 - `supabase/migrations/` — schema + RLS + webhook idempotency.
@@ -47,6 +50,11 @@ pnpm dev        # runs sync:docs, then next dev
 database tests on every push to master and every pull request; production deployments wait for those jobs (Vercel
 Deployment Checks). Copy [`.env.example`](.env.example) to `.env.local`
 and fill in the values for the services you need.
+
+After changing a migration, rebuild the local database from the migrations, as CI does (`supabase db start` if it is
+not running, then `supabase db reset`, which discards its data), and run `pnpm db:types`. CI regenerates the types
+from the migrations and fails if the committed file differs, so generate them with the Supabase CLI version its
+database job pins.
 
 ## Docs pipeline
 

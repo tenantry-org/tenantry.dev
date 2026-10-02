@@ -17,6 +17,7 @@
     "sync:docs": "node scripts/sync-docs.mjs",
     "docs:update": "node scripts/docs-versions-update.mjs update",
     "docs:check": "node scripts/docs-versions-update.mjs check",
+    "db:types": "supabase gen types typescript --local --schema public > src/utils/supabase/database.types.ts && prettier --write --log-level warn src/utils/supabase/database.types.ts",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
     "test": "pnpm lint && pnpm prettier:check && pnpm typecheck && pnpm test:unit",

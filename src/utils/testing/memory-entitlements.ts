@@ -1,6 +1,6 @@
 import type * as EntitlementsStore from '@/utils/entitlements/entitlements-store';
 
-type EntitlementRecord = EntitlementsStore.EntitlementRecord;
+type SubscriptionEntitlement = EntitlementsStore.SubscriptionEntitlement;
 type EntitlementStatus = EntitlementsStore.EntitlementStatus;
 type CustomerAccessRecord = EntitlementsStore.CustomerAccessRecord;
 type GithubState = EntitlementsStore.GithubState;
@@ -22,7 +22,7 @@ const state = {
   githubAccounts: new Map<string, EntitlementsStore.GithubAccount>(),
   /** GitHub itself: each account's current login, by id. Renaming an account changes only this. */
   githubUsers: new Map<number, string>(),
-  entitlements: new Map<string, EntitlementRecord>(),
+  entitlements: new Map<string, SubscriptionEntitlement>(),
   access: new Map<string, CustomerAccessRecord>(),
   licences: [] as Licence[],
   licenceFailures: new Map<string, { attempts: number; lastError: string }>(),
@@ -73,7 +73,7 @@ export const memory = {
       if (account) account.login = login;
     },
 
-    async upsertEntitlement(record: EntitlementRecord) {
+    async upsertEntitlement(record: SubscriptionEntitlement) {
       // As entitlements_grace_started_check does: grace exactly when grace_started_at is set.
       if ((record.status === 'grace') !== (record.graceStartedAt !== null)) {
         throw Object.assign(new Error('violates check constraint "entitlements_grace_started_check"'), {

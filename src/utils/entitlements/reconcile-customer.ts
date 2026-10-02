@@ -18,13 +18,6 @@ import {
 } from '@/utils/entitlements/customer-access';
 
 /**
- * The inbox event type of a reconcile job (reconcile.ts queues one per customer). The inbox worker runs it
- * in order with the customer's Paddle events and never at the same time as one of them, so a reconcile
- * cannot act on access that a concurrent event is changing.
- */
-export const RECONCILE_CUSTOMER_EVENT = 'tenantry.reconcile_customer';
-
-/**
  * What reconcile did about the customer's GitHub access:
  *   granted    added to the team (a first grant, or a retry of one that failed)
  *   invited    an org invitation was sent where none was pending (a first grant, a retry, one GitHub

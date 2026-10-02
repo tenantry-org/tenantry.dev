@@ -12,7 +12,7 @@ vi.mock('@/utils/supabase/user-client', () => ({
     if (!paddle.signedIn) throw new Error('You are not allowed to perform this action.');
   },
 }));
-vi.mock('@/utils/paddle/get-customer-id', () => ({ getCustomerId: async () => paddle.customerId }));
+vi.mock('@/utils/entitlements/get-entitlement', () => ({ getCustomerId: async () => paddle.customerId }));
 vi.mock('@/utils/paddle/get-paddle-instance', () => ({
   getPaddleInstance: () => ({
     subscriptions: paddle.subscriptions,

@@ -9,7 +9,7 @@ const inbox = vi.hoisted(() => ({
   retryEvent: vi.fn(),
   releaseWaitingEvents: vi.fn(),
 }));
-vi.mock('@/utils/webhooks/inbox', () => inbox);
+vi.mock('@/utils/webhooks/inbox', async (original) => ({ ...(await original<object>()), ...inbox }));
 vi.mock('@/utils/paddle/process-webhook', () => ({ ProcessWebhook: class {} }));
 const alertOperator = vi.hoisted(() => vi.fn());
 vi.mock('@/utils/email/alerts', () => ({ alertOperator }));

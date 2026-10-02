@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EntitlementRecord } from '@/utils/entitlements/entitlements-store';
+import type { SubscriptionEntitlement } from '@/utils/entitlements/entitlements-store';
 import { memory } from '@/utils/testing/memory-entitlements';
 import { syncCustomerAccess } from './customer-access';
 import { reconcileCustomer } from './reconcile-customer';
@@ -35,7 +35,7 @@ vi.mock('@/utils/provisioning-guard', () => ({ automatedProvisioningEnabled: eff
 const OCTOBER = new Date('2026-10-01T00:00:00Z');
 const NOVEMBER = new Date('2026-11-01T00:00:00Z');
 
-async function record(overrides: Partial<EntitlementRecord> = {}) {
+async function record(overrides: Partial<SubscriptionEntitlement> = {}) {
   await memory.store.upsertEntitlement({
     customerId: 'ctm_1',
     subscriptionId: 'sub_1',

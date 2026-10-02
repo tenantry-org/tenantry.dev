@@ -1,8 +1,10 @@
 import 'server-only';
+import type { SubscriptionStatus } from '@paddle/paddle-node-sdk';
 import { createUserClient } from '@/utils/supabase/user-client';
-import { getCustomerId } from '@/utils/paddle/get-customer-id';
+import type { Tables } from '@/utils/supabase/database.types';
+import { confirmedEmail } from '@/utils/customers/email';
 import { graceEndsAt } from '@/utils/entitlements/grace';
-import type { GithubState } from '@/utils/entitlements/entitlements-store';
+import type { EntitlementStatus, GithubState } from '@/utils/entitlements/entitlements-store';
 import { isProProduct } from '@/constants/pro-product';
 import { ProOffer } from '@/constants/pro-offer';
 
@@ -21,7 +23,7 @@ export interface ProAccess {
    * has passed (access is then removed by the next reconcile).
    */
   entitlement: {
-    status: string;
+    status: EntitlementStatus;
     github: GithubState;
     /** While `github` is 'invited': when the invitation lapses if not accepted. */
     invitationExpiresAt: string | null;
@@ -36,13 +38,31 @@ export interface ProAccess {
 
 export interface BillingSubscription {
   id: string;
-  /** Paddle's status: active, trialing, past_due or paused. */
-  status: string;
+  /** Paddle's status; never canceled, since ended subscriptions are left out. */
+  status: Exclude<SubscriptionStatus, 'canceled'>;
   interval: 'month' | 'year' | null;
   /** When it renews, unless it is scheduled to cancel. */
   renewsAt: string | null;
   /** When a scheduled cancellation takes effect. */
   endsAt: string | null;
+}
+
+/**
+ * The signed-in user's Paddle customer id, or '' if they have none. Only a confirmed address identifies a
+ * customer; the owner policies enforce the same rule, so this lookup would find nothing otherwise.
+ */
+export async function getCustomerId(): Promise<string> {
+  const supabase = await createUserClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const email = confirmedEmail(user);
+  if (!email) return '';
+
+  const { data } = await supabase.from('customers').select('customer_id').eq('email', email).maybeSingle();
+
+  return data?.customer_id ?? '';
 }
 
 export async function getProAccess(): Promise<ProAccess> {
@@ -80,7 +100,7 @@ export async function getProAccess(): Promise<ProAccess> {
         .eq('customer_id', customerId),
     ]);
 
-  const entitlementRows = (entitlements ?? []) as EntitlementRow[];
+  const entitlementRows = entitlements ?? [];
   const graceEnds = entitlementRows
     .filter(({ status, grace_started_at }) => status === 'grace' && grace_started_at)
     .map(({ grace_started_at }) => graceEndsAt(new Date(grace_started_at!)).getTime());
@@ -90,7 +110,8 @@ export async function getProAccess(): Promise<ProAccess> {
     customerId,
     entitlement: entitlement
       ? {
-          status: entitlement.status,
+          // customer_access's check constraints allow only these.
+          status: entitlement.status as EntitlementStatus,
           github: entitlement.github_state as GithubState,
           invitationExpiresAt:
             entitlement.github_state === 'invited' && entitlement.github_invited_at
@@ -106,27 +127,18 @@ export async function getProAccess(): Promise<ProAccess> {
       : null,
     licence: licence ? { jwt: licence.jwt } : null,
     githubLogin: link?.github_login ?? null,
-    subscriptions: ((subscriptions ?? []) as SubscriptionRow[])
+    subscriptions: (subscriptions ?? [])
       .filter((row) => isProProduct(row.product_id) && row.subscription_status !== 'canceled')
       .map((row) => billingSubscription(row, entitlementRows)),
   };
 }
 
-interface EntitlementRow {
-  subscription_id: string;
-  status: string;
-  current_period_ends_at: string | null;
-  grace_started_at: string | null;
-}
+type EntitlementRow = Pick<Tables<'entitlements'>, 'subscription_id' | 'current_period_ends_at'>;
 
-interface SubscriptionRow {
-  subscription_id: string;
-  subscription_status: string;
-  price_id: string | null;
-  product_id: string | null;
-  scheduled_change: string | null;
-  scheduled_change_action: string | null;
-}
+type SubscriptionRow = Pick<
+  Tables<'subscriptions'>,
+  'subscription_id' | 'subscription_status' | 'price_id' | 'scheduled_change' | 'scheduled_change_action'
+>;
 
 function billingSubscription(row: SubscriptionRow, entitlements: EntitlementRow[]): BillingSubscription {
   const endsAt = row.scheduled_change_action === 'cancel' ? row.scheduled_change : null;
@@ -134,7 +146,8 @@ function billingSubscription(row: SubscriptionRow, entitlements: EntitlementRow[
 
   return {
     id: row.subscription_id,
-    status: row.subscription_status,
+    // Paddle's status, as record_subscription_event stored it; canceled ones are filtered out above.
+    status: row.subscription_status as BillingSubscription['status'],
     interval:
       row.price_id === ProOffer.priceId.month ? 'month' : row.price_id === ProOffer.priceId.year ? 'year' : null,
     renewsAt: endsAt ? null : (periodEndsAt ?? null),

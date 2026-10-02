@@ -1,6 +1,6 @@
 import 'server-only';
-import { createServiceRoleClient } from '@/utils/supabase/service-role-client';
-import { RECONCILE_CUSTOMER_EVENT } from '@/utils/entitlements/reconcile-customer';
+import { customersToReconcile } from '@/utils/entitlements/entitlements-store';
+import { enqueueReconcileJobs } from '@/utils/webhooks/inbox';
 import { DrainResult, drainInbox } from '@/utils/webhooks/worker';
 
 /**
@@ -20,47 +20,7 @@ export async function reconcileEntitlements({
   budgetMs,
 }: { now?: Date; budgetMs?: number } = {}): Promise<ReconcileResult> {
   const customerIds = await customersToReconcile();
-  await queueReconcileJobs(customerIds, now);
+  await enqueueReconcileJobs(customerIds, now);
 
   return { customers: customerIds.length, inbox: await drainInbox({ budgetMs }) };
-}
-
-// Everyone whose access, GitHub membership or licences might need correcting: entitled (by recorded access
-// or by a subscription), linked to GitHub, or holding a live licence. One array, so the API's row limit
-// cannot leave anyone out.
-async function customersToReconcile(): Promise<string[]> {
-  const supabase = createServiceRoleClient();
-  const { data, error } = await supabase.rpc('customers_to_reconcile');
-
-  if (error) throw error;
-
-  return (data ?? []) as string[];
-}
-
-async function queueReconcileJobs(customerIds: string[], now: Date) {
-  if (customerIds.length === 0) return;
-
-  const occurredAt = now.toISOString();
-  const supabase = createServiceRoleClient();
-  const { error } = await supabase.from('webhook_inbox').upsert(
-    customerIds.map((customerId) => {
-      const eventId = `reconcile_${customerId}_${occurredAt}`;
-      return {
-        event_id: eventId,
-        event_type: RECONCILE_CUSTOMER_EVENT,
-        occurred_at: occurredAt,
-        customer_id: customerId,
-        subscription_id: null,
-        payload: {
-          event_id: eventId,
-          event_type: RECONCILE_CUSTOMER_EVENT,
-          occurred_at: occurredAt,
-          data: { customer_id: customerId },
-        },
-      };
-    }),
-    { onConflict: 'event_id', ignoreDuplicates: true },
-  );
-
-  if (error) throw error;
 }

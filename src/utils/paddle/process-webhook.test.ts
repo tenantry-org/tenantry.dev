@@ -8,16 +8,18 @@ import { ProcessWebhook } from './process-webhook';
 const state = vi.hoisted(() => ({
   lastEventAt: new Map<string, string>(),
   customerEmails: new Map<string, string>(),
-  rpcError: null as { code: string; message: string } | null,
+  /** The error recording a subscription or customer event fails with. */
+  recordError: null as { code: string; message: string } | null,
   scheduledChanges: new Map<string, { at: string | null; action: string | null }>(),
 }));
 
-// Stands in for record_subscription_event and record_customer_event (supabase/tests/database): each applies
-// an event unless a newer one for the same subscription or customer was applied already.
+// Stands in for record_subscription_event and record_customer_event (supabase/tests/database), which the store's
+// recordSubscriptionEvent and recordCustomerEvent call: each applies an event unless a newer one for the same
+// subscription or customer was applied already.
 vi.mock('@/utils/supabase/service-role-client', () => ({
   createServiceRoleClient: () => ({
     rpc: async (name: string, args: Record<string, string>) => {
-      if (state.rpcError) return { data: null, error: state.rpcError };
+      if (state.recordError) return { data: null, error: state.recordError };
       const key = name === 'record_customer_event' ? `customer:${args.p_customer_id}` : args.p_subscription_id;
       const last = state.lastEventAt.get(key);
       if (last && new Date(last) > new Date(args.p_occurred_at)) return { data: false, error: null };
@@ -50,9 +52,15 @@ vi.mock('@/utils/github/provisioning', async () => {
     currentLogin: memory.currentLogin,
   };
 });
-vi.mock('@/utils/entitlements/entitlements-store', async () => {
+// The in-memory store, but the real record functions, so the tests check the arguments they pass the database.
+vi.mock('@/utils/entitlements/entitlements-store', async (original) => {
+  const actual = await original<typeof import('@/utils/entitlements/entitlements-store')>();
   const { memory } = await import('@/utils/testing/memory-entitlements');
-  return memory.store;
+  return {
+    ...memory.store,
+    recordSubscriptionEvent: actual.recordSubscriptionEvent,
+    recordCustomerEvent: actual.recordCustomerEvent,
+  };
 });
 vi.mock('@/utils/email/send', () => ({ sendEmail: effects.sendEmail }));
 vi.mock('@/utils/licensing/licence-issuer', () => ({
@@ -98,7 +106,7 @@ describe('ProcessWebhook', () => {
     state.lastEventAt.clear();
     state.scheduledChanges.clear();
     state.customerEmails.clear();
-    state.rpcError = null;
+    state.recordError = null;
     memory.reset();
     memory.state.emails.set('ctm_01', 'buyer@example.com');
     memory.linkGithub('ctm_01', 'octocat');
@@ -233,11 +241,11 @@ describe('ProcessWebhook', () => {
     });
 
     it('fails when the customer cannot be recorded, so the worker retries it', async () => {
-      state.rpcError = { code: '08006', message: 'connection failure' };
+      state.recordError = { code: '08006', message: 'connection failure' };
 
       await expect(
         processor.processEvent(emailEvent('evt_c1', '2026-09-29T10:00:00Z', 'a@example.com')),
-      ).rejects.toEqual(state.rpcError);
+      ).rejects.toEqual(state.recordError);
     });
   });
 
@@ -337,7 +345,7 @@ describe('ProcessWebhook', () => {
   });
 
   it('fails a subscription event whose customer is not recorded yet, so the worker retries it', async () => {
-    state.rpcError = {
+    state.recordError = {
       code: '23503',
       message: 'violates foreign key constraint "public_subscriptions_customer_id_fkey"',
     };

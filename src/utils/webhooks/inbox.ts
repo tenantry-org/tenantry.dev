@@ -1,19 +1,35 @@
 import 'server-only';
 import { createServiceRoleClient } from '@/utils/supabase/service-role-client';
+import type { Json } from '@/utils/supabase/database.types';
 import { errorMessage } from '@/utils/errors';
 
 /**
  * The webhook inbox (supabase/migrations/20260928130000_webhook_inbox.sql): verified Paddle notifications,
- * stored once each and processed by the worker (./worker.ts), one customer at a time and oldest first.
+ * stored once each and processed by the worker (./worker.ts), one customer at a time and oldest first. It also
+ * holds two kinds of row of our own, told apart by their event type: reconcile jobs, which run in order with the
+ * customer's notifications, and customer leases (customer-lease.ts), which hold them back.
  */
 
-/** A Paddle notification as delivered: the verified JSON body, in Paddle's snake_case. */
-export interface PaddleEventJson {
+/**
+ * The event type of a reconcile job (reconcile.ts queues one per customer; reconcile-customer.ts runs it). The
+ * worker runs it in order with the customer's Paddle events and never at the same time as one of them, so a
+ * reconcile cannot act on access that a concurrent event is changing.
+ */
+export const RECONCILE_CUSTOMER_EVENT = 'tenantry.reconcile_customer';
+
+/** The event type of a lease row. The worker completes one it claims (an expired lease) as a no-op. */
+export const CUSTOMER_LEASE_EVENT = 'tenantry.customer_lease';
+
+/**
+ * A Paddle notification as delivered: the verified JSON body, in Paddle's snake_case. A type rather than an
+ * interface, so that it is assignable to the payload column's Json.
+ */
+export type PaddleEventJson = {
   event_id: string;
   event_type: string;
   occurred_at: string;
-  data: Record<string, unknown>;
-}
+  data: { [key: string]: Json | undefined };
+};
 
 export interface InboxEvent {
   eventId: string;
@@ -75,6 +91,38 @@ export async function enqueueEvent(event: PaddleEventJson): Promise<boolean> {
   return (data ?? []).length > 0;
 }
 
+/**
+ * Queues a reconcile job for each customer, as of `now`. The job's event id includes `now`, so queueing the same
+ * customers again for the same `now` adds nothing.
+ */
+export async function enqueueReconcileJobs(customerIds: string[], now: Date): Promise<void> {
+  if (customerIds.length === 0) return;
+
+  const occurredAt = now.toISOString();
+  const supabase = createServiceRoleClient();
+  const { error } = await supabase.from('webhook_inbox').upsert(
+    customerIds.map((customerId) => {
+      const eventId = `reconcile_${customerId}_${occurredAt}`;
+      return {
+        event_id: eventId,
+        event_type: RECONCILE_CUSTOMER_EVENT,
+        occurred_at: occurredAt,
+        customer_id: customerId,
+        subscription_id: null,
+        payload: {
+          event_id: eventId,
+          event_type: RECONCILE_CUSTOMER_EVENT,
+          occurred_at: occurredAt,
+          data: { customer_id: customerId },
+        },
+      };
+    }),
+    { onConflict: 'event_id', ignoreDuplicates: true },
+  );
+
+  if (error) throw error;
+}
+
 /** Claims up to `limit` due events, at most one per customer, locking them for `lockSeconds`. */
 export async function claimEvents(limit: number, lockSeconds: number): Promise<InboxEvent[]> {
   const supabase = createServiceRoleClient();
@@ -82,11 +130,13 @@ export async function claimEvents(limit: number, lockSeconds: number): Promise<I
 
   if (error) throw error;
 
-  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
-    eventId: row.event_id as string,
-    eventType: row.event_type as string,
-    customerId: (row.customer_id as string | null) ?? null,
-    attempts: row.attempts as number,
+  return (data ?? []).map((row) => ({
+    eventId: row.event_id,
+    eventType: row.event_type,
+    customerId: row.customer_id,
+    attempts: row.attempts,
+    // What enqueueEvent or enqueueReconcileJobs stored. A lease row's (acquire_customer_lease) has only event_id
+    // and event_type, and the worker never reads it.
     payload: row.payload as PaddleEventJson,
   }));
 }
@@ -139,6 +189,32 @@ export async function releaseWaitingEvents(customerId: string): Promise<void> {
     .eq('customer_id', customerId)
     .eq('status', 'pending')
     .gt('next_attempt_at', now);
+
+  if (error) throw error;
+}
+
+/**
+ * Takes the customer's lease for `seconds` (`acquire_customer_lease`): a locked inbox row that keeps the worker
+ * from starting their events. Returns its id, or null while one of their events is in progress or another lease
+ * is held.
+ */
+export async function acquireCustomerLease(customerId: string, seconds: number): Promise<string | null> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.rpc('acquire_customer_lease', {
+    p_customer_id: customerId,
+    p_seconds: seconds,
+  });
+
+  if (error) throw error;
+
+  // The function returns null when the customer is busy; generated return types are never nullable.
+  return (data as string | null) ?? null;
+}
+
+/** Releases a lease taken by acquireCustomerLease (`release_customer_lease`). */
+export async function releaseCustomerLease(leaseId: string): Promise<void> {
+  const supabase = createServiceRoleClient();
+  const { error } = await supabase.rpc('release_customer_lease', { p_lease_id: leaseId });
 
   if (error) throw error;
 }
