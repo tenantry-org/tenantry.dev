@@ -1,3 +1,4 @@
+import 'server-only';
 import { Webhooks } from '@paddle/paddle-node-sdk';
 import { ProcessWebhook } from '@/utils/paddle/process-webhook';
 import { claimEvents, completeEvent, type InboxEvent, releaseWaitingEvents, retryEvent } from '@/utils/webhooks/inbox';

@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * The Paddle product that is Tenantry Pro, from the `PADDLE_PRO_PRODUCT_ID` env var (`pro_…`). There is
  * one Pro offer (D10), so a subscription to this product entitles its customer to Pro and any other

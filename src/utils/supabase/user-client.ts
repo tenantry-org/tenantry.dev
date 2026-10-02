@@ -1,7 +1,13 @@
+import 'server-only';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export async function createClient() {
+/**
+ * The signed-in user's client: the anon key plus the session in the request's cookies, so row-level security
+ * applies and every query runs as that user (or as anon, when nobody is signed in). For writes no user may make,
+ * the server uses the service-role client (service-role-client.ts) instead.
+ */
+export async function createUserClient() {
   const cookieStore = await cookies();
 
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
@@ -23,7 +29,7 @@ export async function createClient() {
 }
 
 export async function validateUserSession() {
-  const supabase = await createClient();
+  const supabase = await createUserClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

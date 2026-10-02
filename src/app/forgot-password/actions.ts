@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/utils/supabase/server';
+import { createUserClient } from '@/utils/supabase/user-client';
 import { siteOrigin } from '@/utils/site-origin';
 
 export type ResetRequestResult = { sent: true } | { error: string };
@@ -19,7 +19,7 @@ const MESSAGES: Record<string, string> = {
  * has the address, so accounts cannot be discovered.
  */
 export async function requestPasswordReset(email: string): Promise<ResetRequestResult> {
-  const supabase = await createClient();
+  const supabase = await createUserClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${await siteOrigin()}/auth/callback?next=/reset-password`,
   });

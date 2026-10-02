@@ -1,4 +1,5 @@
-import { createClient } from '@/utils/supabase/server-internal';
+import 'server-only';
+import { createServiceRoleClient } from '@/utils/supabase/service-role-client';
 
 /**
  * Per-customer leases (supabase/migrations/20260929150000_customer_leases.sql). The inbox worker processes a
@@ -43,7 +44,7 @@ export async function withCustomerLease<T>(
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   }: LeaseOptions = {},
 ): Promise<T | typeof CUSTOMER_BUSY> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const deadline = Date.now() + waitMs;
   let leaseId: string | null = null;
 

@@ -1,4 +1,5 @@
-import { createClient } from '@/utils/supabase/server';
+import 'server-only';
+import { createUserClient } from '@/utils/supabase/user-client';
 import { confirmedEmail } from '@/utils/customers/email';
 
 /**
@@ -6,7 +7,7 @@ import { confirmedEmail } from '@/utils/customers/email';
  * customer; the owner policies enforce the same rule, so this lookup would find nothing otherwise.
  */
 export async function getCustomerId() {
-  const supabase = await createClient();
+  const supabase = await createUserClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

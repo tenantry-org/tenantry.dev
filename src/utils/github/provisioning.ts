@@ -1,3 +1,4 @@
+import 'server-only';
 import { Octokit } from '@octokit/rest';
 import { createAppAuth } from '@octokit/auth-app';
 import { requireEnv } from '@/utils/config/env';

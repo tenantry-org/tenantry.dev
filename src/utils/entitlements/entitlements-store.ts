@@ -1,4 +1,5 @@
-import { createClient } from '@/utils/supabase/server-internal';
+import 'server-only';
+import { createServiceRoleClient } from '@/utils/supabase/service-role-client';
 
 /**
  * Service-role data access for the commercial entitlement tables (entitlements, licences,
@@ -32,7 +33,7 @@ export interface EntitlementRecord {
 
 /** Returns the customer's email (populated by Paddle customer webhooks), or null if unknown. */
 export async function getCustomerEmail(customerId: string): Promise<string | null> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { data, error } = await supabase.from('customers').select('email').eq('customer_id', customerId).maybeSingle();
 
   if (error) throw error;
@@ -48,7 +49,7 @@ export interface GithubAccount {
 
 /** Returns the customer's linked GitHub account, or null if they have not connected GitHub yet. */
 export async function getGithubAccount(customerId: string): Promise<GithubAccount | null> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('github_links')
     .select('github_id,github_login')
@@ -62,7 +63,7 @@ export async function getGithubAccount(customerId: string): Promise<GithubAccoun
 
 /** Records the linked account's new login after it was renamed on GitHub. */
 export async function setGithubLogin(customerId: string, login: string): Promise<void> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { error } = await supabase.from('github_links').update({ github_login: login }).eq('customer_id', customerId);
 
   if (error) throw error;
@@ -70,7 +71,7 @@ export async function setGithubLogin(customerId: string, login: string): Promise
 
 /** Inserts or updates the entitlement for a subscription (idempotent on subscription_id). */
 export async function upsertEntitlement(record: EntitlementRecord): Promise<void> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const now = new Date().toISOString();
 
   const { error } = await supabase.from('entitlements').upsert(
@@ -93,7 +94,7 @@ const ENTITLEMENT_COLUMNS = 'customer_id,subscription_id,status,current_period_e
 
 /** Returns all of a customer's entitlements, one per subscription. */
 export async function listEntitlements(customerId: string): Promise<EntitlementRecord[]> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { data, error } = await supabase.from('entitlements').select(ENTITLEMENT_COLUMNS).eq('customer_id', customerId);
 
   if (error) throw error;
@@ -103,7 +104,7 @@ export async function listEntitlements(customerId: string): Promise<EntitlementR
 
 /** Returns a subscription's entitlement, or null if none is recorded. */
 export async function getEntitlement(subscriptionId: string): Promise<EntitlementRecord | null> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('entitlements')
     .select(ENTITLEMENT_COLUMNS)
@@ -132,7 +133,7 @@ function toEntitlement(row: Record<string, string | null>): EntitlementRecord {
  * 'revoked' for a customer seen for the first time. Ending access also resets the GitHub state to 'none'.
  */
 export async function setCustomerAccess(customerId: string, status: EntitlementStatus): Promise<EntitlementStatus> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { data, error } = await supabase.rpc('set_customer_access', {
     p_customer_id: customerId,
     p_status: status,
@@ -145,7 +146,7 @@ export async function setCustomerAccess(customerId: string, status: EntitlementS
 
 /** The customer's recorded access, or null for a customer never seen by syncCustomerAccess. */
 export async function getCustomerAccess(customerId: string): Promise<CustomerAccessRecord | null> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('customer_access')
     .select('status,github_state,github_invited_at')
@@ -165,7 +166,7 @@ export async function getCustomerAccess(customerId: string): Promise<CustomerAcc
 
 /** Forgets the customer's GitHub state, when their access moves to another GitHub account (relink). */
 export async function resetGithubState(customerId: string): Promise<void> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { error } = await supabase
     .from('customer_access')
     .update({ github_state: 'none', github_invited_at: null, updated_at: new Date().toISOString() })
@@ -179,7 +180,7 @@ export async function resetGithubState(customerId: string): Promise<void> {
  * (ending it resets the state, and the grant is then removed). 'invited' starts the invitation's clock.
  */
 export async function setGithubState(customerId: string, state: Exclude<GithubState, 'none'>): Promise<void> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const now = new Date().toISOString();
   const { error } = await supabase
     .from('customer_access')
@@ -192,7 +193,7 @@ export async function setGithubState(customerId: string, state: Exclude<GithubSt
 
 /** Whether the customer has a licence that is not revoked. */
 export async function hasLiveLicence(customerId: string): Promise<boolean> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('licences')
     .select('id')
@@ -208,7 +209,7 @@ export async function hasLiveLicence(customerId: string): Promise<boolean> {
 
 /** Records a freshly issued licence token for a customer. */
 export async function recordLicence(params: { customerId: string; jwt: string }): Promise<void> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
 
   const { error } = await supabase.from('licences').insert({ customer_id: params.customerId, jwt: params.jwt });
 
@@ -217,7 +218,7 @@ export async function recordLicence(params: { customerId: string; jwt: string })
 
 /** Marks all of a customer's licences as revoked, when their access ends. */
 export async function revokeLicences(customerId: string): Promise<void> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
 
   const { error } = await supabase
     .from('licences')
@@ -233,7 +234,7 @@ export async function revokeLicences(customerId: string): Promise<void> {
  * (see supabase/migrations/20260928150000_licence_failures.sql).
  */
 export async function recordLicenceFailure(customerId: string, error: string): Promise<boolean> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { data, error: rpcError } = await supabase.rpc('record_licence_failure', {
     p_customer_id: customerId,
     p_error: error,
@@ -246,7 +247,7 @@ export async function recordLicenceFailure(customerId: string, error: string): P
 
 /** Forgets a customer's licence failures, once their licence is issued or no longer needed. */
 export async function clearLicenceFailure(customerId: string): Promise<void> {
-  const supabase = createClient();
+  const supabase = createServiceRoleClient();
   const { error } = await supabase.from('licence_failures').delete().eq('customer_id', customerId);
 
   if (error) throw error;

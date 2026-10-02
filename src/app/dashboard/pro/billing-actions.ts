@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { Subscription } from '@paddle/paddle-node-sdk';
-import { validateUserSession } from '@/utils/supabase/server';
+import { validateUserSession } from '@/utils/supabase/user-client';
 import { getPaddleInstance } from '@/utils/paddle/get-paddle-instance';
 import { getCustomerId } from '@/utils/paddle/get-customer-id';
 

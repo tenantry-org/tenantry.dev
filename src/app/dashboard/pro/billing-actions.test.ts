@@ -7,7 +7,7 @@ const paddle = vi.hoisted(() => ({
   customerId: 'ctm_mine',
   signedIn: true,
 }));
-vi.mock('@/utils/supabase/server', () => ({
+vi.mock('@/utils/supabase/user-client', () => ({
   validateUserSession: async () => {
     if (!paddle.signedIn) throw new Error('You are not allowed to perform this action.');
   },

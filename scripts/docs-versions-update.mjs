@@ -10,12 +10,8 @@
  */
 import { execFileSync } from 'child_process';
 import { isDeepStrictEqual } from 'util';
+import { REPOSITORIES } from './docs-sources.mjs';
 import { GROUPS, readVersions, resolveVersions, writeVersions } from './docs-versions.mjs';
-
-const REPOSITORIES = {
-  core: 'https://github.com/tenantry-org/tenantry-core',
-  pro: 'https://github.com/tenantry-org/tenantry-pro-docs',
-};
 
 function tags(group) {
   const options = { encoding: 'utf8' };

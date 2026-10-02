@@ -14,8 +14,8 @@ const state = vi.hoisted(() => ({
 
 // Stands in for record_subscription_event and record_customer_event (supabase/tests/database): each applies
 // an event unless a newer one for the same subscription or customer was applied already.
-vi.mock('@/utils/supabase/server-internal', () => ({
-  createClient: () => ({
+vi.mock('@/utils/supabase/service-role-client', () => ({
+  createServiceRoleClient: () => ({
     rpc: async (name: string, args: Record<string, string>) => {
       if (state.rpcError) return { data: null, error: state.rpcError };
       const key = name === 'record_customer_event' ? `customer:${args.p_customer_id}` : args.p_subscription_id;

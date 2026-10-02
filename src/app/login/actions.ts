@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/utils/supabase/server';
+import { createUserClient } from '@/utils/supabase/user-client';
 import { siteOrigin } from '@/utils/site-origin';
 
 interface FormData {
@@ -10,7 +10,7 @@ interface FormData {
   password: string;
 }
 export async function login(data: FormData) {
-  const supabase = await createClient();
+  const supabase = await createUserClient();
   const { error } = await supabase.auth.signInWithPassword(data);
 
   if (error) {
@@ -22,7 +22,7 @@ export async function login(data: FormData) {
 }
 
 export async function signInWithGithub() {
-  const supabase = await createClient();
+  const supabase = await createUserClient();
   const { data } = await supabase.auth.signInWithOAuth({
     provider: 'github',
     options: {

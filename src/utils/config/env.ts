@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Reads a required environment variable. There are no defaults: the server's configuration is validated
  * at startup (see `server-config.ts`), and anything read here without a value fails rather than falling

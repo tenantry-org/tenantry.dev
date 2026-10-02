@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/utils/supabase/server';
+import { createUserClient } from '@/utils/supabase/user-client';
 import { isLinkError, syncGithubLinkForCurrentUser } from '@/utils/github/sync-link';
 import { siteOrigin } from '@/utils/site-origin';
 
@@ -13,7 +13,7 @@ import { siteOrigin } from '@/utils/site-origin';
  * Otherwise we start a GitHub OAuth identity-link, returning through /auth/callback which syncs.
  */
 export async function connectGithub() {
-  const supabase = await createClient();
+  const supabase = await createUserClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -41,7 +41,7 @@ export async function connectGithub() {
  * asked to set a password first.
  */
 export async function switchGithubAccount() {
-  const supabase = await createClient();
+  const supabase = await createUserClient();
   const { data, error } = await supabase.auth.getUserIdentities();
 
   if (error) {
@@ -66,7 +66,7 @@ export async function switchGithubAccount() {
 }
 
 // Starts a GitHub OAuth identity link, which returns through /auth/callback.
-async function startGithubLink(supabase: Awaited<ReturnType<typeof createClient>>) {
+async function startGithubLink(supabase: Awaited<ReturnType<typeof createUserClient>>) {
   const { data, error } = await supabase.auth.linkIdentity({
     provider: 'github',
     options: { redirectTo: `${await siteOrigin()}/auth/callback?next=/dashboard/pro` },

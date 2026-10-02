@@ -1,3 +1,4 @@
+import 'server-only';
 import { hasPendingInvitation, membershipOf, revokeAccess } from '@/utils/github/provisioning';
 import { automatedProvisioningEnabled } from '@/utils/provisioning-guard';
 import {

@@ -7,10 +7,10 @@ const state = vi.hoisted(() => ({
   calls: [] as FakeCall[],
 }));
 
-vi.mock('@/utils/supabase/server', async () => {
+vi.mock('@/utils/supabase/user-client', async () => {
   const { fakeSupabase } = await import('@/utils/testing/fake-supabase');
   return {
-    createClient: async () => ({
+    createUserClient: async () => ({
       ...fakeSupabase({ customers: { single: { customer_id: 'ctm_1' } } }, state.calls),
       auth: { getUser: async () => ({ data: { user: state.user } }) },
     }),

@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/utils/supabase/server';
+import { createUserClient } from '@/utils/supabase/user-client';
 import { siteOrigin } from '@/utils/site-origin';
 
 interface FormData {
@@ -25,7 +25,7 @@ const MESSAGES: Record<string, string> = {
  * already registered as if it were new (so accounts cannot be discovered), and sends no email for it.
  */
 export async function signup(data: FormData): Promise<SignupResult> {
-  const supabase = await createClient();
+  const supabase = await createUserClient();
   const { error } = await supabase.auth.signUp({
     ...data,
     options: { emailRedirectTo: `${await siteOrigin()}/auth/callback?next=/dashboard/pro` },

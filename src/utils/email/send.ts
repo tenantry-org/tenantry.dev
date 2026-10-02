@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Minimal transactional email via Resend's REST API (no SDK dependency).
  *

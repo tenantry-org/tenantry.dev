@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createClient } from './server-internal';
+import { createServiceRoleClient } from './service-role-client';
 
 const headers = vi.hoisted(() => ({ cookies: vi.fn() }));
 vi.mock('next/headers', () => headers);
@@ -29,7 +29,7 @@ describe('the service-role client', () => {
   });
 
   it('authorises writes with the service-role key, never a signed-in session, and reads no cookies', async () => {
-    const client = createClient();
+    const client = createServiceRoleClient();
 
     await client.from('github_links').upsert({ customer_id: 'ctm_1', github_login: 'octocat', github_id: 42 });
 

@@ -1,10 +1,13 @@
 name: test
 
-# Changes are merged to master locally, without pull requests, so master pushes must be tested too.
+# Changes are merged to master locally, without pull requests, so master pushes must be tested too. Production
+# deployments wait for these jobs (Vercel Deployment Checks), so the docs-versions workflow, whose pushes start no
+# workflow, runs this one on master after committing.
 on:
   push:
     branches: [master]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: test-${{ github.ref }}
@@ -26,6 +29,21 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # As Vercel builds: the docs sync (the pinned releases' docs, with its link check), MDX, Next's type check and
+      # prerendering. It needs no configuration: the server validates its own when it starts (instrumentation.ts).
+      - run: pnpm build
 
   database:
     name: Database tests (pgTAP)

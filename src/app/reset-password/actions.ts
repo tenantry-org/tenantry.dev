@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/utils/supabase/server';
+import { createUserClient } from '@/utils/supabase/user-client';
 
 export type NewPasswordResult = { error: string };
 
@@ -17,7 +17,7 @@ const MESSAGES: Record<string, string> = {
  * or from their account. Without a session there is no one to update, so they are sent to request a link.
  */
 export async function setNewPassword(password: string): Promise<NewPasswordResult> {
-  const supabase = await createClient();
+  const supabase = await createUserClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

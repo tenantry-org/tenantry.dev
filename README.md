@@ -30,6 +30,10 @@ Key code:
 - `src/utils/github/` — App-authenticated provisioning + link sync.
 - `src/utils/entitlements/` — entitlement/licence data access + reconciliation.
 - `src/utils/email/` — transactional onboarding/lifecycle email (Resend).
+- `src/utils/supabase/` — `createUserClient` (the signed-in user's session; RLS applies) and
+  `createServiceRoleClient` (bypasses RLS; only server modules under `src/utils` import it). The server's
+  modules (Supabase, licensing, GitHub, Paddle, email, webhooks, config) import `server-only`, so a client
+  component that pulls one in fails the build.
 - `supabase/migrations/` — schema + RLS + webhook idempotency.
 
 ## Develop
@@ -39,7 +43,9 @@ pnpm install
 pnpm dev        # runs sync:docs, then next dev
 ```
 
-`pnpm test` runs lint + Prettier + `tsc` + Vitest. Copy [`.env.example`](.env.example) to `.env.local`
+`pnpm test` runs lint + Prettier + `tsc` + Vitest. CI (`.github/workflows/test.yml`) runs it, `pnpm build` and the
+database tests on every push to master and every pull request; production deployments wait for those jobs (Vercel
+Deployment Checks). Copy [`.env.example`](.env.example) to `.env.local`
 and fill in the values for the services you need.
 
 ## Docs pipeline
@@ -57,8 +63,16 @@ build, local ones included, shows what the released packages do.
 
 - **Releases publish their docs by themselves.** The versions are worked out from the release tags: a line is
   listed once both Core and Pro have a stable release in it, with the newest patch of each. The `docs-versions`
-  workflow checks hourly (or on demand) and commits any change to master and staging, which redeploys the site.
+  workflow checks hourly (or on demand), commits any change to master and staging, which redeploys the site, and runs
+  the test workflow on the commit, since its own pushes start none.
   `pnpm docs:update` does the same locally; `pnpm docs:check` fails unless the file matches the tags.
+- **The Pro access page's install snippets follow a Pro release line**, `PRO_RELEASE_LINE` in
+  `src/utils/pro/install-snippets.ts`. Once that line's docs are published, the tests compare the snippets with its
+  installation guide, and they fail when a newer line is published. So the docs of a Pro release that starts a line
+  or changes the installation guide reach production only with matching snippets: until then the test workflow
+  fails on master, and production deployments, these docs' and any other change's, wait. For a new line, update the
+  snippets before the release: the tests accept the next line; for a patch that changes the guide, once its docs are
+  listed.
 - **Preview unreleased docs** locally with an override, for example
   `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or `CORE_DOCS_DIR`); it replaces the newest version's docs.
   Vercel and CI builds refuse overrides.

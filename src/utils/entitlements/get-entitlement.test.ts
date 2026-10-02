@@ -3,9 +3,9 @@ import type { FakeTable } from '@/utils/testing/fake-supabase';
 import { getProAccess } from './get-entitlement';
 
 const state = vi.hoisted(() => ({ tables: {} as Record<string, FakeTable> }));
-vi.mock('@/utils/supabase/server', async () => {
+vi.mock('@/utils/supabase/user-client', async () => {
   const { fakeSupabase } = await import('@/utils/testing/fake-supabase');
-  return { createClient: async () => fakeSupabase(state.tables) };
+  return { createUserClient: async () => fakeSupabase(state.tables) };
 });
 vi.mock('@/utils/paddle/get-customer-id', () => ({ getCustomerId: async () => 'ctm_1' }));
 

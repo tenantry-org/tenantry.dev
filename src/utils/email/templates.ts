@@ -1,3 +1,4 @@
+import 'server-only';
 import { EmailMessage } from '@/utils/email/send';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://tenantry.dev';

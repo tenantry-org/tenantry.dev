@@ -7,7 +7,7 @@ const auth = vi.hoisted(() => ({
   linkIdentity: vi.fn(),
   getUser: vi.fn(),
 }));
-vi.mock('@/utils/supabase/server', () => ({ createClient: async () => ({ auth }) }));
+vi.mock('@/utils/supabase/user-client', () => ({ createUserClient: async () => ({ auth }) }));
 vi.mock('@/utils/github/sync-link', () => ({ isLinkError: () => false, syncGithubLinkForCurrentUser: vi.fn() }));
 vi.mock('@/utils/site-origin', () => ({ siteOrigin: async () => 'https://tenantry.dev' }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));

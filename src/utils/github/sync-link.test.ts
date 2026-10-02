@@ -27,16 +27,16 @@ function signedInUser(overrides: Record<string, unknown> = {}) {
   };
 }
 
-vi.mock('@/utils/supabase/server', () => ({
-  createClient: () => ({
+vi.mock('@/utils/supabase/user-client', () => ({
+  createUserClient: () => ({
     auth: { getUser: async () => ({ data: { user: state.user } }) },
   }),
 }));
 
-vi.mock('@/utils/supabase/server-internal', async () => {
+vi.mock('@/utils/supabase/service-role-client', async () => {
   const { fakeSupabase } = await import('@/utils/testing/fake-supabase');
   return {
-    createClient: () =>
+    createServiceRoleClient: () =>
       fakeSupabase(
         {
           customers: { single: { customer_id: 'ctm_1' } },

@@ -4,6 +4,9 @@ name: docs-versions
 # release tags (scripts/docs-versions-update.mjs) and, when they differ from docs-versions.json, commits the new list
 # to master and staging, which redeploys the site. A new line appears once both Core and Pro have released in it;
 # a patch release updates its line. Hourly, so a release's docs are live within the hour; on demand as well.
+# Production deploys the commit once the test workflow passes on it, and that workflow checks the Pro access page's
+# install snippets against the newest Pro docs: the docs of a Pro release that starts a line or changes its
+# installation guide go live once the snippets match (README.md, Docs pipeline).
 on:
   schedule:
     - cron: '23 * * * *'
@@ -15,6 +18,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write # to run the test workflow on the new commit
 
 jobs:
   update:
@@ -31,14 +35,32 @@ jobs:
       - run: node scripts/docs-versions-update.mjs update
       - name: Commit and deploy a change
         run: |
+          # Production deploys a commit only once the test workflow's jobs pass on it (Vercel Deployment Checks), and a
+          # push made with this token starts no workflow, so this job runs the test workflow on its own commits. If that
+          # failed last time, master's head is still this job's commit with no test run, and it runs one now.
+          bot='41898282+github-actions[bot]@users.noreply.github.com'
+          test_master() {
+            for attempt in 1 2 3; do
+              gh workflow run test.yml --ref master && return 0
+              sleep 10
+            done
+            return 1
+          }
           if git diff --quiet -- docs-versions.json; then
             echo "No change."
+            if [ "$(git log -1 --format=%ae)" = "$bot" ] &&
+              [ "$(gh run list --workflow test.yml --commit "$(git rev-parse HEAD)" --json databaseId --jq length)" = 0 ]; then
+              test_master
+            fi
             exit 0
           fi
           git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.email "$bot"
           git commit -q -m 'Docs: publish the docs of the latest releases' -m "$(cat docs-versions.json)" -- docs-versions.json
           staging="$(git ls-remote origin refs/heads/staging | cut -f1)"
           git push origin HEAD:master
+          test_master
           # The sandbox follows production (staging is master).
           git push --force-with-lease="staging:$staging" origin HEAD:staging
+        env:
+          GH_TOKEN: ${{ github.token }}

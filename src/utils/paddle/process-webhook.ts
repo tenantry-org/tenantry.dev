@@ -1,3 +1,4 @@
+import 'server-only';
 import {
   AdjustmentAction,
   AdjustmentActionType,
@@ -8,7 +9,7 @@ import {
   EventName,
   SubscriptionStatus,
 } from '@paddle/paddle-node-sdk';
-import { createClient } from '@/utils/supabase/server-internal';
+import { createServiceRoleClient } from '@/utils/supabase/service-role-client';
 import { isProProduct } from '@/constants/pro-product';
 import { getEntitlement, upsertEntitlement } from '@/utils/entitlements/entitlements-store';
 import { entitlementFor } from '@/utils/entitlements/grace';
@@ -151,7 +152,7 @@ export class ProcessWebhook {
   // Returns false if a newer event for this subscription has already been applied. Throws a foreign-key
   // error if the customer has not been recorded yet, so the worker retries once customer.created arrives.
   private async recordSubscriptionEvent(data: SubscriptionEventData, occurredAt: string): Promise<boolean> {
-    const supabase = createClient();
+    const supabase = createServiceRoleClient();
     const { data: applied, error } = await supabase.rpc('record_subscription_event', {
       p_subscription_id: data.id,
       p_customer_id: data.customerId,
@@ -171,7 +172,7 @@ export class ProcessWebhook {
   // Records the customer's email unless a newer customer event has already been applied: the email decides
   // which account owns the customer, so a delayed event must not restore an older one.
   private async recordCustomerEvent(eventData: CustomerCreatedEvent | CustomerUpdatedEvent) {
-    const supabase = createClient();
+    const supabase = createServiceRoleClient();
     const { data: applied, error } = await supabase.rpc('record_customer_event', {
       p_customer_id: eventData.data.id,
       // Stored normalised, as the database also enforces, so it matches the buyer's account in any case.

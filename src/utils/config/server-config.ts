@@ -1,3 +1,4 @@
+import 'server-only';
 import { createPrivateKey, createPublicKey } from 'node:crypto';
 import { parseProProductId } from '@/constants/pro-product';
 import { LegalEntity, legalEntityIncomplete } from '@/constants/legal-entity';

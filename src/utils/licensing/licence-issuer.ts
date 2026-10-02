@@ -1,3 +1,4 @@
+import 'server-only';
 import { createHash, createPrivateKey, createPublicKey, KeyObject, sign as cryptoSign } from 'crypto';
 
 /**

@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CUSTOMER_BUSY, withCustomerLease } from './customer-lease';
 
 const db = vi.hoisted(() => ({ grants: [] as (string | null)[], released: [] as string[] }));
-vi.mock('@/utils/supabase/server-internal', () => ({
-  createClient: () => ({
+vi.mock('@/utils/supabase/service-role-client', () => ({
+  createServiceRoleClient: () => ({
     rpc: async (name: string, args: Record<string, unknown>) => {
       if (name === 'acquire_customer_lease') return { data: db.grants.shift() ?? null, error: null };
       db.released.push(args.p_lease_id as string);

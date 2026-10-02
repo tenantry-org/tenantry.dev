@@ -1,5 +1,6 @@
-import { createClient } from '@/utils/supabase/server';
-import { createClient as createServiceClient } from '@/utils/supabase/server-internal';
+import 'server-only';
+import { createUserClient } from '@/utils/supabase/user-client';
+import { createServiceRoleClient } from '@/utils/supabase/service-role-client';
 import { automatedProvisioningEnabled } from '@/utils/provisioning-guard';
 import { confirmedEmail } from '@/utils/customers/email';
 import { grantAndRecord, isEntitled } from '@/utils/entitlements/customer-access';
@@ -55,7 +56,7 @@ export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
 }
 
 async function syncGithubLink(): Promise<SyncResult> {
-  const supabase = await createClient();
+  const supabase = await createUserClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -78,7 +79,7 @@ async function syncGithubLink(): Promise<SyncResult> {
     return { linked: false, granted: false, reason: 'incomplete-identity' };
   }
 
-  const service = createServiceClient();
+  const service = createServiceRoleClient();
 
   // Only purchasers have a customer row; until then there is nothing to link to.
   const { data: customer } = await service.from('customers').select('customer_id').eq('email', email).maybeSingle();
@@ -92,7 +93,7 @@ async function syncGithubLink(): Promise<SyncResult> {
 
 // Records the link and grants access if the customer is entitled. Runs holding the customer's lease.
 async function linkAndGrant(customerId: string, githubId: number): Promise<SyncResult> {
-  const service = createServiceClient();
+  const service = createServiceRoleClient();
   // The identity's login is as of the user's last GitHub sign-in: the account may have been renamed since, or
   // deleted, and its name then taken by someone else. So the login comes from the id, and a deleted account is
   // neither linked nor granted.

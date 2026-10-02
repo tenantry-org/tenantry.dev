@@ -1,3 +1,4 @@
+import 'server-only';
 import { getPaddleInstance } from '@/utils/paddle/get-paddle-instance';
 
 /**

@@ -1,4 +1,5 @@
-import { createClient } from '@/utils/supabase/server';
+import 'server-only';
+import { createUserClient } from '@/utils/supabase/user-client';
 import { getCustomerId } from '@/utils/paddle/get-customer-id';
 import { graceEndsAt } from '@/utils/entitlements/grace';
 import type { GithubState } from '@/utils/entitlements/entitlements-store';
@@ -51,7 +52,7 @@ export async function getProAccess(): Promise<ProAccess> {
     return { customerId: null, entitlement: null, licence: null, githubLogin: null, subscriptions: [] };
   }
 
-  const supabase = await createClient();
+  const supabase = await createUserClient();
 
   const [{ data: entitlement }, { data: licence }, { data: link }, { data: entitlements }, { data: subscriptions }] =
     await Promise.all([

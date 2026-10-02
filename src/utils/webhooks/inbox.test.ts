@@ -4,10 +4,10 @@ import { enqueueEvent, eventKeys, MAX_ATTEMPTS, PaddleEventJson, retryDelayMinut
 
 const state = vi.hoisted(() => ({ calls: [] as unknown[], inserted: [] as unknown[] }));
 
-vi.mock('@/utils/supabase/server-internal', async () => {
+vi.mock('@/utils/supabase/service-role-client', async () => {
   const { fakeSupabase } = await import('@/utils/testing/fake-supabase');
   return {
-    createClient: () => fakeSupabase({ webhook_inbox: { list: state.inserted } }, state.calls as FakeCall[]),
+    createServiceRoleClient: () => fakeSupabase({ webhook_inbox: { list: state.inserted } }, state.calls as FakeCall[]),
   };
 });
 

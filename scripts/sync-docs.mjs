@@ -29,6 +29,7 @@ import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
 import { basePath, readVersions, versionProblems } from './docs-versions.mjs';
+import { hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = resolve(here, '..');
@@ -39,13 +40,13 @@ const groups = [
     name: 'core',
     title: 'Tenantry Core',
     envVar: 'CORE_DOCS_DIR',
-    repository: 'https://github.com/tenantry-org/tenantry-core',
+    repository: REPOSITORIES.core,
   },
   {
     name: 'pro',
     title: 'Tenantry Pro',
     envVar: 'PRO_DOCS_DIR',
-    repository: 'https://github.com/tenantry-org/tenantry-pro-docs',
+    repository: REPOSITORIES.pro,
   },
 ];
 
@@ -184,46 +185,6 @@ function fail(message) {
   process.exit(1);
 }
 
-function git(...args) {
-  return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); // NOSONAR: git from the build's PATH
-}
-
-function hasTag(dir, tag) {
-  try {
-    git('-C', dir, 'rev-parse', '--verify', '--quiet', `refs/tags/${tag}^{commit}`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// A partial clone of the group's repository (no file contents until a tag's docs are read) with the given tags,
-// or null when it cannot be reached and has none of them yet.
-function repository(group, tags) {
-  const dir = resolve(siteRoot, 'content', '_src', group.name);
-  try {
-    if (!existsSync(join(dir, 'HEAD'))) {
-      rmSync(dir, { recursive: true, force: true });
-      git('clone', '--quiet', '--bare', '--filter=blob:none', '--no-tags', group.repository, dir);
-    }
-    const missing = tags.filter((tag) => !hasTag(dir, tag));
-    if (missing.length > 0) {
-      git(
-        '-C',
-        dir,
-        'fetch',
-        '--quiet',
-        '--filter=blob:none',
-        'origin',
-        ...missing.map((t) => `+refs/tags/${t}:refs/tags/${t}`),
-      );
-    }
-  } catch (error) {
-    console.warn(`sync-docs: could not update ${group.repository}: ${String(error.stderr || error.message).trim()}`);
-  }
-  return existsSync(join(dir, 'HEAD')) ? dir : null;
-}
-
 // The docs folder of a tag, extracted to a temporary folder.
 function docsAt(dir, tag) {
   if (!hasTag(dir, tag)) return null;
@@ -243,7 +204,10 @@ if (problems.length > 0) {
 }
 
 const repositories = Object.fromEntries(
-  groups.map((group) => [group.name, repository(group, versions.map((entry) => entry[group.name]).filter(Boolean))]),
+  groups.map((group) => [
+    group.name,
+    partialClone(group.name, versions.map((entry) => entry[group.name]).filter(Boolean)),
+  ]),
 );
 
 const docsRoot = join(siteRoot, 'content', 'docs');

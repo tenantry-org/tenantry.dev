@@ -1,8 +1,15 @@
 /**
- * The setup snippets the Pro access page shows. They match Tenantry.Pro's installation guide
- * (docs/installation.md in tenantry-pro), with the environment's GitHub org in place of `tenantry-org`, so
- * the portal and the docs never give different instructions. install-snippets.test.ts compares them.
+ * The setup snippets the Pro access page shows. They match the installation guide (docs/installation.md) of the
+ * Tenantry.Pro release line below, with the environment's GitHub org in place of `tenantry-org`, so the portal
+ * and the docs never give different instructions. install-snippets.test.ts compares them.
  */
+
+/**
+ * The Tenantry.Pro release line the snippets describe. It may be the next line before it is released: until its
+ * docs are published (docs-versions.json), the snippets are compared with a sibling tenantry-pro checkout, if there
+ * is one; from then on, with the published guide, and the tests fail once a newer line is published.
+ */
+export const PRO_RELEASE_LINE = '0.5';
 
 /** Environment variables the `nuget.config` reads the feed credentials from. */
 export const FEED_USERNAME_VARIABLE = 'TENANTRY_GITHUB_USERNAME';

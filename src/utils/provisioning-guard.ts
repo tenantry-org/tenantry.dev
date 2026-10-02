@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * The gate for automated provisioning (GitHub team access + licence issuance).
  *

@@ -1,3 +1,4 @@
+import 'server-only';
 import { Environment, LogLevel, Paddle, PaddleOptions } from '@paddle/paddle-node-sdk';
 import { requireEnv } from '@/utils/config/env';
 

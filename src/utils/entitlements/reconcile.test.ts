@@ -11,10 +11,11 @@ const state = vi.hoisted(() => ({
   customers: [] as string[],
 }));
 // customers_to_reconcile is tested against the database in supabase/tests/database/reconcile.test.sql.
-vi.mock('@/utils/supabase/server-internal', async () => {
+vi.mock('@/utils/supabase/service-role-client', async () => {
   const { fakeSupabase } = await import('@/utils/testing/fake-supabase');
   return {
-    createClient: () => fakeSupabase(state.tables, state.calls, { customers_to_reconcile: () => state.customers }),
+    createServiceRoleClient: () =>
+      fakeSupabase(state.tables, state.calls, { customers_to_reconcile: () => state.customers }),
   };
 });
 
