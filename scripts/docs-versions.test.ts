@@ -6,7 +6,8 @@ const v04 = { version: '0.4', core: 'v0.4.0', pro: 'v0.4.0' };
 describe('docs versions', () => {
   it('reads a tag’s release line', () => {
     expect(lineOf('v0.4.0')).toBe('0.4');
-    expect(lineOf('v1.12.3-rc.1')).toBe('1.12');
+    expect(lineOf('v0.12.3-rc.1')).toBe('0.12');
+    expect(lineOf('v1.12.3')).toBe('1');
     expect(lineOf('0.4.0')).toBeNull();
     expect(lineOf('v0.4')).toBeNull();
   });
@@ -25,6 +26,9 @@ describe('docs versions', () => {
       "0.4's pro tag v0.5.0 is not a 0.4 release.",
     ]);
     expect(versionProblems([v04, v04])).toEqual(['0.4 is listed twice.', '0.4 is out of order (newest first).']);
+    expect(versionProblems([{ version: '1.0', core: 'v1.0.0', pro: 'v1.0.0' }])).toEqual([
+      '"1.0" is not a release line (0.MINOR, or MAJOR from 1).',
+    ]);
   });
 
   it('publishes each line both groups released, with the newest stable patch of each', () => {
@@ -49,6 +53,18 @@ describe('docs versions', () => {
       resolveVersions({ core: ['v0.9.0', 'v0.10.0', 'v1.0.0'], pro: ['v0.9.0', 'v0.10.0', 'v1.0.0'] }).map(
         (v) => v.version,
       ),
-    ).toEqual(['1.0', '0.10', '0.9']);
+    ).toEqual(['1', '0.10', '0.9']);
+  });
+
+  it('publishes one line per major from 1.0, with its newest release', () => {
+    const versions = resolveVersions({
+      core: ['v0.5.6', 'v1.0.1', 'v1.2.0', 'v1.10.0', 'v2.0.0-rc.1'],
+      pro: ['v0.5.0', 'v1.0.0', 'v1.1.3', 'v1.1.12'],
+    });
+    expect(versions).toEqual([
+      { version: '1', core: 'v1.10.0', pro: 'v1.1.12' },
+      { version: '0.5', core: 'v0.5.6', pro: 'v0.5.0' },
+    ]);
+    expect(versionProblems(versions)).toEqual([]);
   });
 });

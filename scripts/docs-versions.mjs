@@ -1,10 +1,14 @@
 /**
- * The docs versions the site publishes (docs-versions.json), newest first. Each is a release line (`0.4`) with the
- * Core and Pro release tags its docs come from: Core's repository and the public tenantry-pro-docs repository, which
- * each Pro release publishes to and tags. The newest is served at /docs, each older one at /docs/v<version>.
+ * The docs versions the site publishes (docs-versions.json), newest first. Each is a release line with the Core and
+ * Pro release tags its docs come from: Core's repository and the public tenantry-pro-docs repository, which each Pro
+ * release publishes to and tags. The newest is served at /docs, each older one at /docs/v<version>.
+ *
+ * A release line is the releases that keep one API, so only its newest release's docs are needed: before 1.0 a minor
+ * release can break the API, so each minor is a line (`0.4`, `0.5`); from 1.0 only a major release can, so each
+ * major is one (`1`, `2`). Core and Pro release separately within a line, so its Core and Pro tags can differ.
  *
  * The list is derived from the release tags (resolveVersions), not written by hand: a line is published once both
- * Core and Pro have a stable release in it, with the newest patch of each. The docs-versions workflow updates the
+ * Core and Pro have a stable release in it, with the newest release of each. The docs-versions workflow updates the
  * file when a release changes it.
  */
 import { readFileSync, writeFileSync } from 'fs';
@@ -17,10 +21,11 @@ export const RELEASE_TAG = /^v(\d+)\.(\d+)\.\d+(-[0-9A-Za-z.-]+)?$/;
 const STABLE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 export const CONFIG_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs-versions.json');
 
-/** The release line a tag belongs to: v0.4.1 → 0.4. */
+/** The release line a tag belongs to: v0.4.1 → 0.4, v1.2.3 → 1. */
 export function lineOf(tag) {
   const match = RELEASE_TAG.exec(tag ?? '');
-  return match ? `${match[1]}.${match[2]}` : null;
+  if (!match) return null;
+  return match[1] === '0' ? `0.${match[2]}` : match[1];
 }
 
 /** The problems with a versions list, as messages; empty when it is valid and complete. */
@@ -32,8 +37,8 @@ export function versionProblems(versions) {
   let previous = null;
   for (const entry of versions) {
     const { version } = entry;
-    if (!/^\d+\.\d+$/.test(version ?? '')) {
-      problems.push(`"${version}" is not a release line (MAJOR.MINOR).`);
+    if (!/^(0\.\d+|[1-9]\d*)$/.test(version ?? '')) {
+      problems.push(`"${version}" is not a release line (0.MINOR, or MAJOR from 1).`);
       continue;
     }
     if (seen.has(version)) problems.push(`${version} is listed twice.`);
@@ -51,9 +56,16 @@ export function versionProblems(versions) {
 }
 
 export function compareLines(a, b) {
-  const [aMajor, aMinor] = a.split('.').map(Number);
-  const [bMajor, bMinor] = b.split('.').map(Number);
+  const [aMajor, aMinor = 0] = a.split('.').map(Number);
+  const [bMajor, bMinor = 0] = b.split('.').map(Number);
   return aMajor - bMajor || aMinor - bMinor;
+}
+
+// Two stable tags by version: v0.4.10 is after v0.4.2.
+function compareReleases(a, b) {
+  const [, ...aParts] = STABLE_TAG.exec(a).map(Number);
+  const [, ...bParts] = STABLE_TAG.exec(b).map(Number);
+  return aParts[0] - bParts[0] || aParts[1] - bParts[1] || aParts[2] - bParts[2];
 }
 
 /** The site path each version is served under: the newest at /docs, the others at /docs/v<version>. */
@@ -75,11 +87,10 @@ export function resolveVersions(tagsByGroup) {
   for (const group of GROUPS) {
     newest[group] = new Map();
     for (const tag of tagsByGroup[group] ?? []) {
-      const match = STABLE_TAG.exec(tag);
-      if (!match) continue;
-      const line = `${match[1]}.${match[2]}`;
+      if (!STABLE_TAG.test(tag)) continue;
+      const line = lineOf(tag);
       const current = newest[group].get(line);
-      if (!current || Number(match[3]) > Number(STABLE_TAG.exec(current)[3])) newest[group].set(line, tag);
+      if (!current || compareReleases(tag, current) > 0) newest[group].set(line, tag);
     }
   }
 

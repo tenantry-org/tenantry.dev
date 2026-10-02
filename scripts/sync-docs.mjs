@@ -7,7 +7,7 @@
  *   - injects frontmatter (`title` from the first H1, which is then removed from the body),
  *   - derives a short `description` from the first paragraph,
  *   - rewrites relative `.md` links to clean docs paths (e.g. `(tenant-stores.md)` → `(tenant-stores)`),
- *   - adds each tag's CHANGELOG.md as the group's Changelog page (docs-changelog.mjs).
+ *   - adds the release line's part of each tag's CHANGELOG.md as the group's Changelog page (docs-changelog.mjs).
  *
  * The versions are listed in docs-versions.json (docs-versions.mjs), each with the release tags of Core's
  * repository and of the public tenantry-pro-docs repository (which each Pro release publishes to and tags; Vercel
@@ -215,13 +215,12 @@ function syncChangelog(source, outDir, group, linkSource, context) {
     console.warn(`sync-docs: ${message}`);
     return null;
   }
-  const content = toFrontmatter(
-    changelogPage(readFileSync(file, 'utf8'), group.title),
-    group.name,
-    linkSource,
-    '',
-    context,
-  );
+  const page = changelogPage(readFileSync(file, 'utf8'), {
+    product: group.title,
+    line: context.version,
+    fullChangelog: `${linkSource.repository}/blob/${linkSource.ref}/CHANGELOG.md`,
+  });
+  const content = toFrontmatter(page, group.name, linkSource, '', context);
   for (const link of relativeLinks(content)) brokenLinks.push(`${context.version} ${group.name}/CHANGELOG.md: ${link}`);
   writeFileSync(join(outDir, 'changelog.mdx'), content);
   total += 1;

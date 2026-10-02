@@ -90,11 +90,12 @@ with the Core and Pro release tags its docs come from (Core's repository, and th
 repository, which each Pro release publishes and tags). The newest is served at `/docs`, each older one at
 `/docs/v<version>` with a notice pointing to the latest; the sidebar has a version dropdown and search covers
 the version being read. The tags are read from partial clones kept in `content/_src/` (gitignored), so every
-build, local ones included, shows what the released packages do. Each group ends with a Changelog page, the tag's
-`CHANGELOG.md` (`scripts/docs-changelog.mjs`); tenantry-pro-docs has Pro's from 0.5.0.
+build, local ones included, shows what the released packages do. A release line keeps one API: each minor before
+1.0 (`0.4`, `0.5`), each major from 1.0 (`1`). Each group ends with a Changelog page: the line's releases from the
+tag's `CHANGELOG.md`, with a link to the rest (`scripts/docs-changelog.mjs`); tenantry-pro-docs has Pro's from 0.5.0.
 
 - **Releases publish their docs by themselves.** The versions are worked out from the release tags: a line is
-  listed once both Core and Pro have a stable release in it, with the newest patch of each. The `docs-versions`
+  listed once both Core and Pro have a stable release in it, with the newest release of each. The `docs-versions`
   workflow checks hourly (or on demand), commits any change to master and staging, which redeploys the site, and runs
   the test workflow on the commit, since its own pushes start none.
   `pnpm docs:update` does the same locally; `pnpm docs:check` fails unless the file matches the tags.
