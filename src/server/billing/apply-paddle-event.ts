@@ -10,17 +10,10 @@ import {
   SubscriptionStatus,
 } from '@paddle/paddle-node-sdk';
 import { isProProduct } from '@/constants/pro-product';
-import {
-  getEntitlement,
-  recordCustomerEvent,
-  recordSubscriptionEvent,
-  upsertEntitlement,
-} from '@/server/db/billing-store';
 import { entitlementFor } from '@/server/billing/access-policy';
 import { syncCustomerAccess } from '@/server/billing/customer-access';
 import { normaliseEmail } from '@/server/db/customer-email';
-import { cancelSubscriptionNow } from '@/server/integrations/paddle/cancel-subscription';
-import { alertOperator } from '@/server/integrations/email/alerts';
+import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
 
 // Structural view of the bits of SubscriptionNotification this handler needs.
 interface SubscriptionEventData {
@@ -48,7 +41,7 @@ interface AdjustmentEventData {
  * a subscription or customer event older than the last one applied to its subscription or customer changes
  * nothing. Throwing makes the worker retry the event later.
  */
-export async function applyPaddleEvent(eventData: EventEntity): Promise<void> {
+export async function applyPaddleEvent(eventData: EventEntity, deps: BillingDeps = defaultBillingDeps): Promise<void> {
   switch (eventData.eventType) {
     case EventName.SubscriptionCreated:
     case EventName.SubscriptionUpdated:
@@ -58,15 +51,15 @@ export async function applyPaddleEvent(eventData: EventEntity): Promise<void> {
     case EventName.SubscriptionPaused:
     case EventName.SubscriptionResumed:
     case EventName.SubscriptionTrialing:
-      await handleSubscription(eventData.data as unknown as SubscriptionEventData, eventData.occurredAt);
+      await handleSubscription(eventData.data as unknown as SubscriptionEventData, eventData.occurredAt, deps);
       break;
     case EventName.CustomerCreated:
     case EventName.CustomerUpdated:
-      await handleCustomer(eventData);
+      await handleCustomer(eventData, deps);
       break;
     case EventName.AdjustmentCreated:
     case EventName.AdjustmentUpdated:
-      await handleAdjustment(eventData.data as unknown as AdjustmentEventData);
+      await handleAdjustment(eventData.data as unknown as AdjustmentEventData, deps);
       break;
   }
 }
@@ -76,8 +69,9 @@ export async function applyPaddleEvent(eventData: EventEntity): Promise<void> {
 // has already been applied (Paddle does not guarantee delivery order).
 // Recording the subscription throws a foreign-key error if the customer has not been recorded yet, so the
 // worker retries once customer.created arrives.
-async function handleSubscription(data: SubscriptionEventData, occurredAt: string) {
-  const applied = await recordSubscriptionEvent({
+async function handleSubscription(data: SubscriptionEventData, occurredAt: string, deps: BillingDeps) {
+  const { store } = deps;
+  const applied = await store.recordSubscriptionEvent({
     subscriptionId: data.id,
     customerId: data.customerId,
     status: data.status,
@@ -95,7 +89,7 @@ async function handleSubscription(data: SubscriptionEventData, occurredAt: strin
 
   // A subscription that is not (or is no longer) for Pro entitles to nothing: if it was for Pro before,
   // its entitlement ends, and the customer keeps access only through their other subscriptions.
-  const previous = await getEntitlement(data.id);
+  const previous = await store.getEntitlement(data.id);
 
   if (!isProProduct(data.items[0]?.price?.productId)) {
     console.warn(
@@ -103,8 +97,8 @@ async function handleSubscription(data: SubscriptionEventData, occurredAt: strin
         'it entitles to nothing.',
     );
     if (previous && previous.status !== 'revoked') {
-      await upsertEntitlement({ ...previous, status: 'revoked', graceStartedAt: null });
-      await syncCustomerAccess(data.customerId);
+      await store.upsertEntitlement({ ...previous, status: 'revoked', graceStartedAt: null });
+      await syncCustomerAccess(data.customerId, deps);
     }
     return;
   }
@@ -112,7 +106,7 @@ async function handleSubscription(data: SubscriptionEventData, occurredAt: strin
   // A past-due subscription is in grace from its first past-due event (access-policy.ts).
   const entitlement = entitlementFor(data.status, previous?.graceStartedAt ?? null, new Date(occurredAt));
 
-  await upsertEntitlement({
+  await store.upsertEntitlement({
     customerId: data.customerId,
     subscriptionId: data.id,
     status: entitlement.status,
@@ -120,7 +114,7 @@ async function handleSubscription(data: SubscriptionEventData, occurredAt: strin
     graceStartedAt: entitlement.graceStartedAt,
   });
 
-  await syncCustomerAccess(data.customerId);
+  await syncCustomerAccess(data.customerId, deps);
 }
 
 /**
@@ -130,13 +124,13 @@ async function handleSubscription(data: SubscriptionEventData, occurredAt: strin
  * chargeback warning (which can still be reversed), change nothing but tell the operator. Credits and
  * reversals are ignored. Throwing (Paddle unavailable) makes the worker retry.
  */
-async function handleAdjustment(data: AdjustmentEventData) {
+async function handleAdjustment(data: AdjustmentEventData, deps: BillingDeps) {
   const endsAccess =
     data.status === 'approved' && ((data.action === 'refund' && data.type === 'full') || data.action === 'chargeback');
 
   if (!endsAccess) {
     if (data.status === 'approved' && ['refund', 'chargeback_warning'].includes(data.action)) {
-      await alertOperator(
+      await deps.alertOperator(
         `Paddle ${data.action.replace('_', ' ')} for customer ${data.customerId}`,
         `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId}` +
           `${data.subscriptionId ? `, subscription ${data.subscriptionId}` : ''}. Access is unchanged; ` +
@@ -147,15 +141,15 @@ async function handleAdjustment(data: AdjustmentEventData) {
   }
 
   if (!data.subscriptionId) {
-    await alertOperator(
+    await deps.alertOperator(
       `Paddle ${data.action} without a subscription for customer ${data.customerId}`,
       `Adjustment ${data.id} on transaction ${data.transactionId} names no subscription, so no access was changed.`,
     );
     return;
   }
 
-  if (await cancelSubscriptionNow(data.subscriptionId)) {
-    await alertOperator(
+  if (await deps.cancelSubscriptionNow(data.subscriptionId)) {
+    await deps.alertOperator(
       `Subscription ${data.subscriptionId} cancelled after a ${data.action}`,
       `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId} for customer ` +
         `${data.customerId}. The subscription was cancelled immediately; its access ends when Paddle confirms.`,
@@ -165,8 +159,8 @@ async function handleAdjustment(data: AdjustmentEventData) {
 
 // Records the customer's email unless a newer customer event has already been applied: the email decides
 // which account owns the customer, so a delayed event must not restore an older one.
-async function handleCustomer(eventData: CustomerCreatedEvent | CustomerUpdatedEvent) {
-  const applied = await recordCustomerEvent({
+async function handleCustomer(eventData: CustomerCreatedEvent | CustomerUpdatedEvent, deps: BillingDeps) {
+  const applied = await deps.store.recordCustomerEvent({
     customerId: eventData.data.id,
     // Stored normalised, as the database also enforces, so it matches the buyer's account in any case.
     email: normaliseEmail(eventData.data.email),

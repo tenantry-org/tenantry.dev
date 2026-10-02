@@ -1,81 +1,22 @@
 import { Webhooks } from '@paddle/paddle-node-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaddleEventJson } from '@/server/db/inbox';
+import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
 import { adjustmentEvent, customerEvent, subscriptionEvent } from '@/test/paddle-events';
 import { memory } from '@/test/memory-billing-store';
 import { applyPaddleEvent } from './apply-paddle-event';
 
-const state = vi.hoisted(() => ({
-  lastEventAt: new Map<string, string>(),
-  customerEmails: new Map<string, string>(),
-  /** The error recording a subscription or customer event fails with. */
-  recordError: null as { code: string; message: string } | null,
-  scheduledChanges: new Map<string, { at: string | null; action: string | null }>(),
-}));
-
-// Stands in for record_subscription_event and record_customer_event (supabase/tests/database), which the store's
-// recordSubscriptionEvent and recordCustomerEvent call: each applies an event unless a newer one for the same
-// subscription or customer was applied already.
-vi.mock('@/server/db/service-role-client', () => ({
-  createServiceRoleClient: () => ({
-    rpc: async (name: string, args: Record<string, string>) => {
-      if (state.recordError) return { data: null, error: state.recordError };
-      const key = name === 'record_customer_event' ? `customer:${args.p_customer_id}` : args.p_subscription_id;
-      const last = state.lastEventAt.get(key);
-      if (last && new Date(last) > new Date(args.p_occurred_at)) return { data: false, error: null };
-      state.lastEventAt.set(key, args.p_occurred_at);
-      if (name === 'record_customer_event') state.customerEmails.set(args.p_customer_id, args.p_email);
-      else
-        state.scheduledChanges.set(args.p_subscription_id, {
-          at: args.p_scheduled_change,
-          action: args.p_scheduled_change_action,
-        });
-      return { data: true, error: null };
-    },
-  }),
-}));
-
-const effects = vi.hoisted(() => ({
-  grantAccess: vi.fn().mockResolvedValue('active'),
-  revokeAccess: vi.fn(),
-  sendEmail: vi.fn(),
-  cancelSubscriptionNow: vi.fn(),
-  alertOperator: vi.fn(),
-}));
-vi.mock('@/server/integrations/paddle/cancel-subscription', () => ({
-  cancelSubscriptionNow: effects.cancelSubscriptionNow,
-}));
-vi.mock('@/server/integrations/email/alerts', () => ({ alertOperator: effects.alertOperator }));
-vi.mock('@/server/integrations/github/provisioning', async () => {
-  const { memory } = await import('@/test/memory-billing-store');
-  return {
-    grantAccess: effects.grantAccess,
-    revokeAccess: effects.revokeAccess,
-    currentLogin: memory.currentLogin,
-  };
-});
-// The in-memory store, but the real record functions, so the tests check the arguments they pass the database.
-vi.mock('@/server/db/billing-store', async (original) => {
-  const actual = await original<typeof import('@/server/db/billing-store')>();
-  const { memory } = await import('@/test/memory-billing-store');
-  return {
-    ...memory.store,
-    recordSubscriptionEvent: actual.recordSubscriptionEvent,
-    recordCustomerEvent: actual.recordCustomerEvent,
-  };
-});
-vi.mock('@/server/integrations/email/send', () => ({ sendEmail: effects.sendEmail }));
-vi.mock('@/server/integrations/licensing/licence-issuer', () => ({
-  issueLicence: ({ customerId }: { customerId: string }) => `licence:${customerId}`,
-}));
-vi.mock('@/server/config/provisioning-guard', () => ({ automatedProvisioningEnabled: () => true }));
+// The in-memory store applies a subscription or customer event unless a newer one was applied already, as the
+// database functions do (supabase/tests/database); billing-store.test.ts checks the arguments the real store passes
+// them.
+let deps: FakeBillingDeps;
 
 function delivered(event: PaddleEventJson) {
   return Webhooks.fromJson(event as unknown as Parameters<typeof Webhooks.fromJson>[0]);
 }
 
 function emailSubjects(): string[] {
-  return effects.sendEmail.mock.calls.map(([message]) => message.subject);
+  return deps.sendEmail.mock.calls.map(([message]) => message.subject);
 }
 
 const WELCOME = 'Welcome to Tenantry Pro — connect GitHub to get access';
@@ -101,32 +42,28 @@ const cancelled = subscriptionEvent({
 
 describe('applyPaddleEvent', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    deps = fakeBillingDeps();
     vi.stubEnv('PADDLE_PRO_PRODUCT_ID', 'pro_01');
-    state.lastEventAt.clear();
-    state.scheduledChanges.clear();
-    state.customerEmails.clear();
-    state.recordError = null;
     memory.reset();
     memory.state.emails.set('ctm_01', 'buyer@example.com');
     memory.linkGithub('ctm_01', 'octocat');
   });
 
   it('keeps a cancelled subscription revoked when an older update is delivered after the cancellation', async () => {
-    await applyPaddleEvent(delivered(created));
-    await applyPaddleEvent(delivered(cancelled));
+    await applyPaddleEvent(delivered(created), deps);
+    await applyPaddleEvent(delivered(cancelled), deps);
 
-    expect(effects.revokeAccess).toHaveBeenCalledWith('octocat');
+    expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
     expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
     vi.clearAllMocks();
 
-    await applyPaddleEvent(delivered(earlierUpdate));
+    await applyPaddleEvent(delivered(earlierUpdate), deps);
 
     expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
     expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
     expect(memory.liveLicences('ctm_01')).toEqual([]);
-    expect(effects.grantAccess).not.toHaveBeenCalled();
-    expect(effects.sendEmail).not.toHaveBeenCalled();
+    expect(deps.github.grantAccess).not.toHaveBeenCalled();
+    expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
   afterEach(() => {
@@ -143,17 +80,18 @@ describe('applyPaddleEvent', () => {
           productId: 'pro_02',
         }),
       ),
+      deps,
     );
 
-    expect(state.lastEventAt.get('sub_01')).toBeDefined();
+    expect(memory.state.subscriptions.get('sub_01')).toBeDefined();
     expect(memory.state.entitlements.size).toBe(0);
     expect(memory.state.access.size).toBe(0);
-    expect(effects.grantAccess).not.toHaveBeenCalled();
-    expect(effects.sendEmail).not.toHaveBeenCalled();
+    expect(deps.github.grantAccess).not.toHaveBeenCalled();
+    expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
   it('ends access when the Pro subscription moves to another product, and on later events for it', async () => {
-    await applyPaddleEvent(delivered(created));
+    await applyPaddleEvent(delivered(created), deps);
     vi.clearAllMocks();
 
     const movedAway = subscriptionEvent({
@@ -162,11 +100,11 @@ describe('applyPaddleEvent', () => {
       status: 'active',
       productId: 'pro_02',
     });
-    await applyPaddleEvent(delivered(movedAway));
+    await applyPaddleEvent(delivered(movedAway), deps);
 
     expect(memory.state.entitlements.get('sub_01')).toMatchObject({ status: 'revoked', graceStartedAt: null });
     expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
-    expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
+    expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
     expect(memory.liveLicences('ctm_01')).toEqual([]);
     expect(emailSubjects()).toEqual([ENDED]);
     vi.clearAllMocks();
@@ -182,15 +120,16 @@ describe('applyPaddleEvent', () => {
           productId: 'pro_02',
         }),
       ),
+      deps,
     );
 
     expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
-    expect(effects.revokeAccess).not.toHaveBeenCalled();
-    expect(effects.sendEmail).not.toHaveBeenCalled();
+    expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+    expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
   it('keeps access through another Pro subscription when one moves to another product', async () => {
-    await applyPaddleEvent(delivered(created));
+    await applyPaddleEvent(delivered(created), deps);
     await applyPaddleEvent(
       delivered(
         subscriptionEvent({
@@ -201,6 +140,7 @@ describe('applyPaddleEvent', () => {
           subscriptionId: 'sub_02',
         }),
       ),
+      deps,
     );
     vi.clearAllMocks();
 
@@ -213,12 +153,13 @@ describe('applyPaddleEvent', () => {
           productId: 'pro_02',
         }),
       ),
+      deps,
     );
 
     expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
     expect(memory.state.access.get('ctm_01')?.status).toBe('active');
-    expect(effects.revokeAccess).not.toHaveBeenCalled();
-    expect(effects.sendEmail).not.toHaveBeenCalled();
+    expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+    expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
   describe('customer events', () => {
@@ -226,43 +167,44 @@ describe('applyPaddleEvent', () => {
       delivered(customerEvent({ eventId, eventType: 'customer.updated', occurredAt, customerId: 'ctm_01', email }));
 
     it('records the email normalised, with when the event occurred', async () => {
-      await applyPaddleEvent(emailEvent('evt_c1', '2026-09-29T10:00:00Z', ' Buyer@Example.COM '));
+      await applyPaddleEvent(emailEvent('evt_c1', '2026-09-29T10:00:00Z', ' Buyer@Example.COM '), deps);
 
-      expect(state.customerEmails.get('ctm_01')).toBe('buyer@example.com');
-      expect(state.lastEventAt.get('customer:ctm_01')).toBe('2026-09-29T10:00:00Z');
+      expect(memory.state.emails.get('ctm_01')).toBe('buyer@example.com');
+      expect(memory.state.customerEventAt.get('ctm_01')).toBe('2026-09-29T10:00:00Z');
     });
 
     it('keeps a newer email when an older customer event is delivered after it', async () => {
-      await applyPaddleEvent(emailEvent('evt_c1', '2026-09-29T10:00:00Z', 'old@example.com'));
-      await applyPaddleEvent(emailEvent('evt_c3', '2026-09-29T11:00:00Z', 'new@example.com'));
-      await applyPaddleEvent(emailEvent('evt_c2', '2026-09-29T10:30:00Z', 'old@example.com'));
+      await applyPaddleEvent(emailEvent('evt_c1', '2026-09-29T10:00:00Z', 'old@example.com'), deps);
+      await applyPaddleEvent(emailEvent('evt_c3', '2026-09-29T11:00:00Z', 'new@example.com'), deps);
+      await applyPaddleEvent(emailEvent('evt_c2', '2026-09-29T10:30:00Z', 'old@example.com'), deps);
 
-      expect(state.customerEmails.get('ctm_01')).toBe('new@example.com');
+      expect(memory.state.emails.get('ctm_01')).toBe('new@example.com');
     });
 
     it('fails when the customer cannot be recorded, so the worker retries it', async () => {
-      state.recordError = { code: '08006', message: 'connection failure' };
+      const connectionFailure = { code: '08006', message: 'connection failure' };
+      vi.spyOn(deps.store, 'recordCustomerEvent').mockRejectedValueOnce(connectionFailure);
 
-      await expect(applyPaddleEvent(emailEvent('evt_c1', '2026-09-29T10:00:00Z', 'a@example.com'))).rejects.toEqual(
-        state.recordError,
-      );
+      await expect(
+        applyPaddleEvent(emailEvent('evt_c1', '2026-09-29T10:00:00Z', 'a@example.com'), deps),
+      ).rejects.toEqual(connectionFailure);
     });
   });
 
   it('changes nothing when the same event is processed again, as after a worker crash before it was marked done', async () => {
-    await applyPaddleEvent(delivered(created));
-    await applyPaddleEvent(delivered(created));
-    await applyPaddleEvent(delivered(cancelled));
-    await applyPaddleEvent(delivered(cancelled));
+    await applyPaddleEvent(delivered(created), deps);
+    await applyPaddleEvent(delivered(created), deps);
+    await applyPaddleEvent(delivered(cancelled), deps);
+    await applyPaddleEvent(delivered(cancelled), deps);
 
-    expect(effects.grantAccess).toHaveBeenCalledOnce();
-    expect(effects.revokeAccess).toHaveBeenCalledOnce();
+    expect(deps.github.grantAccess).toHaveBeenCalledOnce();
+    expect(deps.github.revokeAccess).toHaveBeenCalledOnce();
     expect(memory.state.licences).toHaveLength(1);
     expect(emailSubjects()).toEqual([WELCOME, ENDED]);
   });
 
   it('records a scheduled cancellation with when it takes effect, for the billing card', async () => {
-    await applyPaddleEvent(delivered(created));
+    await applyPaddleEvent(delivered(created), deps);
     await applyPaddleEvent(
       delivered(
         subscriptionEvent({
@@ -272,18 +214,22 @@ describe('applyPaddleEvent', () => {
           cancelsAt: '2026-10-01T00:00:00Z',
         }),
       ),
+      deps,
     );
 
-    expect(state.scheduledChanges.get('sub_01')).toEqual({ at: '2026-10-01T00:00:00Z', action: 'cancel' });
+    expect(memory.state.subscriptions.get('sub_01')).toMatchObject({
+      scheduledChangeAt: '2026-10-01T00:00:00Z',
+      scheduledChangeAction: 'cancel',
+    });
   });
 
   it('applies the same events in order: access granted, then revoked', async () => {
-    await applyPaddleEvent(delivered(earlierUpdate));
-    expect(effects.grantAccess).toHaveBeenCalledWith('octocat');
+    await applyPaddleEvent(delivered(earlierUpdate), deps);
+    expect(deps.github.grantAccess).toHaveBeenCalledWith('octocat');
     expect(memory.liveLicences('ctm_01')).toHaveLength(1);
 
-    await applyPaddleEvent(delivered(cancelled));
-    expect(effects.revokeAccess).toHaveBeenCalledWith('octocat');
+    await applyPaddleEvent(delivered(cancelled), deps);
+    expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
     expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
     expect(memory.liveLicences('ctm_01')).toEqual([]);
     expect(emailSubjects()).toEqual([WELCOME, ENDED]);
@@ -291,7 +237,7 @@ describe('applyPaddleEvent', () => {
 
   it('keeps a customer with two subscriptions in the team, with a licence, when one is cancelled', async () => {
     const second = { subscriptionId: 'sub_02', periodEndsAt: '2026-10-15T00:00:00Z' };
-    await applyPaddleEvent(delivered(created));
+    await applyPaddleEvent(delivered(created), deps);
     await applyPaddleEvent(
       delivered(
         subscriptionEvent({
@@ -302,14 +248,15 @@ describe('applyPaddleEvent', () => {
           ...second,
         }),
       ),
+      deps,
     );
 
     // Access started once, with the first subscription.
-    expect(effects.grantAccess).toHaveBeenCalledOnce();
+    expect(deps.github.grantAccess).toHaveBeenCalledOnce();
     expect(emailSubjects()).toEqual([WELCOME]);
     vi.clearAllMocks();
 
-    await applyPaddleEvent(delivered(cancelled));
+    await applyPaddleEvent(delivered(cancelled), deps);
 
     expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
     expect(memory.state.access.get('ctm_01')).toEqual({
@@ -317,8 +264,8 @@ describe('applyPaddleEvent', () => {
       githubState: 'active',
       githubInvitedAt: null,
     });
-    expect(effects.revokeAccess).not.toHaveBeenCalled();
-    expect(effects.sendEmail).not.toHaveBeenCalled();
+    expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+    expect(deps.sendEmail).not.toHaveBeenCalled();
     expect(memory.liveLicences('ctm_01')).toHaveLength(1);
 
     // Access ends with the last subscription.
@@ -332,9 +279,10 @@ describe('applyPaddleEvent', () => {
           ...second,
         }),
       ),
+      deps,
     );
 
-    expect(effects.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
+    expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
     expect(memory.state.access.get('ctm_01')).toEqual({
       status: 'revoked',
       githubState: 'none',
@@ -345,14 +293,11 @@ describe('applyPaddleEvent', () => {
   });
 
   it('fails a subscription event whose customer is not recorded yet, so the worker retries it', async () => {
-    state.recordError = {
-      code: '23503',
-      message: 'violates foreign key constraint "public_subscriptions_customer_id_fkey"',
-    };
+    memory.state.emails.delete('ctm_01');
 
-    await expect(applyPaddleEvent(delivered(earlierUpdate))).rejects.toMatchObject({ code: '23503' });
+    await expect(applyPaddleEvent(delivered(earlierUpdate), deps)).rejects.toMatchObject({ code: '23503' });
     expect(memory.state.entitlements.size).toBe(0);
-    expect(effects.grantAccess).not.toHaveBeenCalled();
+    expect(deps.github.grantAccess).not.toHaveBeenCalled();
   });
 
   describe('payment failure', () => {
@@ -380,8 +325,8 @@ describe('applyPaddleEvent', () => {
     });
 
     it('starts grace at the first past-due event, keeps that start, and clears it when the payment recovers', async () => {
-      await applyPaddleEvent(delivered(created));
-      await applyPaddleEvent(delivered(renewalFailed));
+      await applyPaddleEvent(delivered(created), deps);
+      await applyPaddleEvent(delivered(renewalFailed), deps);
 
       expect(memory.state.entitlements.get('sub_01')).toMatchObject({
         status: 'grace',
@@ -390,7 +335,7 @@ describe('applyPaddleEvent', () => {
       expect(memory.liveLicences('ctm_01')).toHaveLength(1);
 
       vi.setSystemTime(new Date('2026-10-08T00:10:00Z'));
-      await applyPaddleEvent(delivered(retryFailed));
+      await applyPaddleEvent(delivered(retryFailed), deps);
       expect(memory.state.entitlements.get('sub_01')?.graceStartedAt).toEqual(new Date('2026-10-01T00:05:00Z'));
 
       await applyPaddleEvent(
@@ -402,15 +347,16 @@ describe('applyPaddleEvent', () => {
             periodEndsAt: '2026-11-01T00:00:00Z',
           }),
         ),
+        deps,
       );
       expect(memory.state.entitlements.get('sub_01')).toMatchObject({ status: 'active', graceStartedAt: null });
       expect(memory.state.access.get('ctm_01')?.status).toBe('active');
-      expect(effects.revokeAccess).not.toHaveBeenCalled();
+      expect(deps.github.revokeAccess).not.toHaveBeenCalled();
     });
 
     it('does not restore access for a past-due event processed after grace has ended', async () => {
-      await applyPaddleEvent(delivered(created));
-      await applyPaddleEvent(delivered(renewalFailed));
+      await applyPaddleEvent(delivered(created), deps);
+      await applyPaddleEvent(delivered(renewalFailed), deps);
 
       vi.setSystemTime(new Date('2026-11-02T00:00:00Z'));
       await applyPaddleEvent(
@@ -422,26 +368,23 @@ describe('applyPaddleEvent', () => {
             periodEndsAt: '2026-11-01T00:00:00Z',
           }),
         ),
+        deps,
       );
 
       expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
-      expect(effects.revokeAccess).toHaveBeenCalledWith('octocat');
+      expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
     });
   });
 
   describe('refunds and chargebacks', () => {
-    beforeEach(() => {
-      effects.cancelSubscriptionNow.mockResolvedValue(true);
-    });
-
     const adjusted = (options: Parameters<typeof adjustmentEvent>[0]) =>
-      applyPaddleEvent(delivered(adjustmentEvent(options)));
+      applyPaddleEvent(delivered(adjustmentEvent(options)), deps);
 
     it('cancels the subscription at once when a full refund is approved, and tells the operator', async () => {
       await adjusted({ eventId: 'evt_refund', action: 'refund', status: 'approved' });
 
-      expect(effects.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
-      expect(effects.alertOperator).toHaveBeenCalledWith(
+      expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
+      expect(deps.alertOperator).toHaveBeenCalledWith(
         'Subscription sub_01 cancelled after a refund',
         expect.stringContaining('full refund'),
       );
@@ -456,27 +399,27 @@ describe('applyPaddleEvent', () => {
       });
       await adjusted({ eventId: 'evt_rejected', action: 'refund', status: 'rejected' });
 
-      expect(effects.cancelSubscriptionNow).not.toHaveBeenCalled();
-      expect(effects.alertOperator).not.toHaveBeenCalled();
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
     it('cancels on an approved chargeback, but only alerts on a chargeback warning', async () => {
       await adjusted({ eventId: 'evt_warning', action: 'chargeback_warning', status: 'approved' });
-      expect(effects.cancelSubscriptionNow).not.toHaveBeenCalled();
-      expect(effects.alertOperator).toHaveBeenCalledWith(
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(deps.alertOperator).toHaveBeenCalledWith(
         'Paddle chargeback warning for customer ctm_01',
         expect.any(String),
       );
 
       await adjusted({ eventId: 'evt_chargeback', action: 'chargeback', status: 'approved' });
-      expect(effects.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
+      expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
     });
 
     it('leaves access alone on a partial refund, telling the operator', async () => {
       await adjusted({ eventId: 'evt_partial', action: 'refund', type: 'partial', status: 'approved' });
 
-      expect(effects.cancelSubscriptionNow).not.toHaveBeenCalled();
-      expect(effects.alertOperator).toHaveBeenCalledWith(
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(deps.alertOperator).toHaveBeenCalledWith(
         'Paddle refund for customer ctm_01',
         expect.stringContaining('Access is unchanged'),
       );
@@ -486,29 +429,29 @@ describe('applyPaddleEvent', () => {
       await adjusted({ eventId: 'evt_credit', action: 'credit', status: 'approved' });
       await adjusted({ eventId: 'evt_reverse', action: 'chargeback_reverse', status: 'approved' });
 
-      expect(effects.cancelSubscriptionNow).not.toHaveBeenCalled();
-      expect(effects.alertOperator).not.toHaveBeenCalled();
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
     it('tells the operator about a refund with no subscription, changing nothing', async () => {
       await adjusted({ eventId: 'evt_orphan', action: 'refund', status: 'approved', subscriptionId: null });
 
-      expect(effects.cancelSubscriptionNow).not.toHaveBeenCalled();
-      expect(effects.alertOperator).toHaveBeenCalledWith(
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(deps.alertOperator).toHaveBeenCalledWith(
         'Paddle refund without a subscription for customer ctm_01',
         expect.any(String),
       );
     });
 
     it('does nothing more for a subscription already cancelled (a repeated or second refund)', async () => {
-      effects.cancelSubscriptionNow.mockResolvedValue(false);
+      deps.cancelSubscriptionNow.mockResolvedValue(false);
 
       await adjusted({ eventId: 'evt_again', action: 'refund', status: 'approved' });
-      expect(effects.alertOperator).not.toHaveBeenCalled();
+      expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
     it('fails the event when Paddle cannot be reached, so the worker retries it', async () => {
-      effects.cancelSubscriptionNow.mockRejectedValue(new Error('Paddle unavailable'));
+      deps.cancelSubscriptionNow.mockRejectedValue(new Error('Paddle unavailable'));
 
       await expect(adjusted({ eventId: 'evt_down', action: 'refund', status: 'approved' })).rejects.toThrow(
         'Paddle unavailable',

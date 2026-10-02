@@ -1,13 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall } from '@/test/fake-supabase';
-import { enqueueEvent, eventKeys, MAX_ATTEMPTS, PaddleEventJson, retryDelayMinutes, retryEvent } from './inbox';
+import {
+  enqueueEvent,
+  enqueueReconcileJobs,
+  eventKeys,
+  MAX_ATTEMPTS,
+  PaddleEventJson,
+  retryDelayMinutes,
+  retryEvent,
+} from './inbox';
 
-const state = vi.hoisted(() => ({ calls: [] as unknown[], inserted: [] as unknown[] }));
+const state = vi.hoisted(() => ({ calls: [] as FakeCall[], inserted: [] as unknown[] }));
 
 vi.mock('@/server/db/service-role-client', async () => {
   const { fakeSupabase } = await import('@/test/fake-supabase');
   return {
-    createServiceRoleClient: () => fakeSupabase({ webhook_inbox: { list: state.inserted } }, state.calls as FakeCall[]),
+    createServiceRoleClient: () => fakeSupabase({ webhook_inbox: { list: state.inserted } }, state.calls),
   };
 });
 
@@ -71,6 +79,54 @@ describe('enqueueEvent', () => {
 
     state.inserted = [];
     await expect(enqueueEvent(subscriptionCreated)).resolves.toBe(false);
+  });
+});
+
+describe('enqueueReconcileJobs', () => {
+  const NOW = new Date('2026-10-31T04:00:00Z');
+  const queued = () =>
+    state.calls.filter(
+      (call) => (call as FakeCall).table === 'webhook_inbox' && (call as FakeCall).method === 'upsert',
+    );
+
+  beforeEach(() => {
+    state.calls.length = 0;
+  });
+
+  it("queues one job per customer, in the customer's order, once for each run", async () => {
+    await enqueueReconcileJobs(['ctm_entitled', 'ctm_linked'], NOW);
+
+    const [rows, options] = queued()[0].args as [Record<string, unknown>[], unknown];
+    expect(rows.map((row) => row.customer_id)).toEqual(['ctm_entitled', 'ctm_linked']);
+    expect(rows[0]).toEqual({
+      event_id: 'reconcile_ctm_entitled_2026-10-31T04:00:00.000Z',
+      event_type: 'tenantry.reconcile_customer',
+      occurred_at: '2026-10-31T04:00:00.000Z',
+      customer_id: 'ctm_entitled',
+      subscription_id: null,
+      payload: {
+        event_id: 'reconcile_ctm_entitled_2026-10-31T04:00:00.000Z',
+        event_type: 'tenantry.reconcile_customer',
+        occurred_at: '2026-10-31T04:00:00.000Z',
+        data: { customer_id: 'ctm_entitled' },
+      },
+    });
+    expect(options).toEqual({ onConflict: 'event_id', ignoreDuplicates: true });
+  });
+
+  it('queues every customer in one write, beyond the API row limit', async () => {
+    const customers = Array.from({ length: 2500 }, (_, index) => `ctm_${String(index).padStart(4, '0')}`);
+
+    await enqueueReconcileJobs(customers, NOW);
+
+    expect(queued()).toHaveLength(1);
+    expect((queued()[0].args[0] as unknown[]).length).toBe(2500);
+  });
+
+  it('writes nothing when there is no one to reconcile', async () => {
+    await enqueueReconcileJobs([], NOW);
+
+    expect(state.calls).toEqual([]);
   });
 });
 

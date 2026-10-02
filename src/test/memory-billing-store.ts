@@ -1,14 +1,18 @@
-import type * as EntitlementsStore from '@/server/db/billing-store';
-
-type SubscriptionEntitlement = EntitlementsStore.SubscriptionEntitlement;
-type EntitlementStatus = EntitlementsStore.EntitlementStatus;
-type CustomerAccessRecord = EntitlementsStore.CustomerAccessRecord;
-type GithubState = EntitlementsStore.GithubState;
+import type {
+  CustomerAccessRecord,
+  EntitlementStatus,
+  GithubAccount,
+  GithubState,
+  SubscriptionEntitlement,
+  SubscriptionEvent,
+} from '@/server/db/billing-store';
+import type { BillingStore } from '@/server/billing/deps';
 
 /**
  * In-memory stand-in for billing-store.ts, for tests that follow a customer's access through several
- * events. `setCustomerAccess` and `recordLicenceFailure` behave as the `set_customer_access` and
- * `record_licence_failure` database functions do (tested in supabase/tests/database).
+ * events. `recordCustomerEvent`, `recordSubscriptionEvent`, `setCustomerAccess`, `recordLicenceFailure` and
+ * `customersToReconcile` behave as the database functions they call do (tested in supabase/tests/database), and
+ * `linkGithubAccount` as github_links' unique github_id does.
  */
 interface Licence {
   customerId: string;
@@ -17,9 +21,14 @@ interface Licence {
 }
 
 const state = {
+  /** The recorded customers' emails: a customer is recorded once it has an email here. */
   emails: new Map<string, string>(),
+  /** When each customer's last applied event occurred (customers.last_event_at). */
+  customerEventAt: new Map<string, string>(),
+  /** Each subscription as its last applied event described it. */
+  subscriptions: new Map<string, SubscriptionEvent>(),
   /** Each customer's linked GitHub account, as github_links records it. */
-  githubAccounts: new Map<string, EntitlementsStore.GithubAccount>(),
+  githubAccounts: new Map<string, GithubAccount>(),
   /** GitHub itself: each account's current login, by id. Renaming an account changes only this. */
   githubUsers: new Map<number, string>(),
   entitlements: new Map<string, SubscriptionEntitlement>(),
@@ -39,6 +48,8 @@ export const memory = {
 
   reset() {
     state.emails.clear();
+    state.customerEventAt.clear();
+    state.subscriptions.clear();
     state.githubAccounts.clear();
     state.githubUsers.clear();
     state.entitlements.clear();
@@ -63,9 +74,42 @@ export const memory = {
       return state.emails.get(customerId) ?? null;
     },
 
+    async findCustomerIdByEmail(email: string) {
+      return [...state.emails].find(([, customerEmail]) => customerEmail === email)?.[0] ?? null;
+    },
+
+    async recordCustomerEvent(event: { customerId: string; email: string; occurredAt: string }) {
+      if (isOlder(event.occurredAt, state.customerEventAt.get(event.customerId))) return false;
+      state.customerEventAt.set(event.customerId, event.occurredAt);
+      state.emails.set(event.customerId, event.email);
+      return true;
+    },
+
+    async recordSubscriptionEvent(event: SubscriptionEvent) {
+      if (!state.emails.has(event.customerId)) {
+        throw Object.assign(new Error('violates foreign key constraint "public_subscriptions_customer_id_fkey"'), {
+          code: '23503',
+        });
+      }
+      if (isOlder(event.occurredAt, state.subscriptions.get(event.subscriptionId)?.occurredAt)) return false;
+      state.subscriptions.set(event.subscriptionId, { ...event });
+      return true;
+    },
+
     async getGithubAccount(customerId: string) {
       const account = state.githubAccounts.get(customerId);
       return account ? { ...account } : null;
+    },
+
+    async getGithubAccountHolder(githubId: number) {
+      return [...state.githubAccounts].find(([, account]) => account.id === githubId)?.[0] ?? null;
+    },
+
+    async linkGithubAccount(customerId: string, account: GithubAccount) {
+      const holder = await memory.store.getGithubAccountHolder(account.id);
+      if (holder !== null && holder !== customerId) return false;
+      state.githubAccounts.set(customerId, { ...account });
+      return true;
     },
 
     async setGithubLogin(customerId: string, login: string) {
@@ -143,5 +187,21 @@ export const memory = {
     async clearLicenceFailure(customerId: string) {
       state.licenceFailures.delete(customerId);
     },
-  } satisfies Partial<typeof EntitlementsStore>,
+
+    async customersToReconcile() {
+      const entitled = (status: EntitlementStatus) => status === 'active' || status === 'grace';
+      const customers = new Set([
+        ...[...state.access].filter(([, access]) => entitled(access.status)).map(([customerId]) => customerId),
+        ...[...state.entitlements.values()].filter((e) => entitled(e.status)).map((e) => e.customerId),
+        ...state.githubAccounts.keys(),
+        ...state.licences.filter((licence) => !licence.revoked).map((licence) => licence.customerId),
+      ]);
+      return [...customers].sort();
+    },
+  } satisfies BillingStore,
 };
+
+// Whether an event occurred before the last one applied: the database applies an event unless it is older.
+function isOlder(occurredAt: string, lastAppliedAt: string | undefined): boolean {
+  return lastAppliedAt !== undefined && new Date(occurredAt) < new Date(lastAppliedAt);
+}

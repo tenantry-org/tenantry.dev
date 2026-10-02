@@ -1,13 +1,5 @@
 import 'server-only';
-import { hasPendingInvitation, membershipOf, revokeAccess } from '@/server/integrations/github/provisioning';
-import { automatedProvisioningEnabled } from '@/server/config/provisioning-guard';
-import {
-  CustomerAccessRecord,
-  hasLiveLicence,
-  getCustomerAccess,
-  revokeLicences,
-  setGithubState,
-} from '@/server/db/billing-store';
+import type { CustomerAccessRecord } from '@/server/db/billing-store';
 import {
   AccessChange,
   grantAndRecord,
@@ -16,6 +8,7 @@ import {
   syncCustomerAccess,
 } from '@/server/billing/customer-access';
 import { isEntitled } from '@/server/billing/access-policy';
+import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
 
 /**
  * What reconcile did about the customer's GitHub access:
@@ -52,21 +45,24 @@ export interface CustomerReconciliation {
  *
  * Every step is idempotent, so a job that throws is retried by the inbox with backoff.
  */
-export async function reconcileCustomer(customerId: string): Promise<CustomerReconciliation> {
-  const { change, licence } = await syncCustomerAccess(customerId);
-  const access = await getCustomerAccess(customerId);
+export async function reconcileCustomer(
+  customerId: string,
+  deps: BillingDeps = defaultBillingDeps,
+): Promise<CustomerReconciliation> {
+  const { change, licence } = await syncCustomerAccess(customerId, deps);
+  const access = await deps.store.getCustomerAccess(customerId);
   const entitled = access !== null && isEntitled(access.status);
-  const githubLogin = await linkedGithubLogin(customerId);
+  const githubLogin = await linkedGithubLogin(customerId, deps);
   const result: CustomerReconciliation = { access: change, licence, github: 'unchanged', licencesRevoked: false };
 
   if (githubLogin) {
     result.github = entitled
-      ? await reconcileGrant(customerId, githubLogin, access)
-      : await reconcileRemoval(githubLogin);
+      ? await reconcileGrant(customerId, githubLogin, access, deps)
+      : await reconcileRemoval(githubLogin, deps);
   }
 
-  if (!entitled && (await hasLiveLicence(customerId))) {
-    await revokeLicences(customerId);
+  if (!entitled && (await deps.store.hasLiveLicence(customerId))) {
+    await deps.store.revokeLicences(customerId);
     result.licencesRevoked = true;
   }
 
@@ -78,15 +74,16 @@ async function reconcileGrant(
   customerId: string,
   githubLogin: string,
   access: CustomerAccessRecord,
+  deps: BillingDeps,
 ): Promise<GithubReconciliation> {
   const recorded = access.githubState;
 
   if (recorded === 'invited' || recorded === 'active') {
-    const membership = await membershipOf(githubLogin);
+    const membership = await deps.github.membershipOf(githubLogin);
 
     if (membership === 'active') {
       if (recorded === 'active') return 'unchanged';
-      await setGithubState(customerId, 'active');
+      await deps.store.setGithubState(customerId, 'active');
       return 'accepted';
     }
     if (membership === 'pending') return 'unchanged'; // still waiting for the customer to accept
@@ -94,9 +91,9 @@ async function reconcileGrant(
   }
 
   // Honour the provisioning gate, so reconcile cannot backfill a grant the webhook withheld.
-  if (!automatedProvisioningEnabled()) return 'withheld';
+  if (!deps.automatedProvisioningEnabled()) return 'withheld';
 
-  const state = await grantAndRecord(customerId, githubLogin);
+  const state = await grantAndRecord(customerId, githubLogin, deps);
   if (state === 'failed') throw new Error(`GitHub grant failed for customer ${customerId}`);
 
   return state === 'active' ? 'granted' : 'invited';
@@ -105,9 +102,12 @@ async function reconcileGrant(
 // A customer who is not entitled must not be in the team, or hold an invitation they could still accept.
 // The invitation is checked even without a membership: a removal that failed between leaving the team and
 // cancelling the invitation leaves only the invitation.
-async function reconcileRemoval(githubLogin: string): Promise<GithubReconciliation> {
-  if ((await membershipOf(githubLogin)) === null && !(await hasPendingInvitation(githubLogin))) return 'unchanged';
+async function reconcileRemoval(githubLogin: string, deps: BillingDeps): Promise<GithubReconciliation> {
+  const { github } = deps;
+  if ((await github.membershipOf(githubLogin)) === null && !(await github.hasPendingInvitation(githubLogin))) {
+    return 'unchanged';
+  }
 
-  await revokeAccess(githubLogin);
+  await github.revokeAccess(githubLogin);
   return 'removed';
 }

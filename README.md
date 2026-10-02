@@ -39,8 +39,11 @@ Key code is in `src/server`, in layers whose imports point only down this list (
 - `config/` — the server's environment, validated when it starts.
 
 Modules in `src/server` import `server-only` (except `db/update-session.ts`, which the proxy runs), so a client
-component that pulls one in fails the build. `src/lib` holds helpers for both sides, and `src/test` the fakes the
-tests share. The schema, RLS policies and database functions are in `supabase/migrations/`, and their tests in
+component that pulls one in fails the build. The services that change a customer's access (`customer-access.ts`,
+`reconcile-customer.ts`, `apply-paddle-event.ts`, `sync-github-link.ts`) take what they use from the layers below as
+their last argument (`billing/deps.ts`), defaulting to the real modules, so their tests pass an in-memory billing store
+and fakes instead of replacing modules; the read model is tested against a fake Supabase client. `src/lib` holds
+helpers for both sides, and `src/test` the fakes the tests share. The schema, RLS policies and database functions are in `supabase/migrations/`, and their tests in
 `supabase/tests/database/`.
 
 ## Develop

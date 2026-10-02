@@ -1,27 +1,9 @@
 import 'server-only';
-import {
-  GithubState,
-  hasLiveLicence,
-  getCustomerAccess,
-  getCustomerEmail,
-  getGithubAccount,
-  clearLicenceFailure,
-  listEntitlements,
-  recordLicence,
-  recordLicenceFailure,
-  revokeLicences,
-  setCustomerAccess,
-  setGithubLogin,
-  setGithubState,
-} from '@/server/db/billing-store';
-import { issueLicence } from '@/server/integrations/licensing/licence-issuer';
-import { currentLogin, grantAccess, revokeAccess } from '@/server/integrations/github/provisioning';
-import { sendEmail } from '@/server/integrations/email/send';
+import type { GithubState } from '@/server/db/billing-store';
 import { accessRevokedEmail, welcomeProEmail } from '@/server/integrations/email/templates';
-import { automatedProvisioningEnabled } from '@/server/config/provisioning-guard';
-import { alertOperator } from '@/server/integrations/email/alerts';
 import { errorMessage } from '@/lib/errors';
 import { aggregateAccess, isEntitled } from '@/server/billing/access-policy';
+import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
 
 /**
  * Customer-level access. A customer can hold several subscriptions, each with its own entitlement, but
@@ -59,22 +41,26 @@ export interface AccessSync {
  * side effect is attempted once and a failure is logged: reconcile retries GitHub grants and removals,
  * licence issuance and revocation, and an email is not resent.
  */
-export async function syncCustomerAccess(customerId: string): Promise<AccessSync> {
-  const status = aggregateAccess(await listEntitlements(customerId));
-  const email = await getCustomerEmail(customerId);
+export async function syncCustomerAccess(
+  customerId: string,
+  deps: BillingDeps = defaultBillingDeps,
+): Promise<AccessSync> {
+  const { store } = deps;
+  const status = aggregateAccess(await store.listEntitlements(customerId));
+  const email = await store.getCustomerEmail(customerId);
 
-  const wasEntitled = isEntitled(await setCustomerAccess(customerId, status));
+  const wasEntitled = isEntitled(await store.setCustomerAccess(customerId, status));
 
   if (!isEntitled(status)) {
     if (!wasEntitled) return { change: 'unchanged', licence: null };
 
-    await endAccess(customerId, email);
+    await endAccess(customerId, email, deps);
     return { change: 'ended', licence: null };
   }
 
   // Provisioning gate: in manual mode (PROVISIONING_MODE not 'auto') access is recorded but GitHub access
   // and the licence are left to the operator.
-  if (!automatedProvisioningEnabled()) {
+  if (!deps.automatedProvisioningEnabled()) {
     console.warn(
       `Customer access: automated provisioning is off (PROVISIONING_MODE) for customer ${customerId}; ` +
         'recording access but withholding GitHub access and licence.',
@@ -83,14 +69,14 @@ export async function syncCustomerAccess(customerId: string): Promise<AccessSync
   }
 
   if (wasEntitled) {
-    return { change: 'unchanged', licence: await ensureLicence(customerId) };
+    return { change: 'unchanged', licence: await ensureLicence(customerId, deps) };
   }
 
-  await grantGithubAccess(customerId);
-  const licence = await ensureLicence(customerId);
+  await grantGithubAccess(customerId, deps);
+  const licence = await ensureLicence(customerId, deps);
 
   if (email) {
-    await sendEmail(welcomeProEmail(email)); // sendEmail never throws
+    await deps.sendEmail(welcomeProEmail(email)); // sendEmail never throws
   } else {
     console.info(`Customer access: no email on file for customer ${customerId}; skipping the welcome email.`);
   }
@@ -103,24 +89,27 @@ export async function syncCustomerAccess(customerId: string): Promise<AccessSync
  * login names nobody, or someone else. Records a new login. Null when the customer has not linked GitHub, or
  * the account has since been deleted (its team membership and invitations went with it).
  */
-export async function linkedGithubLogin(customerId: string): Promise<string | null> {
-  const account = await getGithubAccount(customerId);
+export async function linkedGithubLogin(
+  customerId: string,
+  deps: BillingDeps = defaultBillingDeps,
+): Promise<string | null> {
+  const account = await deps.store.getGithubAccount(customerId);
   if (!account) return null;
 
-  const login = await currentLogin(account.id);
+  const login = await deps.github.currentLogin(account.id);
   if (login === null) {
     console.warn(`Customer access: the GitHub account linked to customer ${customerId} (id ${account.id}) is deleted.`);
     return null;
   }
 
-  if (login !== account.login) await setGithubLogin(customerId, login);
+  if (login !== account.login) await deps.store.setGithubLogin(customerId, login);
   return login;
 }
 
-async function grantGithubAccess(customerId: string) {
+async function grantGithubAccess(customerId: string, deps: BillingDeps) {
   let githubLogin: string | null;
   try {
-    githubLogin = await linkedGithubLogin(customerId);
+    githubLogin = await linkedGithubLogin(customerId, deps);
   } catch (error) {
     console.error(
       `Customer access: could not read the GitHub link of customer ${customerId}; reconcile retries:`,
@@ -134,7 +123,7 @@ async function grantGithubAccess(customerId: string) {
     return;
   }
 
-  await grantAndRecord(customerId, githubLogin);
+  await grantAndRecord(customerId, githubLogin, deps);
 }
 
 /**
@@ -142,21 +131,25 @@ async function grantGithubAccess(customerId: string) {
  * invitation to accept), or 'failed', which reconcile retries. The first failure after a success alerts the
  * operator; retries that keep failing do not. Never throws.
  */
-export async function grantAndRecord(customerId: string, githubLogin: string): Promise<GithubState> {
+export async function grantAndRecord(
+  customerId: string,
+  githubLogin: string,
+  deps: BillingDeps = defaultBillingDeps,
+): Promise<GithubState> {
   let state: GithubState;
   try {
-    state = (await grantAccess(githubLogin)) === 'active' ? 'active' : 'invited';
+    state = (await deps.github.grantAccess(githubLogin)) === 'active' ? 'active' : 'invited';
   } catch (error) {
     console.error(
       `Customer access: failed to grant GitHub access to customer ${customerId}; reconcile retries:`,
       error,
     );
     state = 'failed';
-    await grantFailed(customerId, githubLogin, error);
+    await grantFailed(customerId, githubLogin, error, deps);
   }
 
   try {
-    await setGithubState(customerId, state);
+    await deps.store.setGithubState(customerId, state);
   } catch (error) {
     console.error(`Customer access: could not record GitHub state '${state}' for customer ${customerId}:`, error);
   }
@@ -166,17 +159,17 @@ export async function grantAndRecord(customerId: string, githubLogin: string): P
 
 // Alerts unless the grant was already failing (a retry). If the state cannot be read, alerts anyway rather
 // than risk staying silent.
-async function grantFailed(customerId: string, githubLogin: string, error: unknown) {
+async function grantFailed(customerId: string, githubLogin: string, error: unknown, deps: BillingDeps) {
   let alreadyFailing = false;
   try {
-    alreadyFailing = (await getCustomerAccess(customerId))?.githubState === 'failed';
+    alreadyFailing = (await deps.store.getCustomerAccess(customerId))?.githubState === 'failed';
   } catch (readError) {
     console.error(`Customer access: could not read the GitHub state of customer ${customerId}:`, readError);
   }
 
   if (alreadyFailing) return;
 
-  await alertOperator(
+  await deps.alertOperator(
     `GitHub grant failed for customer ${customerId}`,
     `Adding GitHub account ${githubLogin} (Paddle customer ${customerId}) to the customer team failed: ` +
       `${errorMessage(error)}. The customer has access but cannot restore packages. Reconcile retries on every ` +
@@ -189,37 +182,37 @@ export type LicenceOutcome = 'issued' | 'current' | 'failed';
 // Issues the customer's licence unless they already have a live one; it does not expire, so renewals keep it.
 // A failure is recorded (alerting the operator when it starts a run of failures) and reconcile retries it;
 // success clears the record.
-async function ensureLicence(customerId: string): Promise<LicenceOutcome> {
+async function ensureLicence(customerId: string, deps: BillingDeps): Promise<LicenceOutcome> {
   let outcome: LicenceOutcome = 'current';
 
   try {
-    if (!(await hasLiveLicence(customerId))) {
-      await recordLicence({ customerId, jwt: issueLicence({ customerId }) });
+    if (!(await deps.store.hasLiveLicence(customerId))) {
+      await deps.store.recordLicence({ customerId, jwt: deps.issueLicence({ customerId }) });
       outcome = 'issued';
     }
   } catch (error) {
-    await licenceFailed(customerId, error);
+    await licenceFailed(customerId, error, deps);
     return 'failed';
   }
 
-  await forgetLicenceFailures(customerId);
+  await forgetLicenceFailures(customerId, deps);
   return outcome;
 }
 
-async function licenceFailed(customerId: string, error: unknown) {
+async function licenceFailed(customerId: string, error: unknown, deps: BillingDeps) {
   const message = errorMessage(error);
   console.error(`Customer access: failed to issue a licence for customer ${customerId}; reconcile retries:`, error);
 
   // If the failure cannot be recorded either, alert anyway rather than risk staying silent.
   let firstFailure = true;
   try {
-    firstFailure = await recordLicenceFailure(customerId, message.slice(0, 2000));
+    firstFailure = await deps.store.recordLicenceFailure(customerId, message.slice(0, 2000));
   } catch (recordError) {
     console.error(`Customer access: could not record the licence failure for customer ${customerId}:`, recordError);
   }
 
   if (firstFailure) {
-    await alertOperator(
+    await deps.alertOperator(
       `Licence issuance failed for customer ${customerId}`,
       `Issuing a licence for Paddle customer ${customerId} failed: ${message}. The customer has access but no ` +
         'current licence. Reconcile retries on every run; failed attempts are recorded in licence_failures, ' +
@@ -228,18 +221,18 @@ async function licenceFailed(customerId: string, error: unknown) {
   }
 }
 
-async function forgetLicenceFailures(customerId: string) {
+async function forgetLicenceFailures(customerId: string, deps: BillingDeps) {
   try {
-    await clearLicenceFailure(customerId);
+    await deps.store.clearLicenceFailure(customerId);
   } catch (error) {
     console.error(`Customer access: could not clear the licence failure for customer ${customerId}:`, error);
   }
 }
 
-async function endAccess(customerId: string, email: string | null) {
+async function endAccess(customerId: string, email: string | null, deps: BillingDeps) {
   try {
-    const githubLogin = await linkedGithubLogin(customerId);
-    if (githubLogin) await revokeAccess(githubLogin);
+    const githubLogin = await linkedGithubLogin(customerId, deps);
+    if (githubLogin) await deps.github.revokeAccess(githubLogin);
   } catch (error) {
     console.error(
       `Customer access: failed to revoke GitHub access for customer ${customerId}; reconcile retries:`,
@@ -248,15 +241,15 @@ async function endAccess(customerId: string, email: string | null) {
   }
 
   try {
-    await revokeLicences(customerId);
+    await deps.store.revokeLicences(customerId);
   } catch (error) {
     console.error(`Customer access: failed to revoke licences for customer ${customerId}; reconcile retries:`, error);
   }
 
-  await forgetLicenceFailures(customerId);
+  await forgetLicenceFailures(customerId, deps);
 
   if (email) {
-    await sendEmail(accessRevokedEmail(email));
+    await deps.sendEmail(accessRevokedEmail(email));
   } else {
     console.info(`Customer access: no email on file for customer ${customerId}; skipping the revocation email.`);
   }

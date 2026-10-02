@@ -34,12 +34,15 @@ const serviceRoleClient = {
 // The server code is in layers, and imports point only down this list: billing (the rules and services) → jobs
 // (the webhook inbox's worker and leases) → integrations (Paddle, GitHub, email, licence signing) and db (the
 // Supabase clients and the modules that query the database) → config. src/lib holds isomorphic helpers and imports
-// no server code.
+// no server code. The patterns match both the alias and relative paths (`@/server/billing/…`, `../billing/…`).
 const below = (layer, ...higher) => ({
-  group: higher.map((name) => `@/server/${name}/**`),
+  regex: `^(@/server/|(\\.\\./)+(server/)?)(${higher.join('|')})(/|$)`,
   message: `src/server/${layer} must not import ${higher.join(', ')}: imports point down the layers (eslint.config.mjs).`,
 });
-const isomorphic = { group: ['@/server/**'], message: 'src/lib is isomorphic: it imports no server code.' };
+const isomorphic = {
+  regex: '^(@/server|(\\.\\./)+server)(/|$)',
+  message: 'src/lib is isomorphic: it imports no server code.',
+};
 const dbLayer = below('db', 'billing', 'jobs', 'integrations');
 
 function importRules(files, patterns, { ignores = [], clients = true } = {}) {

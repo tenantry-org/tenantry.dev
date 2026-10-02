@@ -1,331 +1,270 @@
+import type { User } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FakeCall } from '@/test/fake-supabase';
+import { CUSTOMER_BUSY } from '@/server/jobs/customer-lease';
+import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
+import { memory } from '@/test/memory-billing-store';
 import { syncGithubLinkForCurrentUser } from './sync-github-link';
 
-const github = vi.hoisted(() => ({ grantAccess: vi.fn(), revokeAccess: vi.fn(), currentLogin: vi.fn() }));
-vi.mock('@/server/integrations/github/provisioning', () => github);
+let deps: FakeBillingDeps;
 
-const state = vi.hoisted(() => ({
-  user: null as Record<string, unknown> | null,
-  accessStatus: 'active',
-  calls: [] as FakeCall[],
-  /** The customer's current link, and the customer (if any) already holding the signing-in GitHub id. */
-  previousLink: null as { github_login: string; github_id: number } | null,
-  holder: null as { customer_id: string } | null,
-  linkWriteError: undefined as { code: string; message: string } | undefined,
-  failLookup: false,
-  /** Whether one of the customer's inbox events is in progress, so no lease is granted. */
-  customerBusy: false,
-}));
-
-function signedInUser(overrides: Record<string, unknown> = {}) {
+function signedInUser(overrides: Record<string, unknown> = {}): User {
   return {
     email: 'buyer@example.com',
     email_confirmed_at: '2026-09-01T00:00:00Z',
     identities: [{ provider: 'github', id: '42', identity_data: { user_name: 'octocat', provider_id: '42' } }],
     ...overrides,
-  };
+  } as unknown as User;
 }
 
-vi.mock('@/server/db/user-client', () => ({
-  createUserClient: () => ({
-    auth: { getUser: async () => ({ data: { user: state.user } }) },
-  }),
-}));
+/** Links the customer's previous GitHub account, as an earlier sync did. */
+function linkPrevious(id: number, login: string) {
+  memory.state.githubAccounts.set('ctm_1', { id, login });
+}
 
-vi.mock('@/server/db/service-role-client', async () => {
-  const { fakeSupabase } = await import('@/test/fake-supabase');
-  return {
-    createServiceRoleClient: () =>
-      fakeSupabase(
-        {
-          customers: { single: { customer_id: 'ctm_1' } },
-          customer_access: { single: { status: state.accessStatus } },
-          github_links: {
-            single: (filters: Record<string, unknown>) => {
-              if (state.failLookup) throw new Error('database unavailable');
-              return 'github_id' in filters ? state.holder : state.previousLink;
-            },
-            writeError: state.linkWriteError,
-          },
-        },
-        state.calls,
-        {
-          acquire_customer_lease: () => (state.customerBusy ? null : 'lease_1'),
-          release_customer_lease: () => null,
-        },
-      ),
-  };
-});
+const link = () => memory.state.githubAccounts.get('ctm_1');
+const access = () => memory.state.access.get('ctm_1');
 
 describe('syncGithubLinkForCurrentUser', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    state.user = signedInUser();
-    state.accessStatus = 'active';
-    state.calls.length = 0;
-    state.previousLink = null;
-    state.holder = null;
-    state.linkWriteError = undefined;
-    state.failLookup = false;
-    state.customerBusy = false;
+    deps = fakeBillingDeps();
+    deps.currentUser.mockResolvedValue(signedInUser());
     // GitHub's current logins, by account id.
-    github.currentLogin.mockImplementation(async (id: number) => ({ 42: 'octocat', 7: 'old-account' })[id] ?? null);
+    deps.github.currentLogin.mockImplementation(async (id) => ({ 42: 'octocat', 7: 'old-account' })[id] ?? null);
+    memory.reset();
+    memory.state.emails.set('ctm_1', 'buyer@example.com');
+    memory.state.access.set('ctm_1', { status: 'active', githubState: 'none', githubInvitedAt: null });
   });
 
   afterEach(() => {
-    delete process.env.PROVISIONING_MODE;
+    vi.restoreAllMocks(); // the console spies
   });
 
-  it('links the account but does not grant access when PROVISIONING_MODE is unset', async () => {
-    const result = await syncGithubLinkForCurrentUser();
+  it('links the account but does not grant access while provisioning is manual', async () => {
+    deps.automatedProvisioningEnabled.mockReturnValue(false);
+
+    const result = await syncGithubLinkForCurrentUser(deps);
 
     expect(result).toEqual({ linked: true, granted: false, reason: 'provisioning-disabled' });
-    expect(github.grantAccess).not.toHaveBeenCalled();
+    expect(link()).toEqual({ id: 42, login: 'octocat' });
+    expect(deps.github.grantAccess).not.toHaveBeenCalled();
   });
 
   it('grants access in automated mode, and records an org invitation to accept as invited', async () => {
-    process.env.PROVISIONING_MODE = 'auto';
-    github.grantAccess.mockResolvedValueOnce('pending');
+    deps.github.grantAccess.mockResolvedValueOnce('pending');
 
-    const result = await syncGithubLinkForCurrentUser();
+    const result = await syncGithubLinkForCurrentUser(deps);
 
     expect(result).toEqual({ linked: true, granted: true, invited: true });
-    expect(github.grantAccess).toHaveBeenCalledWith('octocat');
-    expect(state.calls).toContainEqual(
-      expect.objectContaining({
-        table: 'customer_access',
-        method: 'update',
-        args: [expect.objectContaining({ github_state: 'invited' })],
-      }),
-    );
+    expect(deps.github.grantAccess).toHaveBeenCalledWith('octocat');
+    expect(access()).toMatchObject({ githubState: 'invited', githubInvitedAt: expect.any(Date) });
   });
 
   it('records an existing org member as active', async () => {
-    process.env.PROVISIONING_MODE = 'auto';
-    github.grantAccess.mockResolvedValueOnce('active');
-
-    await expect(syncGithubLinkForCurrentUser()).resolves.toEqual({ linked: true, granted: true, invited: false });
-    expect(state.calls).toContainEqual(
-      expect.objectContaining({
-        table: 'customer_access',
-        method: 'update',
-        args: [expect.objectContaining({ github_state: 'active', github_invited_at: null })],
-      }),
-    );
+    await expect(syncGithubLinkForCurrentUser(deps)).resolves.toEqual({ linked: true, granted: true, invited: false });
+    expect(access()).toMatchObject({ githubState: 'active', githubInvitedAt: null });
   });
 
   it("links but does not grant access when none of the customer's subscriptions entitles them", async () => {
-    process.env.PROVISIONING_MODE = 'auto';
-    state.accessStatus = 'revoked';
+    memory.state.access.set('ctm_1', { status: 'revoked', githubState: 'none', githubInvitedAt: null });
 
-    const result = await syncGithubLinkForCurrentUser();
+    const result = await syncGithubLinkForCurrentUser(deps);
 
     expect(result).toEqual({ linked: true, granted: false, reason: 'no-active-entitlement' });
-    expect(github.grantAccess).not.toHaveBeenCalled();
+    expect(deps.github.grantAccess).not.toHaveBeenCalled();
   });
 
   it('does not link an account whose email is not confirmed, and looks nothing up', async () => {
-    process.env.PROVISIONING_MODE = 'auto';
-    state.user = signedInUser({ email_confirmed_at: null });
+    deps.currentUser.mockResolvedValue(signedInUser({ email_confirmed_at: null }));
+    const findCustomer = vi.spyOn(deps.store, 'findCustomerIdByEmail');
 
-    const result = await syncGithubLinkForCurrentUser();
+    const result = await syncGithubLinkForCurrentUser(deps);
 
     expect(result).toEqual({ linked: false, granted: false, reason: 'email-not-confirmed' });
-    expect(state.calls).toEqual([]);
-    expect(github.grantAccess).not.toHaveBeenCalled();
+    expect(findCustomer).not.toHaveBeenCalled();
+    expect(link()).toBeUndefined();
+    expect(deps.github.grantAccess).not.toHaveBeenCalled();
   });
 
   it('matches the customer by the confirmed email, lowercased and trimmed, and writes the link', async () => {
-    state.user = signedInUser({ email: ' Buyer@Example.COM ' });
+    deps.currentUser.mockResolvedValue(signedInUser({ email: ' Buyer@Example.COM ' }));
+    const findCustomer = vi.spyOn(deps.store, 'findCustomerIdByEmail');
 
-    const result = await syncGithubLinkForCurrentUser();
+    const result = await syncGithubLinkForCurrentUser(deps);
 
     expect(result.linked).toBe(true);
-    expect(state.calls).toContainEqual({ table: 'customers', method: 'eq', args: ['email', 'buyer@example.com'] });
-    expect(state.calls).toContainEqual({
-      table: 'github_links',
-      method: 'upsert',
-      args: [{ customer_id: 'ctm_1', github_login: 'octocat', github_id: 42 }, { onConflict: 'customer_id' }],
+    expect(findCustomer).toHaveBeenCalledWith('buyer@example.com');
+    expect(link()).toEqual({ id: 42, login: 'octocat' });
+  });
+
+  it('does not link a signed-in user who has not bought Pro', async () => {
+    memory.state.emails.clear();
+
+    await expect(syncGithubLinkForCurrentUser(deps)).resolves.toEqual({
+      linked: false,
+      granted: false,
+      reason: 'no-customer',
     });
   });
 
   it('grants the account under its current login when it was renamed since the user last signed in', async () => {
-    process.env.PROVISIONING_MODE = 'auto';
-    github.grantAccess.mockResolvedValueOnce('active');
-    github.currentLogin.mockImplementation(async () => 'octocat-renamed');
+    deps.github.currentLogin.mockImplementation(async () => 'octocat-renamed');
 
-    await syncGithubLinkForCurrentUser();
+    await syncGithubLinkForCurrentUser(deps);
 
-    expect(github.grantAccess).toHaveBeenCalledWith('octocat-renamed');
-    expect(state.calls).toContainEqual(
-      expect.objectContaining({
-        table: 'github_links',
-        method: 'upsert',
-        args: [expect.objectContaining({ github_login: 'octocat-renamed', github_id: 42 }), expect.anything()],
-      }),
-    );
+    expect(deps.github.grantAccess).toHaveBeenCalledWith('octocat-renamed');
+    expect(link()).toEqual({ id: 42, login: 'octocat-renamed' });
   });
 
   it('neither links nor grants a deleted account, whose login someone else may have taken', async () => {
-    process.env.PROVISIONING_MODE = 'auto';
-    github.currentLogin.mockImplementation(async () => null);
+    deps.github.currentLogin.mockImplementation(async () => null);
 
-    await expect(syncGithubLinkForCurrentUser()).resolves.toEqual({
+    await expect(syncGithubLinkForCurrentUser(deps)).resolves.toEqual({
       linked: false,
       granted: false,
       reason: 'github-account-deleted',
     });
-    expect(github.grantAccess).not.toHaveBeenCalled();
-    expect(state.calls.some((call) => call.table === 'github_links' && call.method === 'upsert')).toBe(false);
+    expect(deps.github.grantAccess).not.toHaveBeenCalled();
+    expect(link()).toBeUndefined();
   });
 
   describe('account linking', () => {
-    beforeEach(() => {
-      process.env.PROVISIONING_MODE = 'auto';
-      github.grantAccess.mockResolvedValue('active');
-    });
-
-    const linkWrites = () => state.calls.filter((call) => call.table === 'github_links' && call.method === 'upsert');
-    const leaseCalls = () => state.calls.filter((call) => call.table.startsWith('rpc:')).map((call) => call.table);
-
     it("changes the link holding the customer's lease, so no reconcile can re-add the previous account", async () => {
-      state.previousLink = { github_login: 'old-account', github_id: 7 };
-      github.revokeAccess.mockImplementation(async () => {
-        state.calls.push({ table: 'github:revoke', method: 'revoke', args: [] });
+      linkPrevious(7, 'old-account');
+      const steps: string[] = [];
+      vi.spyOn(deps, 'withCustomerLease').mockImplementation(async (_customerId, work) => {
+        steps.push('acquire');
+        try {
+          return await work();
+        } finally {
+          steps.push('release');
+        }
       });
-      github.grantAccess.mockImplementation(async () => {
-        state.calls.push({ table: 'github:grant', method: 'grant', args: [] });
+      deps.github.revokeAccess.mockImplementation(async () => {
+        steps.push('revoke');
+      });
+      deps.github.grantAccess.mockImplementation(async () => {
+        steps.push('grant');
         return 'active';
       });
+      const linkAccount = deps.store.linkGithubAccount;
+      vi.spyOn(deps.store, 'linkGithubAccount').mockImplementation(async (customerId, account) => {
+        steps.push('link');
+        return linkAccount(customerId, account);
+      });
 
-      await syncGithubLinkForCurrentUser();
+      await syncGithubLinkForCurrentUser(deps);
 
-      const order = state.calls
-        .map((call) => call.table)
-        .filter((table) => table.startsWith('rpc:') || table.startsWith('github:') || table === 'github_links');
-      expect(order.indexOf('rpc:acquire_customer_lease')).toBeLessThan(order.indexOf('github:revoke'));
-      expect(order.lastIndexOf('rpc:release_customer_lease')).toBeGreaterThan(order.indexOf('github:grant'));
-      expect(order.indexOf('rpc:acquire_customer_lease')).toBeLessThan(order.indexOf('github_links'));
+      expect(steps).toEqual(['acquire', 'revoke', 'link', 'grant', 'release']);
     });
 
     it("changes nothing while one of the customer's events is in progress, and says so", async () => {
-      vi.useFakeTimers();
-      try {
-        state.previousLink = { github_login: 'old-account', github_id: 7 };
-        state.customerBusy = true;
+      linkPrevious(7, 'old-account');
+      vi.spyOn(deps, 'withCustomerLease').mockResolvedValue(CUSTOMER_BUSY);
 
-        const result = syncGithubLinkForCurrentUser();
-        await vi.advanceTimersByTimeAsync(11_000);
-
-        await expect(result).resolves.toEqual({ linked: false, granted: false, reason: 'link-busy' });
-        expect(github.revokeAccess).not.toHaveBeenCalled();
-        expect(github.grantAccess).not.toHaveBeenCalled();
-        expect(linkWrites()).toEqual([]);
-        expect(leaseCalls()).not.toContain('rpc:release_customer_lease');
-      } finally {
-        vi.useRealTimers();
-      }
+      await expect(syncGithubLinkForCurrentUser(deps)).resolves.toEqual({
+        linked: false,
+        granted: false,
+        reason: 'link-busy',
+      });
+      expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+      expect(deps.github.grantAccess).not.toHaveBeenCalled();
+      expect(link()).toEqual({ id: 7, login: 'old-account' });
     });
 
-    it('releases the lease when linking fails', async () => {
-      state.linkWriteError = { code: '08006', message: 'connection failure' };
+    it('returns a failure when the link cannot be written', async () => {
+      vi.spyOn(deps.store, 'linkGithubAccount').mockRejectedValue({ code: '08006', message: 'connection failure' });
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-      await expect(syncGithubLinkForCurrentUser()).resolves.toMatchObject({ reason: 'sync-failed' });
-      expect(leaseCalls()).toEqual(['rpc:acquire_customer_lease', 'rpc:release_customer_lease']);
+      await expect(syncGithubLinkForCurrentUser(deps)).resolves.toMatchObject({ reason: 'sync-failed' });
+      expect(deps.github.grantAccess).not.toHaveBeenCalled();
     });
 
     it('removes the previous GitHub account from the team before linking a different one', async () => {
-      state.previousLink = { github_login: 'old-account', github_id: 7 };
+      linkPrevious(7, 'old-account');
+      const resetState = vi.spyOn(deps.store, 'resetGithubState');
 
-      await expect(syncGithubLinkForCurrentUser()).resolves.toMatchObject({ linked: true, granted: true });
+      await expect(syncGithubLinkForCurrentUser(deps)).resolves.toMatchObject({ linked: true, granted: true });
 
-      expect(github.revokeAccess).toHaveBeenCalledExactlyOnceWith('old-account');
-      expect(github.revokeAccess.mock.invocationCallOrder[0]).toBeLessThan(
-        github.grantAccess.mock.invocationCallOrder[0],
+      expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('old-account');
+      expect(deps.github.revokeAccess.mock.invocationCallOrder[0]).toBeLessThan(
+        deps.github.grantAccess.mock.invocationCallOrder[0],
       );
-      expect(state.calls).toContainEqual(
-        expect.objectContaining({
-          table: 'customer_access',
-          method: 'update',
-          args: [expect.objectContaining({ github_state: 'none', github_invited_at: null })],
-        }),
-      );
-      expect(linkWrites()).toHaveLength(1);
+      expect(resetState).toHaveBeenCalledWith('ctm_1');
+      expect(link()).toEqual({ id: 42, login: 'octocat' });
     });
 
     it('removes the previous account under its current login when it was renamed since it was linked', async () => {
-      state.previousLink = { github_login: 'old-account', github_id: 7 };
-      github.currentLogin.mockImplementation(async (id: number) => (id === 7 ? 'old-account-renamed' : 'octocat'));
+      linkPrevious(7, 'old-account');
+      deps.github.currentLogin.mockImplementation(async (id) => (id === 7 ? 'old-account-renamed' : 'octocat'));
 
-      await syncGithubLinkForCurrentUser();
+      await syncGithubLinkForCurrentUser(deps);
 
-      expect(github.revokeAccess).toHaveBeenCalledExactlyOnceWith('old-account-renamed');
+      expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('old-account-renamed');
     });
 
     it('links the new account when the previous one has been deleted, which took its access with it', async () => {
-      state.previousLink = { github_login: 'old-account', github_id: 7 };
-      github.currentLogin.mockImplementation(async (id: number) => (id === 7 ? null : 'octocat'));
+      linkPrevious(7, 'old-account');
+      deps.github.currentLogin.mockImplementation(async (id) => (id === 7 ? null : 'octocat'));
 
-      await expect(syncGithubLinkForCurrentUser()).resolves.toMatchObject({ linked: true, granted: true });
-      expect(github.revokeAccess).not.toHaveBeenCalled();
+      await expect(syncGithubLinkForCurrentUser(deps)).resolves.toMatchObject({ linked: true, granted: true });
+      expect(deps.github.revokeAccess).not.toHaveBeenCalled();
     });
 
     it('keeps access for a renamed account: same GitHub id, new login', async () => {
-      state.previousLink = { github_login: 'octocat-old-name', github_id: 42 };
+      linkPrevious(42, 'octocat-old-name');
 
-      await expect(syncGithubLinkForCurrentUser()).resolves.toMatchObject({ linked: true, granted: true });
-      expect(github.revokeAccess).not.toHaveBeenCalled();
-      expect(linkWrites()[0].args[0]).toMatchObject({ github_login: 'octocat', github_id: 42 });
+      await expect(syncGithubLinkForCurrentUser(deps)).resolves.toMatchObject({ linked: true, granted: true });
+      expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+      expect(link()).toEqual({ id: 42, login: 'octocat' });
     });
 
     it('keeps the old link when the previous account cannot be removed, so the user can retry', async () => {
-      state.previousLink = { github_login: 'old-account', github_id: 7 };
-      github.revokeAccess.mockRejectedValueOnce(new Error('GitHub unavailable'));
+      linkPrevious(7, 'old-account');
+      deps.github.revokeAccess.mockRejectedValueOnce(new Error('GitHub unavailable'));
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-      await expect(syncGithubLinkForCurrentUser()).resolves.toEqual({
+      await expect(syncGithubLinkForCurrentUser(deps)).resolves.toEqual({
         linked: false,
         granted: false,
         reason: 'relink-failed',
       });
-      expect(linkWrites()).toEqual([]);
-      expect(github.grantAccess).not.toHaveBeenCalled();
+      expect(link()).toEqual({ id: 7, login: 'old-account' });
+      expect(deps.github.grantAccess).not.toHaveBeenCalled();
     });
 
     it('refuses a GitHub account that is linked to another customer, and grants nothing', async () => {
-      state.holder = { customer_id: 'ctm_other' };
+      memory.state.githubAccounts.set('ctm_other', { id: 42, login: 'octocat' });
 
-      await expect(syncGithubLinkForCurrentUser()).resolves.toEqual({
+      await expect(syncGithubLinkForCurrentUser(deps)).resolves.toEqual({
         linked: false,
         granted: false,
         reason: 'github-account-linked-elsewhere',
       });
-      expect(linkWrites()).toEqual([]);
-      expect(github.revokeAccess).not.toHaveBeenCalled();
-      expect(github.grantAccess).not.toHaveBeenCalled();
+      expect(link()).toBeUndefined();
+      expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+      expect(deps.github.grantAccess).not.toHaveBeenCalled();
     });
 
     it('refuses the account when another customer links it at the same moment (unique github_id)', async () => {
-      state.linkWriteError = { code: '23505', message: 'duplicate key value violates unique constraint' };
+      vi.spyOn(deps.store, 'linkGithubAccount').mockResolvedValueOnce(false);
 
-      await expect(syncGithubLinkForCurrentUser()).resolves.toMatchObject({
+      await expect(syncGithubLinkForCurrentUser(deps)).resolves.toMatchObject({
         linked: false,
         reason: 'github-account-linked-elsewhere',
       });
-      expect(github.grantAccess).not.toHaveBeenCalled();
+      expect(deps.github.grantAccess).not.toHaveBeenCalled();
     });
 
     it('returns a failure instead of throwing when something unexpected fails', async () => {
-      state.failLookup = true;
+      vi.spyOn(deps.store, 'getGithubAccount').mockRejectedValue(new Error('database unavailable'));
       const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-      await expect(syncGithubLinkForCurrentUser()).resolves.toEqual({
+      await expect(syncGithubLinkForCurrentUser(deps)).resolves.toEqual({
         linked: false,
         granted: false,
         reason: 'sync-failed',
       });
       expect(log).toHaveBeenCalled();
-      log.mockRestore();
     });
   });
 });

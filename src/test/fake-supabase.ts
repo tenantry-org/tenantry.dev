@@ -1,7 +1,8 @@
 /**
  * Minimal stand-in for the Supabase query builder in unit tests. Every builder method returns the same
  * chain; `maybeSingle()` resolves to the table's `single` row and awaiting the chain resolves to its
- * `list`. Writes resolve without error. `rpc(name)` resolves to what the matching `rpcs` handler returns.
+ * `list`. Writes resolve with the table's `writeError`, if any. `rpc(name)` resolves to what the matching `rpcs`
+ * handler returns, or with the error it throws, as a failed database function does.
  */
 export interface FakeTable {
   list?: unknown[];
@@ -30,7 +31,11 @@ export function fakeSupabase(
   return {
     async rpc(name: string, args: Record<string, unknown> = {}): Promise<Result> {
       calls?.push({ table: `rpc:${name}`, method: 'rpc', args: [args] });
-      return { data: rpcs[name]?.(args) ?? null, error: null };
+      try {
+        return { data: rpcs[name]?.(args) ?? null, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
     },
     from(table: string) {
       const filters: Record<string, unknown> = {};

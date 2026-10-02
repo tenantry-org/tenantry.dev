@@ -16,12 +16,21 @@ export interface ReconcileResult {
   inbox: DrainResult;
 }
 
-export async function reconcileEntitlements({
-  now = new Date(),
-  budgetMs,
-}: { now?: Date; budgetMs?: number } = {}): Promise<ReconcileResult> {
-  const customerIds = await customersToReconcile();
-  await enqueueReconcileJobs(customerIds, now);
+/** What the reconcile run uses: who to reconcile (the billing store), and the inbox. */
+export interface ReconcileDeps {
+  customersToReconcile: () => Promise<string[]>;
+  enqueueReconcileJobs: (customerIds: string[], now: Date) => Promise<void>;
+  processInbox: (options: { budgetMs?: number }) => Promise<DrainResult>;
+}
 
-  return { customers: customerIds.length, inbox: await processInbox({ budgetMs }) };
+const defaultReconcileDeps: ReconcileDeps = { customersToReconcile, enqueueReconcileJobs, processInbox };
+
+export async function reconcileEntitlements(
+  { now = new Date(), budgetMs }: { now?: Date; budgetMs?: number } = {},
+  deps: ReconcileDeps = defaultReconcileDeps,
+): Promise<ReconcileResult> {
+  const customerIds = await deps.customersToReconcile();
+  await deps.enqueueReconcileJobs(customerIds, now);
+
+  return { customers: customerIds.length, inbox: await deps.processInbox({ budgetMs }) };
 }

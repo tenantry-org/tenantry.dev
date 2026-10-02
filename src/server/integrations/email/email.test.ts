@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { alertOperator } from './alerts';
 import { resendRequest, sendEmail } from './send';
 import { accessRevokedEmail, welcomeProEmail } from './templates';
 
@@ -50,5 +51,48 @@ describe('email templates', () => {
       expect(msg.html).toContain('package feed');
       expect(msg.html).not.toMatch(/repositor|source code/i);
     }
+  });
+});
+
+describe('alertOperator', () => {
+  const resend = vi.fn<typeof fetch>(async () => new Response('{}', { status: 200 }));
+  const sent = () => resend.mock.calls.map(([, init]) => JSON.parse(init?.body as string));
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks(); // the console spy
+    resend.mockClear();
+  });
+
+  function stubResend() {
+    vi.stubEnv('RESEND_API_KEY', 're_test');
+    vi.stubGlobal('fetch', resend);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  }
+
+  it('emails the operator at ALERT_EMAIL, with the detail escaped', async () => {
+    stubResend();
+    vi.stubEnv('ALERT_EMAIL', ' ops@example.com ');
+
+    await alertOperator('GitHub grant failed for customer ctm_1', 'Adding <octocat> & co failed');
+
+    expect(sent()).toEqual([
+      expect.objectContaining({
+        to: 'ops@example.com',
+        subject: '[Tenantry alert] GitHub grant failed for customer ctm_1',
+        html: '<p>Adding &#60;octocat&#62; &#38; co failed</p>',
+      }),
+    ]);
+  });
+
+  it('only logs the alert when ALERT_EMAIL is not set', async () => {
+    stubResend();
+    vi.stubEnv('ALERT_EMAIL', '');
+
+    await alertOperator('Inbox event evt_1 failed for good', 'detail');
+
+    expect(resend).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith('ALERT: Inbox event evt_1 failed for good. detail');
   });
 });

@@ -1,19 +1,9 @@
 import 'server-only';
-import { createUserClient } from '@/server/db/user-client';
-import { automatedProvisioningEnabled } from '@/server/config/provisioning-guard';
 import { confirmedEmail } from '@/server/db/customer-email';
+import { CUSTOMER_BUSY } from '@/server/jobs/customer-lease';
 import { grantAndRecord } from '@/server/billing/customer-access';
 import { isEntitled } from '@/server/billing/access-policy';
-import {
-  findCustomerIdByEmail,
-  getCustomerAccess,
-  getGithubAccount,
-  getGithubAccountHolder,
-  linkGithubAccount,
-  resetGithubState,
-} from '@/server/db/billing-store';
-import { currentLogin, revokeAccess } from '@/server/integrations/github/provisioning';
-import { CUSTOMER_BUSY, withCustomerLease } from '@/server/jobs/customer-lease';
+import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
 
 /**
  * Reconciles the signed-in user's GitHub identity into `github_links` and, if their customer is entitled
@@ -21,7 +11,7 @@ import { CUSTOMER_BUSY, withCustomerLease } from '@/server/jobs/customer-lease';
  * loop between "customer connected GitHub" and "customer can restore Tenantry.Pro".
  *
  * Safe to call repeatedly (idempotent): from the OAuth callback and from the "Connect GitHub" action.
- * Reads identity with the user-scoped client; records the link through the service-role store (RLS has no
+ * Reads identity from the user's session; records the link through the service-role store (RLS has no
  * INSERT/UPDATE policy for authenticated users). The user is matched to a customer by their confirmed
  * email only: anyone can sign up with a purchaser's address, but only the purchaser can confirm it.
  *
@@ -53,20 +43,17 @@ export interface SyncResult {
   reason?: string;
 }
 
-export async function syncGithubLinkForCurrentUser(): Promise<SyncResult> {
+export async function syncGithubLinkForCurrentUser(deps: BillingDeps = defaultBillingDeps): Promise<SyncResult> {
   try {
-    return await syncGithubLink();
+    return await syncGithubLink(deps);
   } catch (error) {
     console.error('GitHub link sync failed:', error);
     return { linked: false, granted: false, reason: 'sync-failed' };
   }
 }
 
-async function syncGithubLink(): Promise<SyncResult> {
-  const supabase = await createUserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+async function syncGithubLink(deps: BillingDeps): Promise<SyncResult> {
+  const user = await deps.currentUser();
 
   if (!user) return { linked: false, granted: false, reason: 'not-authenticated' };
   if (!user.email) return { linked: false, granted: false, reason: 'no-email' };
@@ -87,23 +74,27 @@ async function syncGithubLink(): Promise<SyncResult> {
   }
 
   // Only purchasers have a customer row; until then there is nothing to link to.
-  const customerId = await findCustomerIdByEmail(email);
+  const customerId = await deps.store.findCustomerIdByEmail(email);
 
   if (!customerId) return { linked: false, granted: false, reason: 'no-customer' };
 
-  const result = await withCustomerLease(customerId, () => linkAndGrant(customerId, githubId));
+  const result = await deps.withCustomerLease(customerId, () => linkAndGrant(customerId, githubId, deps));
   return result === CUSTOMER_BUSY ? { linked: false, granted: false, reason: 'link-busy' } : result;
 }
 
 // Records the link and grants access if the customer is entitled. Runs holding the customer's lease.
-async function linkAndGrant(customerId: string, githubId: number): Promise<SyncResult> {
+async function linkAndGrant(customerId: string, githubId: number, deps: BillingDeps): Promise<SyncResult> {
+  const { store, github } = deps;
   // The identity's login is as of the user's last GitHub sign-in: the account may have been renamed since, or
   // deleted, and its name then taken by someone else. So the login comes from the id, and a deleted account is
   // neither linked nor granted.
-  const login = await currentLogin(githubId);
+  const login = await github.currentLogin(githubId);
   if (login === null) return { linked: false, granted: false, reason: 'github-account-deleted' };
 
-  const [previous, holder] = await Promise.all([getGithubAccount(customerId), getGithubAccountHolder(githubId)]);
+  const [previous, holder] = await Promise.all([
+    store.getGithubAccount(customerId),
+    store.getGithubAccountHolder(githubId),
+  ]);
 
   if (holder && holder !== customerId) {
     return { linked: false, granted: false, reason: 'github-account-linked-elsewhere' };
@@ -114,9 +105,9 @@ async function linkAndGrant(customerId: string, githubId: number): Promise<SyncR
   // keep the old link so the user can retry.
   if (previous && previous.id !== githubId) {
     try {
-      const previousLogin = await currentLogin(previous.id);
-      if (previousLogin) await revokeAccess(previousLogin); // a deleted account's access went with it
-      await resetGithubState(customerId);
+      const previousLogin = await github.currentLogin(previous.id);
+      if (previousLogin) await github.revokeAccess(previousLogin); // a deleted account's access went with it
+      await store.resetGithubState(customerId);
     } catch (error) {
       console.error(`Could not remove the previous GitHub account of customer ${customerId}:`, error);
       return { linked: false, granted: false, reason: 'relink-failed' };
@@ -124,19 +115,19 @@ async function linkAndGrant(customerId: string, githubId: number): Promise<SyncR
   }
 
   // A concurrent link of the same account to another customer loses the race on github_id's unique index.
-  if (!(await linkGithubAccount(customerId, { id: githubId, login }))) {
+  if (!(await store.linkGithubAccount(customerId, { id: githubId, login }))) {
     return { linked: false, granted: false, reason: 'github-account-linked-elsewhere' };
   }
 
   // Grant immediately if the customer is entitled (by any of their subscriptions).
-  const access = await getCustomerAccess(customerId);
+  const access = await store.getCustomerAccess(customerId);
   if (!access || !isEntitled(access.status)) return { linked: true, granted: false, reason: 'no-active-entitlement' };
 
   // Same gate as the webhook and reconcile paths: manual mode links the account but leaves the grant to
   // the operator.
-  if (!automatedProvisioningEnabled()) return { linked: true, granted: false, reason: 'provisioning-disabled' };
+  if (!deps.automatedProvisioningEnabled()) return { linked: true, granted: false, reason: 'provisioning-disabled' };
 
-  const state = await grantAndRecord(customerId, login);
+  const state = await grantAndRecord(customerId, login, deps);
   if (state === 'failed') return { linked: true, granted: false, reason: 'grant-failed' };
 
   return { linked: true, granted: true, invited: state === 'invited' };
