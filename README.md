@@ -1,7 +1,7 @@
 # tenantry-site
 
 The Tenantry website, documentation, and commercial customer portal — a [Next.js](https://nextjs.org/)
-16 app (App Router, React 19.2, Tailwind v4) that handles marketing, pricing, docs, and the
+16 app (App Router, React 19.3, Tailwind v4) that handles marketing, pricing, docs, and the
 purchase → entitlement → access pipeline for **Tenantry Pro**.
 
 ## What it does
@@ -11,8 +11,8 @@ purchase → entitlement → access pipeline for **Tenantry Pro**.
   from the `tenantry-core` and `tenantry-pro` repos (see [Docs pipeline](#docs-pipeline)).
 - **Commercial backend** — Paddle webhooks drive Supabase entitlements, an ES256 licence issuer, and
   GitHub provisioning (org/team membership = private package-feed access).
-- **Customer portal** (`/dashboard`) — subscription status, "Connect GitHub", licence-key download,
-  and NuGet feed setup at `/dashboard/pro`.
+- **Customer portal** (`/dashboard/pro`) — Access ("Connect GitHub" and the licence key), Install (setting up the
+  private NuGet feed) and Billing (the subscriptions, with invoices and the payment method in Paddle's portal).
 
 ## Architecture
 
@@ -60,6 +60,19 @@ pnpm dev        # runs sync:docs, then next dev
 database tests on every push to master and every pull request; production deployments wait for those jobs (Vercel
 Deployment Checks). Copy [`.env.example`](.env.example) to `.env.local`
 and fill in the values for the services you need.
+
+**TypeScript is installed twice, under aliases.** `@typescript/native` is TypeScript 7 (`npm:typescript@^7`): its
+`tsc` is what `pnpm typecheck` runs, in `pnpm test` and CI. `typescript` is TypeScript 6
+(`npm:@typescript/typescript6@^6`) for typescript-eslint, which needs TypeScript 6's compiler API: its supported range
+ends before 6.1, and TypeScript 7.0 has only a new, unstable API. Next's build runs the `typescript` package's own
+compiler (`tsc6`), so the build type-checks with TypeScript 6 and `pnpm typecheck` with 7, and code must pass both.
+Dependabot skips aliased packages, so these two are updated by hand. Once typescript-eslint supports TypeScript 7, drop
+the aliases: `typescript` becomes TypeScript 7 itself, and `@typescript/native` goes.
+
+The local Supabase stack (`supabase start`) runs from `supabase/config.toml`. Signing in with GitHub and Connect
+GitHub need a GitHub OAuth app whose callback URL is `http://127.0.0.1:54321/auth/v1/callback`: put its client id and
+secret in `.env.local` (`SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID` and `SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET`), where
+the CLI reads them, and restart the stack.
 
 After changing a migration, rebuild the local database from the migrations, as CI does (`supabase db start` if it is
 not running, then `supabase db reset`, which discards its data), and run `pnpm db:types`. CI regenerates the types

@@ -5,12 +5,6 @@ const paddle = vi.hoisted(() => ({
   subscriptions: { get: vi.fn(), update: vi.fn() },
   customerPortalSessions: { create: vi.fn() },
   customerId: 'ctm_mine' as string | null,
-  signedIn: true,
-}));
-vi.mock('@/server/db/user-client', () => ({
-  validateUserSession: async () => {
-    if (!paddle.signedIn) throw new Error('You are not allowed to perform this action.');
-  },
 }));
 vi.mock('@/server/db/customer-dashboard', () => ({ getCustomerId: async () => paddle.customerId }));
 vi.mock('@/server/integrations/paddle/get-paddle-instance', () => ({
@@ -26,7 +20,6 @@ const cancelScheduled = { action: 'cancel', effectiveAt: '2026-10-29T00:00:00Z',
 beforeEach(() => {
   vi.clearAllMocks();
   paddle.customerId = 'ctm_mine';
-  paddle.signedIn = true;
   paddle.subscriptions.get.mockImplementation(async (id: string) => ({
     id,
     customerId: id === 'sub_mine' ? 'ctm_mine' : 'ctm_someone_else',
@@ -72,11 +65,8 @@ describe('openBillingPortal', () => {
   });
 
   it('refuses a login with no customer, and no session', async () => {
+    // getCustomerId reads the session's user, verified with Supabase Auth: null for either.
     paddle.customerId = null;
-    await expect(openBillingPortal({ kind: 'overview' })).resolves.toMatchObject({ error: expect.any(String) });
-
-    paddle.customerId = 'ctm_mine';
-    paddle.signedIn = false;
     await expect(openBillingPortal({ kind: 'overview' })).resolves.toMatchObject({ error: expect.any(String) });
     expect(paddle.customerPortalSessions.create).not.toHaveBeenCalled();
   });

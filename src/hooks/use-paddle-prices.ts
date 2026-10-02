@@ -1,6 +1,6 @@
 import type { Paddle, PricePreviewResponse } from '@paddle/paddle-js';
 import { useEffect, useState } from 'react';
-import type { PaddleState } from '@/hooks/usePaddle';
+import type { PaddleState } from '@/hooks/use-paddle';
 import { publicConfig } from '@/lib/public-config';
 
 /** Each Pro price's total, formatted for the visitor, by Paddle price id. */

@@ -1,4 +1,4 @@
-import type { PricesState } from '@/hooks/usePaddlePrices';
+import type { PricesState } from '@/hooks/use-paddle-prices';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface Props {

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { PricesState } from '@/hooks/usePaddlePrices';
+import type { PricesState } from '@/hooks/use-paddle-prices';
 import { PriceAmount } from './price-amount';
 
 const render = (prices: PricesState) =>

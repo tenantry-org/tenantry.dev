@@ -20,9 +20,6 @@ const nextConfig = {
     // The Rust port of the React Compiler, which runs inside Turbopack instead of through Babel.
     turbopackRustReactCompiler: true,
   },
-  images: {
-    remotePatterns: [{ protocol: 'https', hostname: 'tenantry.dev' }],
-  },
   async headers() {
     return [
       {

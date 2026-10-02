@@ -1,10 +1,9 @@
 name: audit
 
 # Fails when an installed package (dependencies and dev dependencies, from pnpm-lock.yaml) has a known high or
-# critical vulnerability; moderate and low ones are listed but do not fail it. GitHub's own Dependabot alerts
-# cannot read this repository's manifests since the move to TypeScript 7 (the npm: aliases in package.json are
-# the likely cause), so this is the check that counts. Weekly as well as on changes, because advisories are
-# published for versions already installed.
+# critical vulnerability; moderate and low ones are listed but do not fail it. Dependabot's alerts cover the same
+# lockfile; this check also fails the change that brings a vulnerable version in. Weekly as well as on changes,
+# because advisories are published for versions already installed.
 on:
   push:
     branches: [master]

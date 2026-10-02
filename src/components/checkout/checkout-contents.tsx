@@ -4,7 +4,7 @@ import { PriceSection } from '@/components/checkout/price-section';
 import type { CheckoutEventsData } from '@paddle/paddle-js/types/checkout/events';
 import { useEffect, useRef, useState } from 'react';
 import { track } from '@vercel/analytics';
-import { usePaddle } from '@/hooks/usePaddle';
+import { usePaddle } from '@/hooks/use-paddle';
 
 interface Props {
   priceId: string;

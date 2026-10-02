@@ -3,12 +3,12 @@
 import { Toggle } from '@/components/shared/toggle/toggle';
 import { PriceCards } from '@/components/home/pricing/price-cards';
 import { useState } from 'react';
-import { BillingFrequency, IBillingFrequency } from '@/constants/billing-frequency';
-import { usePaddle } from '@/hooks/usePaddle';
-import { usePaddlePrices } from '@/hooks/usePaddlePrices';
+import { BILLING_INTERVALS, type BillingIntervalOption } from '@/constants/billing-intervals';
+import { usePaddle } from '@/hooks/use-paddle';
+import { usePaddlePrices } from '@/hooks/use-paddle-prices';
 
 export function Pricing() {
-  const [frequency, setFrequency] = useState<IBillingFrequency>(BillingFrequency[0]);
+  const [option, setOption] = useState<BillingIntervalOption>(BILLING_INTERVALS[0]);
   const prices = usePaddlePrices(usePaddle());
 
   return (
@@ -18,8 +18,8 @@ export function Pricing() {
         <p className={'mt-4 mb-10 max-w-xl text-center text-lg text-muted-foreground'}>
           One Pro subscription, billed monthly or yearly. Tenantry Core stays free and open source.
         </p>
-        <Toggle frequency={frequency} setFrequency={setFrequency} />
-        <PriceCards frequency={frequency} prices={prices} />
+        <Toggle option={option} setOption={setOption} />
+        <PriceCards option={option} prices={prices} />
       </div>
     </section>
   );

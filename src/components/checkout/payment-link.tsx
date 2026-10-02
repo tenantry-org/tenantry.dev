@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { usePaddle } from '@/hooks/usePaddle';
+import { usePaddle } from '@/hooks/use-paddle';
 
 /**
  * Opens the checkout for a transaction Paddle created (`?_ptxn=txn_…`): the invoice, renewal and

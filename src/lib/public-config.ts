@@ -1,10 +1,10 @@
 export type PaddleEnvironment = 'sandbox' | 'production';
 
-/** The Pro offer's two Paddle prices: monthly and yearly. */
-export interface OfferPrices {
-  month: string;
-  year: string;
-}
+/** How often Pro is billed: monthly or yearly, each at its own Paddle price. */
+export type BillingInterval = 'month' | 'year';
+
+/** The Pro offer's two Paddle prices, by billing interval. */
+export type OfferPrices = Record<BillingInterval, string>;
 
 /**
  * The configuration the browser has: the `NEXT_PUBLIC_` variables it uses, which Next.js compiles into the build, so

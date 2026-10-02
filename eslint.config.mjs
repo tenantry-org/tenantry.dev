@@ -67,15 +67,6 @@ const eslintConfig = [
     // eslint-plugin-react 7.37 detects the React version through an API ESLint 10 removed; naming it skips that.
     settings: { react: { version: '19.3' } },
   },
-  {
-    // react-hooks v6 (bundled with eslint-config-next 16) adds stricter rules that flag pre-existing
-    // starter-kit patterns. Keep them visible as warnings rather than rewriting working code during
-    // the framework upgrade.
-    rules: {
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/use-memo': 'warn',
-    },
-  },
   importRules(['src/**/*.{ts,tsx}'], [serviceRoleClient], { ignores: ['src/server/**', 'src/lib/**'] }),
   importRules(['src/lib/**/*.{ts,tsx}'], [isomorphic], { ignores: [browserClientFactory] }),
   importRules([browserClientFactory], [isomorphic], { clients: false }),

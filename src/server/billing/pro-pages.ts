@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SubscriptionStatus } from '@paddle/paddle-node-sdk';
 import type { Tables } from '@/lib/supabase/database.types';
-import type { OfferPrices } from '@/lib/public-config';
+import type { BillingInterval, OfferPrices } from '@/lib/public-config';
 import { getCurrentUser } from '@/server/db/current-user';
 import {
   getCustomerId,
@@ -72,7 +72,7 @@ export interface BillingSubscription {
   id: string;
   /** Paddle's status; never canceled, since ended subscriptions are left out. */
   status: Exclude<SubscriptionStatus, 'canceled'>;
-  interval: 'month' | 'year' | null;
+  interval: BillingInterval | null;
   /** When it renews, unless it is scheduled to cancel. */
   renewsAt: string | null;
   /** When a scheduled cancellation takes effect. */

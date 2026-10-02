@@ -1,7 +1,7 @@
 import type { Paddle, PricePreviewResponse } from '@paddle/paddle-js';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { loadPaddle } from './usePaddle';
-import { previewPrices } from './usePaddlePrices';
+import { loadPaddle } from './use-paddle';
+import { previewPrices } from './use-paddle-prices';
 
 // The public configuration is compiled from these variables (public-config.ts); this file reads it once.
 beforeAll(() => {

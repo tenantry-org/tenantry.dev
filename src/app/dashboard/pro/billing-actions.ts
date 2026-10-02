@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { Subscription } from '@paddle/paddle-node-sdk';
-import { validateUserSession } from '@/server/db/user-client';
 import { getPaddleInstance } from '@/server/integrations/paddle/get-paddle-instance';
 import { getCustomerId } from '@/server/db/customer-dashboard';
 
@@ -20,7 +19,7 @@ const UNAVAILABLE = 'Billing is unavailable right now, please try again later';
  */
 export async function openBillingPortal(target: BillingPortalTarget): Promise<Result<{ url: string }>> {
   try {
-    const customerId = await sessionCustomerId();
+    const customerId = await getCustomerId();
     if (!customerId) return { error: 'No Tenantry Pro billing account is linked to this login' };
 
     const subscriptionIds = target.kind === 'overview' ? [] : [target.subscriptionId];
@@ -50,7 +49,7 @@ export async function openBillingPortal(target: BillingPortalTarget): Promise<Re
  */
 export async function keepSubscription(subscriptionId: string): Promise<Result<{ kept: true }>> {
   try {
-    const customerId = await sessionCustomerId();
+    const customerId = await getCustomerId();
     const existing = customerId ? await ownSubscription(customerId, subscriptionId) : null;
     if (!existing) return { error: 'Subscription not found' };
     if (existing.status === 'canceled' || existing.scheduledChange?.action !== 'cancel') {
@@ -64,11 +63,6 @@ export async function keepSubscription(subscriptionId: string): Promise<Result<{
     console.log('Error keeping subscription', e);
     return { error: 'Something went wrong, please try again later' };
   }
-}
-
-async function sessionCustomerId(): Promise<string | null> {
-  await validateUserSession();
-  return getCustomerId();
 }
 
 // The subscription, if it belongs to the customer (its id comes from the browser), else null.
