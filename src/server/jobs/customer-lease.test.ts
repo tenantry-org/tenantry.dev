@@ -31,7 +31,7 @@ describe('withCustomerLease', () => {
     expect(db.released).toEqual(['lease_1']);
   });
 
-  it('waits for an event in progress to finish', async () => {
+  it('waits for a job in progress to finish', async () => {
     db.grants = [null, null, 'lease_3'];
 
     await expect(withCustomerLease('ctm_1', async () => 'done', noWait)).resolves.toBe('done');

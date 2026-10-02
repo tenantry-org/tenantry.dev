@@ -48,7 +48,7 @@ describe('email templates', () => {
   });
 
   it('promises only the package feed, not repository access', () => {
-    // A subscription gives access to the private package feed only (D10); neither email may claim more.
+    // A subscription gives access to the private package feed only; neither email may claim more.
     for (const msg of [welcomeProEmail('cust@example.com', SITE), accessRevokedEmail('cust@example.com', SITE)]) {
       expect(msg.html).toContain('package feed');
       expect(msg.html).not.toMatch(/repositor|source code/i);
@@ -93,9 +93,9 @@ describe('alertOperator', () => {
   it('only logs the alert when ALERT_EMAIL is not set', async () => {
     stubResend();
 
-    await alertOperator('Inbox event evt_1 failed for good', 'detail', testServerConfig({ alertEmail: null }));
+    await alertOperator('Job evt_1 failed for good', 'detail', testServerConfig({ alertEmail: null }));
 
     expect(resend).not.toHaveBeenCalled();
-    expect(console.error).toHaveBeenCalledWith('ALERT: Inbox event evt_1 failed for good. detail');
+    expect(console.error).toHaveBeenCalledWith('ALERT: Job evt_1 failed for good. detail');
   });
 });

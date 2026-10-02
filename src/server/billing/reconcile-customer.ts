@@ -43,7 +43,7 @@ export interface CustomerReconciliation {
  *   - a removal that failed part-way, such as an invitation left pending after leaving the team,
  *   - licences left live after access ended.
  *
- * Every step is idempotent, so a job that throws is retried by the inbox with backoff.
+ * Every step is idempotent, so a job that throws is retried later with backoff.
  */
 export async function reconcileCustomer(
   customerId: string,

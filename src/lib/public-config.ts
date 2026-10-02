@@ -1,6 +1,6 @@
 export type PaddleEnvironment = 'sandbox' | 'production';
 
-/** The Pro offer's two Paddle prices (D10). */
+/** The Pro offer's two Paddle prices: monthly and yearly. */
 export interface OfferPrices {
   month: string;
   year: string;

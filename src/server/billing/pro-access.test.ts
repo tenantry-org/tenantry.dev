@@ -80,10 +80,10 @@ describe('getProAccess', () => {
   describe('billing', () => {
     const subscription = (id: string, extra: Record<string, unknown> = {}) => ({
       subscription_id: id,
-      subscription_status: 'active',
+      status: 'active',
       price_id: 'pri_unknown',
       product_id: 'pro_01',
-      scheduled_change: null,
+      scheduled_change_at: null,
       scheduled_change_action: null,
       ...extra,
     });
@@ -101,7 +101,7 @@ describe('getProAccess', () => {
       state.tables.subscriptions = {
         list: [
           subscription('sub_renews'),
-          subscription('sub_ends', { scheduled_change: '2026-11-15T00:00:00Z', scheduled_change_action: 'cancel' }),
+          subscription('sub_ends', { scheduled_change_at: '2026-11-15T00:00:00Z', scheduled_change_action: 'cancel' }),
         ],
       };
 
@@ -116,7 +116,7 @@ describe('getProAccess', () => {
     it('does not call another scheduled change an ending', async () => {
       state.tables.subscriptions = {
         list: [
-          subscription('sub_renews', { scheduled_change: '2026-11-01T00:00:00Z', scheduled_change_action: 'pause' }),
+          subscription('sub_renews', { scheduled_change_at: '2026-11-01T00:00:00Z', scheduled_change_action: 'pause' }),
         ],
       };
 
@@ -146,7 +146,7 @@ describe('getProAccess', () => {
     it('leaves out ended subscriptions and other products', async () => {
       state.tables.subscriptions = {
         list: [
-          subscription('sub_renews', { subscription_status: 'canceled' }),
+          subscription('sub_renews', { status: 'canceled' }),
           subscription('sub_other', { product_id: 'pro_other' }),
         ],
       };

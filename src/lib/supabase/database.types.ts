@@ -35,6 +35,54 @@ export type Database = {
           },
         ];
       };
+      customer_jobs: {
+        Row: {
+          attempts: number;
+          created_at: string;
+          customer_id: string | null;
+          event_type: string | null;
+          id: string;
+          kind: string;
+          last_error: string | null;
+          locked_until: string | null;
+          next_attempt_at: string;
+          occurred_at: string;
+          payload: Json | null;
+          processed_at: string | null;
+          status: string;
+        };
+        Insert: {
+          attempts?: number;
+          created_at?: string;
+          customer_id?: string | null;
+          event_type?: string | null;
+          id: string;
+          kind: string;
+          last_error?: string | null;
+          locked_until?: string | null;
+          next_attempt_at?: string;
+          occurred_at: string;
+          payload?: Json | null;
+          processed_at?: string | null;
+          status?: string;
+        };
+        Update: {
+          attempts?: number;
+          created_at?: string;
+          customer_id?: string | null;
+          event_type?: string | null;
+          id?: string;
+          kind?: string;
+          last_error?: string | null;
+          locked_until?: string | null;
+          next_attempt_at?: string;
+          occurred_at?: string;
+          payload?: Json | null;
+          processed_at?: string | null;
+          status?: string;
+        };
+        Relationships: [];
+      };
       customers: {
         Row: {
           created_at: string;
@@ -68,7 +116,7 @@ export type Database = {
           id: string;
           revoked_at: string | null;
           status: string;
-          subscription_id: string | null;
+          subscription_id: string;
           updated_at: string;
         };
         Insert: {
@@ -79,7 +127,7 @@ export type Database = {
           id?: string;
           revoked_at?: string | null;
           status: string;
-          subscription_id?: string | null;
+          subscription_id: string;
           updated_at?: string;
         };
         Update: {
@@ -90,7 +138,7 @@ export type Database = {
           id?: string;
           revoked_at?: string | null;
           status?: string;
-          subscription_id?: string | null;
+          subscription_id?: string;
           updated_at?: string;
         };
         Relationships: [
@@ -210,10 +258,10 @@ export type Database = {
           last_event_at: string | null;
           price_id: string | null;
           product_id: string | null;
-          scheduled_change: string | null;
           scheduled_change_action: string | null;
+          scheduled_change_at: string | null;
+          status: string;
           subscription_id: string;
-          subscription_status: string;
           updated_at: string;
         };
         Insert: {
@@ -222,10 +270,10 @@ export type Database = {
           last_event_at?: string | null;
           price_id?: string | null;
           product_id?: string | null;
-          scheduled_change?: string | null;
           scheduled_change_action?: string | null;
+          scheduled_change_at?: string | null;
+          status: string;
           subscription_id: string;
-          subscription_status: string;
           updated_at?: string;
         };
         Update: {
@@ -234,15 +282,15 @@ export type Database = {
           last_event_at?: string | null;
           price_id?: string | null;
           product_id?: string | null;
-          scheduled_change?: string | null;
           scheduled_change_action?: string | null;
+          scheduled_change_at?: string | null;
+          status?: string;
           subscription_id?: string;
-          subscription_status?: string;
           updated_at?: string;
         };
         Relationships: [
           {
-            foreignKeyName: 'public_subscriptions_customer_id_fkey';
+            foreignKeyName: 'subscriptions_customer_id_fkey';
             columns: ['customer_id'];
             isOneToOne: false;
             referencedRelation: 'customers';
@@ -250,80 +298,32 @@ export type Database = {
           },
         ];
       };
-      webhook_inbox: {
-        Row: {
-          attempts: number;
-          customer_id: string | null;
-          event_id: string;
-          event_type: string;
-          last_error: string | null;
-          locked_until: string | null;
-          next_attempt_at: string;
-          occurred_at: string;
-          payload: NonNullable<Json>;
-          processed_at: string | null;
-          received_at: string;
-          status: string;
-          subscription_id: string | null;
-        };
-        Insert: {
-          attempts?: number;
-          customer_id?: string | null;
-          event_id: string;
-          event_type: string;
-          last_error?: string | null;
-          locked_until?: string | null;
-          next_attempt_at?: string;
-          occurred_at: string;
-          payload: NonNullable<Json>;
-          processed_at?: string | null;
-          received_at?: string;
-          status?: string;
-          subscription_id?: string | null;
-        };
-        Update: {
-          attempts?: number;
-          customer_id?: string | null;
-          event_id?: string;
-          event_type?: string;
-          last_error?: string | null;
-          locked_until?: string | null;
-          next_attempt_at?: string;
-          occurred_at?: string;
-          payload?: NonNullable<Json>;
-          processed_at?: string | null;
-          received_at?: string;
-          status?: string;
-          subscription_id?: string | null;
-        };
-        Relationships: [];
-      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
       acquire_customer_lease: { Args: { p_customer_id: string; p_seconds: number }; Returns: string };
-      claim_webhook_events: {
+      claim_customer_jobs: {
         Args: { p_limit: number; p_lock_seconds: number };
         Returns: {
           attempts: number;
+          created_at: string;
           customer_id: string | null;
-          event_id: string;
-          event_type: string;
+          event_type: string | null;
+          id: string;
+          kind: string;
           last_error: string | null;
           locked_until: string | null;
           next_attempt_at: string;
           occurred_at: string;
-          payload: NonNullable<Json>;
+          payload: Json | null;
           processed_at: string | null;
-          received_at: string;
           status: string;
-          subscription_id: string | null;
         }[];
         SetofOptions: {
           from: '*';
-          to: 'webhook_inbox';
+          to: 'customer_jobs';
           isOneToOne: false;
           isSetofReturn: true;
         };
@@ -340,8 +340,8 @@ export type Database = {
           p_occurred_at: string;
           p_price_id: string;
           p_product_id: string;
-          p_scheduled_change: string;
           p_scheduled_change_action: string;
+          p_scheduled_change_at: string;
           p_status: string;
           p_subscription_id: string;
         };

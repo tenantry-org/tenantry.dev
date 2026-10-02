@@ -70,7 +70,7 @@ describe('Paddle events', () => {
       p_status: 'active',
       p_price_id: 'pri_1',
       p_product_id: 'pro_1',
-      p_scheduled_change: '2026-10-01T00:00:00Z',
+      p_scheduled_change_at: '2026-10-01T00:00:00Z',
       p_scheduled_change_action: 'cancel',
       p_occurred_at: '2026-09-28T11:00:00Z',
     });
@@ -93,7 +93,7 @@ describe('Paddle events', () => {
     ).resolves.toBe(false);
 
     expect(rpcArgs('record_subscription_event')).toMatchObject({
-      p_scheduled_change: null,
+      p_scheduled_change_at: null,
       p_scheduled_change_action: null,
     });
   });
@@ -110,11 +110,11 @@ describe('Paddle events', () => {
     });
   });
 
-  // The inbox retries an event whose recording throws; one that returned false would be completed as stale.
+  // The worker retries an event whose recording throws; one that returned false would be completed as stale.
   it('throws when recording an event fails, such as a subscription whose customer is not recorded yet', async () => {
     state.rpcError = {
       code: '23503',
-      message: 'violates foreign key constraint "public_subscriptions_customer_id_fkey"',
+      message: 'violates foreign key constraint "subscriptions_customer_id_fkey"',
     };
     await expect(
       recordSubscriptionEvent({

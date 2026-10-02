@@ -1,4 +1,4 @@
--- An entitlement is in grace exactly when it records when grace started (implementation plan 6.6).
+-- An entitlement is in grace exactly when it records when grace started, and every entitlement is a subscription's.
 -- Run with `supabase test db` against the local database.
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -10,11 +10,14 @@ set local search_path to public, extensions;
 select plan(5);
 
 insert into public.customers (customer_id, email) values ('ctm_1', 'buyer@example.com');
-insert into public.subscriptions (subscription_id, subscription_status, customer_id) values
+insert into public.subscriptions (subscription_id, status, customer_id) values
   ('sub_1', 'past_due', 'ctm_1'),
   ('sub_2', 'active', 'ctm_1');
 
-select has_column('public', 'entitlements', 'grace_started_at', 'entitlements record when grace started');
+select throws_ok(
+  $$insert into public.entitlements (customer_id, status) values ('ctm_1', 'active')$$,
+  '23502', null,
+  'rejects an entitlement without a subscription');
 
 select lives_ok(
   $$insert into public.entitlements (customer_id, subscription_id, status, grace_started_at)

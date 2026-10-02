@@ -21,7 +21,7 @@ export const PRODUCTION_LICENCE_PUBLIC_KEY =
 /**
  * Production's GitHub org and Supabase project. A sandbox server must use neither, so a sandbox purchase
  * (free, with test cards) can never add anyone to the real customer team or write to real customers'
- * records. Each environment has its own services (D6); this makes a misconfiguration fail at startup.
+ * records. Each environment has its own services; this makes a misconfiguration fail at startup.
  */
 export const PRODUCTION_GITHUB_ORG = 'tenantry-org';
 export const PRODUCTION_SUPABASE_URL = 'https://xoqqgenzhqefyeyzahim.supabase.co';

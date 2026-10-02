@@ -29,11 +29,11 @@ Key code is in `src/server`, in layers whose imports point only down this list (
   access, GitHub membership, licence and emails in line with their entitlements (`customer-access.ts`); applying
   Paddle's notifications (`apply-paddle-event.ts`); linking a GitHub account (`sync-github-link.ts`); the reconcile
   run; and the Pro pages' read model (`pro-access.ts`).
-- `jobs/` — the webhook inbox's worker, which runs each customer's Paddle events and reconcile jobs in order, and the
-  per-customer leases.
+- `jobs/` — the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order, and
+  the per-customer leases.
 - `integrations/` — Paddle, GitHub team provisioning (a GitHub App), email (Resend) and the licence issuer.
 - `db/` — `createUserClient` (the signed-in user's session; RLS applies) and `createServiceRoleClient` (bypasses
-  RLS), and the only modules that query the database: the billing tables' store, the webhook inbox and the
+  RLS), and the only modules that query the database: the billing tables' store, the customer jobs and the
   dashboard's reads. The clients are typed by `src/lib/supabase/database.types.ts`, which is generated from the
   migrations.
 - `config/` — the server's configuration, `serverConfig()`: every setting, validated when the server starts.
@@ -43,7 +43,10 @@ component that pulls one in fails the build. The services that change a customer
 `reconcile-customer.ts`, `apply-paddle-event.ts`, `sync-github-link.ts`) take what they use from the layers below as
 their last argument (`billing/deps.ts`), defaulting to the real modules, so their tests pass an in-memory billing store
 and fakes instead of replacing modules; the read model is tested against a fake Supabase client. `src/lib` holds
-helpers for both sides, and `src/test` the fakes the tests share. The schema, RLS policies and database functions are in `supabase/migrations/`, and their tests in
+helpers for both sides, and `src/test` the fakes the tests share.
+
+The database schema, with its RLS policies and functions, is one file,
+`supabase/migrations/20261002120000_baseline.sql`; later changes are migrations after it. Their tests are in
 `supabase/tests/database/`.
 
 ## Develop

@@ -1,6 +1,6 @@
 import { Webhooks } from '@paddle/paddle-node-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PaddleEventJson } from '@/server/db/inbox';
+import type { PaddleEventJson } from '@/server/db/customer-jobs';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
 import { adjustmentEvent, customerEvent, subscriptionEvent } from '@/test/paddle-events';
 import { memory } from '@/test/memory-billing-store';

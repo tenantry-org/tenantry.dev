@@ -3,7 +3,7 @@ import type {
   EntitlementStatus,
   GithubAccount,
   GithubState,
-  SubscriptionEntitlement,
+  EntitlementRecord,
   SubscriptionEvent,
 } from '@/server/db/billing-store';
 import type { BillingStore } from '@/server/billing/deps';
@@ -31,7 +31,7 @@ const state = {
   githubAccounts: new Map<string, GithubAccount>(),
   /** GitHub itself: each account's current login, by id. Renaming an account changes only this. */
   githubUsers: new Map<number, string>(),
-  entitlements: new Map<string, SubscriptionEntitlement>(),
+  entitlements: new Map<string, EntitlementRecord>(),
   access: new Map<string, CustomerAccessRecord>(),
   licences: [] as Licence[],
   licenceFailures: new Map<string, { attempts: number; lastError: string }>(),
@@ -87,7 +87,7 @@ export const memory = {
 
     async recordSubscriptionEvent(event: SubscriptionEvent) {
       if (!state.emails.has(event.customerId)) {
-        throw Object.assign(new Error('violates foreign key constraint "public_subscriptions_customer_id_fkey"'), {
+        throw Object.assign(new Error('violates foreign key constraint "subscriptions_customer_id_fkey"'), {
           code: '23503',
         });
       }
@@ -117,7 +117,7 @@ export const memory = {
       if (account) account.login = login;
     },
 
-    async upsertEntitlement(record: SubscriptionEntitlement) {
+    async upsertEntitlement(record: EntitlementRecord) {
       // As entitlements_grace_started_check does: grace exactly when grace_started_at is set.
       if ((record.status === 'grace') !== (record.graceStartedAt !== null)) {
         throw Object.assign(new Error('violates check constraint "entitlements_grace_started_check"'), {

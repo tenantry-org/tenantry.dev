@@ -21,7 +21,7 @@ interface Props {
 type Pending = { kind: 'cancel' | 'keep'; subscriptionId: string } | null;
 
 /**
- * The customer's subscription and billing (6.17). Invoices, invoice details (company and tax ID), payment
+ * The customer's subscription and billing. Invoices, invoice details (company and tax ID), payment
  * methods and cancelling are Paddle's hosted customer portal, reached through one-time links. A scheduled
  * cancellation can be undone here (Keep subscription) or in the portal (Don't cancel). Shown to former customers
  * too: one whose grace period ended updates the failed payment method here, and invoices stay available.

@@ -1,16 +1,16 @@
 import 'server-only';
-import { acquireCustomerLease, releaseCustomerLease } from '@/server/db/inbox';
+import { acquireCustomerLease, releaseCustomerLease } from '@/server/db/customer-jobs';
 
 /**
- * Per-customer leases (supabase/migrations/20260929150000_customer_leases.sql). The inbox worker processes a
- * customer's Paddle events and reconcile jobs one at a time; work outside it that changes the customer's GitHub
- * access (linking an account) holds the customer's lease, so it never runs alongside one of those.
+ * Per-customer leases. The worker runs a customer's jobs (Paddle events and reconciles) one at a time; work outside it
+ * that changes the customer's GitHub access (linking an account) holds the customer's lease, a job of its own, so it
+ * never runs alongside one of those.
  */
 
 /**
  * How long a lease lasts if it is never released. The work it protects cannot outlast it: every route that
  * takes a lease stops at its `maxDuration`, which is shorter (lease-deadlines.test.ts). Otherwise a slow
- * relink could go on after the lease expired and another event for the customer had started.
+ * relink could go on after the lease expired and another of the customer's jobs had started.
  */
 export const LEASE_SECONDS = 120;
 
@@ -20,14 +20,14 @@ export const CUSTOMER_BUSY = Symbol('customer-busy');
 export interface LeaseOptions {
   /** How long the lease lasts if it is never released: longer than the work can take. */
   seconds?: number;
-  /** How long to wait for the customer's event in progress (or another lease) to finish. */
+  /** How long to wait for the customer's job in progress (or another lease) to finish. */
   waitMs?: number;
   pollMs?: number;
   sleep?: (ms: number) => Promise<void>;
 }
 
 /**
- * Runs `work` holding the customer's lease: none of their inbox events runs meanwhile. Waits up to `waitMs` for
+ * Runs `work` holding the customer's lease: none of their other jobs runs meanwhile. Waits up to `waitMs` for
  * one in progress to finish, and returns CUSTOMER_BUSY if it does not. The lease is released however `work`
  * ends; if releasing fails, it expires after `seconds`.
  */

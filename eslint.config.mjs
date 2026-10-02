@@ -32,7 +32,7 @@ const serviceRoleClient = {
 };
 
 // The server code is in layers, and imports point only down this list: billing (the rules and services) → jobs
-// (the webhook inbox's worker and leases) → integrations (Paddle, GitHub, email, licence signing) and db (the
+// (the customer jobs' worker and leases) → integrations (Paddle, GitHub, email, licence signing) and db (the
 // Supabase clients and the modules that query the database) → config. src/lib holds isomorphic helpers and imports
 // no server code. The patterns match both the alias and relative paths (`@/server/billing/…`, `../billing/…`).
 const below = (layer, ...higher) => ({

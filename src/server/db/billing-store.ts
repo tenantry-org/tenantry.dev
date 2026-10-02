@@ -26,20 +26,17 @@ export interface CustomerAccessRecord {
 }
 
 /**
- * An entitlement: a subscription's, or one granted by hand without a subscription (`subscriptionId` null). GitHub
- * access and the licence are per customer (see customer-access.ts).
+ * A subscription's entitlement, as Paddle's events left it. GitHub access and the licence are per customer (see
+ * customer-access.ts).
  */
 export interface EntitlementRecord {
   customerId: string;
-  subscriptionId: string | null;
+  subscriptionId: string;
   status: EntitlementStatus;
   currentPeriodEndsAt: Date | null;
   /** When the subscription became past due; set exactly while the status is 'grace' (see access-policy.ts). */
   graceStartedAt: Date | null;
 }
-
-/** A subscription's entitlement, the kind Paddle's events record. */
-export type SubscriptionEntitlement = EntitlementRecord & { subscriptionId: string };
 
 /** Returns the customer's email (populated by Paddle customer webhooks), or null if unknown. */
 export async function getCustomerEmail(customerId: string): Promise<string | null> {
@@ -109,7 +106,7 @@ export async function recordSubscriptionEvent(event: SubscriptionEvent): Promise
     p_price_id: event.priceId,
     p_product_id: event.productId,
     // The function takes null for no scheduled change; generated argument types are never nullable.
-    p_scheduled_change: event.scheduledChangeAt as string,
+    p_scheduled_change_at: event.scheduledChangeAt as string,
     p_scheduled_change_action: event.scheduledChangeAction as string,
     p_occurred_at: event.occurredAt,
   });
@@ -181,7 +178,7 @@ export async function setGithubLogin(customerId: string, login: string): Promise
 }
 
 /** Inserts or updates the entitlement for a subscription (idempotent on subscription_id). */
-export async function upsertEntitlement(record: SubscriptionEntitlement): Promise<void> {
+export async function upsertEntitlement(record: EntitlementRecord): Promise<void> {
   const supabase = createServiceRoleClient();
   const now = new Date().toISOString();
 
@@ -203,7 +200,7 @@ export async function upsertEntitlement(record: SubscriptionEntitlement): Promis
 
 const ENTITLEMENT_COLUMNS = 'customer_id,subscription_id,status,current_period_ends_at,grace_started_at';
 
-/** Returns all of a customer's entitlements: one per subscription, and any granted by hand. */
+/** Returns all of a customer's entitlements, one per subscription. */
 export async function listEntitlements(customerId: string): Promise<EntitlementRecord[]> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase.from('entitlements').select(ENTITLEMENT_COLUMNS).eq('customer_id', customerId);
@@ -214,7 +211,7 @@ export async function listEntitlements(customerId: string): Promise<EntitlementR
 }
 
 /** Returns a subscription's entitlement, or null if none is recorded. */
-export async function getEntitlement(subscriptionId: string): Promise<SubscriptionEntitlement | null> {
+export async function getEntitlement(subscriptionId: string): Promise<EntitlementRecord | null> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('entitlements')
@@ -224,7 +221,7 @@ export async function getEntitlement(subscriptionId: string): Promise<Subscripti
 
   if (error) throw error;
 
-  return data ? { ...toEntitlement(data), subscriptionId } : null;
+  return data ? toEntitlement(data) : null;
 }
 
 type EntitlementRow = Pick<
@@ -364,7 +361,7 @@ export async function customersToReconcile(): Promise<string[]> {
 
 /**
  * Records a failed licence issuance and returns true if it starts a run of failures, the one to alert on
- * (see supabase/migrations/20260928150000_licence_failures.sql).
+ * (see licence_failures in supabase/migrations/20261002120000_baseline.sql).
  */
 export async function recordLicenceFailure(customerId: string, error: string): Promise<boolean> {
   const supabase = createServiceRoleClient();

@@ -8,33 +8,33 @@ function fakeDeps(customers: string[]) {
     // customers_to_reconcile is tested against the database in supabase/tests/database/reconcile.test.sql.
     customersToReconcile: vi.fn<ReconcileDeps['customersToReconcile']>(async () => customers),
     enqueueReconcileJobs: vi.fn<ReconcileDeps['enqueueReconcileJobs']>(async () => undefined),
-    processInbox: vi.fn<ReconcileDeps['processInbox']>(async () => ({ processed: 3, retrying: 0, failed: 0 })),
+    processJobs: vi.fn<ReconcileDeps['processJobs']>(async () => ({ processed: 3, retrying: 0, failed: 0 })),
   } satisfies ReconcileDeps;
 }
 
 describe('reconcileEntitlements', () => {
-  it('queues one reconcile job per customer who is entitled, linked or licensed, then drains the inbox', async () => {
+  it('queues one reconcile job per customer who is entitled, linked or licensed, then runs the due jobs', async () => {
     const deps = fakeDeps(['ctm_entitled', 'ctm_linked', 'ctm_revoked_by_mistake']);
 
     await expect(reconcileEntitlements({ now: NOW, budgetMs: 45_000 }, deps)).resolves.toEqual({
       customers: 3,
-      inbox: { processed: 3, retrying: 0, failed: 0 },
+      jobs: { processed: 3, retrying: 0, failed: 0 },
     });
 
     expect(deps.enqueueReconcileJobs).toHaveBeenCalledExactlyOnceWith(
       ['ctm_entitled', 'ctm_linked', 'ctm_revoked_by_mistake'],
       NOW,
     );
-    expect(deps.processInbox).toHaveBeenCalledWith({ budgetMs: 45_000 });
+    expect(deps.processJobs).toHaveBeenCalledWith({ budgetMs: 45_000 });
     expect(deps.enqueueReconcileJobs.mock.invocationCallOrder[0]).toBeLessThan(
-      deps.processInbox.mock.invocationCallOrder[0],
+      deps.processJobs.mock.invocationCallOrder[0],
     );
   });
 
-  it('still drains the inbox when there is no one to reconcile', async () => {
+  it('still runs the due jobs when there is no one to reconcile', async () => {
     const deps = fakeDeps([]);
 
     await expect(reconcileEntitlements({ now: NOW }, deps)).resolves.toMatchObject({ customers: 0 });
-    expect(deps.processInbox).toHaveBeenCalledOnce();
+    expect(deps.processJobs).toHaveBeenCalledOnce();
   });
 });

@@ -34,7 +34,7 @@ export interface AccessSync {
  * only when it ends. While the customer stays entitled it only issues the licence if they have none (a
  * failed issuance, or access that started while provisioning was manual).
  *
- * Called by the webhook worker after one of the customer's entitlements changed (one customer's events
+ * Called when a Paddle event changed one of the customer's entitlements (the worker runs one customer's jobs
  * at a time), and by reconcile for every entitled customer, which ends access whose grace period is over
  * and retries licences. `set_customer_access` makes concurrent calls see each change once. Everything
  * that can throw runs before the change is recorded, so a failure is retried as a whole; after that, each

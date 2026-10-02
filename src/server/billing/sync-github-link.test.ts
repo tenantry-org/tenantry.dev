@@ -158,7 +158,7 @@ describe('syncGithubLinkForCurrentUser', () => {
       expect(steps).toEqual(['acquire', 'revoke', 'link', 'grant', 'release']);
     });
 
-    it("changes nothing while one of the customer's events is in progress, and says so", async () => {
+    it("changes nothing while one of the customer's jobs is in progress, and says so", async () => {
       linkPrevious(7, 'old-account');
       vi.spyOn(deps, 'withCustomerLease').mockResolvedValue(CUSTOMER_BUSY);
 

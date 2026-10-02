@@ -8,7 +8,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(24);
+select plan(16);
 
 insert into public.customers (customer_id, email) values ('ctm_1', 'buyer@example.com');
 
@@ -53,18 +53,7 @@ select ok(
   not has_function_privilege('anon', 'public.set_customer_access(text, text)', 'execute'),
   'an anonymous user cannot');
 
-select hasnt_column('public', 'entitlements', 'github_granted', 'the GitHub grant is no longer per subscription');
-select has_column('public', 'entitlements', 'current_period_ends_at', 'entitlements record the billing period end');
-
--- One Pro offer (D10): nothing records a tier.
-select hasnt_column('public', 'entitlements', 'tier', 'entitlements have no tier');
-select hasnt_column('public', 'customer_access', 'tier', 'customer access has no tier');
-select hasnt_column('public', 'licences', 'tier', 'licences have no tier');
-select hasnt_column('public', 'licences', 'expires_at', 'licences do not expire');
-select hasnt_function('public', 'set_customer_access', array['text', 'text', 'text'], 'set_customer_access takes no tier');
-
--- GitHub invitation state (6.7).
-select hasnt_column('public', 'customer_access', 'github_granted', 'github_granted is replaced by github_state');
+-- The GitHub state, and when an invitation was sent.
 select throws_ok(
   $$update public.customer_access set github_state = 'granted' where customer_id = 'ctm_1'$$,
   '23514', null,

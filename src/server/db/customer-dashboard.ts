@@ -52,7 +52,7 @@ export async function readDashboardRows(customerId: string) {
         .eq('customer_id', customerId),
       supabase
         .from('subscriptions')
-        .select('subscription_id,subscription_status,price_id,product_id,scheduled_change,scheduled_change_action')
+        .select('subscription_id,status,price_id,product_id,scheduled_change_at,scheduled_change_action')
         .eq('customer_id', customerId),
     ]);
 

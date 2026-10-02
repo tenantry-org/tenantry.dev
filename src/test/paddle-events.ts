@@ -1,4 +1,4 @@
-import type { PaddleEventJson } from '@/server/db/inbox';
+import type { PaddleEventJson } from '@/server/db/customer-jobs';
 
 /** Paddle notification bodies shaped like real deliveries, for tests that rebuild them with the SDK. */
 

@@ -8,7 +8,7 @@ import { getCustomerId } from '@/server/db/customer-dashboard';
 
 type Result<T> = T | { error: string };
 
-/** Where in Paddle's customer portal to send the customer (6.17). */
+/** Where in Paddle's customer portal to send the customer. */
 export type BillingPortalTarget = { kind: 'overview' } | { kind: 'cancel' | 'payment-method'; subscriptionId: string };
 
 const UNAVAILABLE = 'Billing is unavailable right now, please try again later';
@@ -45,7 +45,7 @@ export async function openBillingPortal(target: BillingPortalTarget): Promise<Re
 }
 
 /**
- * Undoes a scheduled cancellation, so the subscription renews as normal (6.16). The portal offers the same
+ * Undoes a scheduled cancellation, so the subscription renews as normal. The portal offers the same
  * (Don't cancel); this saves the customer the trip there.
  */
 export async function keepSubscription(subscriptionId: string): Promise<Result<{ kept: true }>> {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SubscriptionEntitlement } from '@/server/db/billing-store';
+import type { EntitlementRecord } from '@/server/db/billing-store';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
 import { memory } from '@/test/memory-billing-store';
 import { testServerConfig } from '@/test/server-config';
@@ -11,7 +11,7 @@ let deps: FakeBillingDeps;
 const OCTOBER = new Date('2026-10-01T00:00:00Z');
 const NOVEMBER = new Date('2026-11-01T00:00:00Z');
 
-async function record(overrides: Partial<SubscriptionEntitlement> = {}) {
+async function record(overrides: Partial<EntitlementRecord> = {}) {
   await memory.store.upsertEntitlement({
     customerId: 'ctm_1',
     subscriptionId: 'sub_1',
@@ -202,7 +202,7 @@ describe('reconcileCustomer', () => {
     expect(memory.state.access.get('ctm_1')?.status).toBe('active');
   });
 
-  it('retries a grant that failed, and throws while it keeps failing so the inbox retries the job', async () => {
+  it('retries a grant that failed, and throws while it keeps failing so the worker retries the job', async () => {
     deps.github.grantAccess.mockRejectedValueOnce(new Error('GitHub unavailable'));
     await record();
     await syncCustomerAccess('ctm_1', deps);

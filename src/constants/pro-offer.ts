@@ -7,7 +7,7 @@ export interface Offer {
 }
 
 /**
- * The single Tenantry Pro offer (D10). Tenantry Core is free and open source; Pro is one subscription,
+ * The single Tenantry Pro offer. Tenantry Core is free and open source; Pro is one subscription,
  * billed monthly or yearly, with no tiers or seats. Each environment has its own Paddle prices for it, in the
  * public configuration (src/lib/public-config.ts).
  */

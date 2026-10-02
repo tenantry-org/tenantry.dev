@@ -10,7 +10,7 @@ interface Props {
 
 /**
  * Shared shell for legal documents. The content of each page is a TEMPLATE and must be reviewed by
- * legal counsel before launch. The legal entity comes from constants/legal-entity.ts (plan item 4.7).
+ * legal counsel before launch. The legal entity comes from constants/legal-entity.ts.
  */
 export function LegalPage({ title, lastUpdated, children }: Props) {
   return (

@@ -1,16 +1,16 @@
 import { NextRequest, after } from 'next/server';
 import { getPaddleInstance } from '@/server/integrations/paddle/get-paddle-instance';
-import { enqueueEvent, PaddleEventJson } from '@/server/db/inbox';
-import { processInbox } from '@/server/billing/process-inbox';
+import { enqueuePaddleEvent, PaddleEventJson } from '@/server/db/customer-jobs';
+import { processJobs } from '@/server/billing/process-jobs';
 import { serverConfig } from '@/server/config/server-config';
 
 // Processing runs after the response (see `after` below), within this function's time limit.
 export const maxDuration = 60;
 
 // Paddle delivers notifications here and expects an answer within 5 seconds. The signature is verified
-// with the destination secret, the event is stored in the webhook inbox (a duplicate delivery changes
-// nothing), and the response goes out. The inbox is then drained after the response; the reconcile cron
-// drains it too, so an event that fails is retried even if Paddle sends nothing more.
+// with the destination secret, the event is stored as a customer job (a duplicate delivery changes nothing),
+// and the response goes out. The due jobs then run after the response; the reconcile cron runs them too, so an
+// event that fails is retried even if Paddle sends nothing more.
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('paddle-signature') || '';
   const rawRequestBody = await request.text();
@@ -29,13 +29,13 @@ export async function POST(request: NextRequest) {
 
   try {
     const event = JSON.parse(rawRequestBody) as PaddleEventJson;
-    const stored = await enqueueEvent(event);
+    const stored = await enqueuePaddleEvent(event);
 
     after(async () => {
       try {
-        await processInbox();
+        await processJobs();
       } catch (error) {
-        console.error('Paddle webhook: draining the inbox failed; the reconcile cron will retry:', error);
+        console.error('Paddle webhook: running the jobs failed; the reconcile cron will retry:', error);
       }
     });
 

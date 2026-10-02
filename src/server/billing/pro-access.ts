@@ -88,7 +88,7 @@ export async function getProAccess(paddle?: ServerConfig['paddle']): Promise<Pro
     licence: licence ? { jwt: licence.jwt } : null,
     githubLogin: link?.github_login ?? null,
     subscriptions: subscriptions
-      .filter((row) => row.product_id === proProductId && row.subscription_status !== 'canceled')
+      .filter((row) => row.product_id === proProductId && row.status !== 'canceled')
       .map((row) => billingSubscription(row, entitlements, prices)),
   };
 }
@@ -97,7 +97,7 @@ type EntitlementRow = Pick<Tables<'entitlements'>, 'subscription_id' | 'current_
 
 type SubscriptionRow = Pick<
   Tables<'subscriptions'>,
-  'subscription_id' | 'subscription_status' | 'price_id' | 'scheduled_change' | 'scheduled_change_action'
+  'subscription_id' | 'status' | 'price_id' | 'scheduled_change_at' | 'scheduled_change_action'
 >;
 
 function billingSubscription(
@@ -105,13 +105,13 @@ function billingSubscription(
   entitlements: EntitlementRow[],
   prices: OfferPrices,
 ): BillingSubscription {
-  const endsAt = row.scheduled_change_action === 'cancel' ? row.scheduled_change : null;
+  const endsAt = row.scheduled_change_action === 'cancel' ? row.scheduled_change_at : null;
   const periodEndsAt = entitlements.find((e) => e.subscription_id === row.subscription_id)?.current_period_ends_at;
 
   return {
     id: row.subscription_id,
     // Paddle's status, as record_subscription_event stored it; canceled ones are filtered out above.
-    status: row.subscription_status as BillingSubscription['status'],
+    status: row.status as BillingSubscription['status'],
     interval: row.price_id === prices.month ? 'month' : row.price_id === prices.year ? 'year' : null,
     renewsAt: endsAt ? null : (periodEndsAt ?? null),
     endsAt,

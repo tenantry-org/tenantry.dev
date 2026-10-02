@@ -17,13 +17,13 @@ insert into public.customers (customer_id, email) values
   ('ctm_lapsed', 'lapsed@example.com');
 
 -- 1500 entitled customers, more than the API's max_rows.
-insert into public.subscriptions (subscription_id, subscription_status, customer_id)
+insert into public.subscriptions (subscription_id, status, customer_id)
 select 'sub_' || customer_id, 'active', customer_id from public.customers where customer_id ~ '^ctm_[0-9]+$';
 insert into public.entitlements (customer_id, subscription_id, status)
 select customer_id, 'sub_' || customer_id, 'active' from public.customers where customer_id ~ '^ctm_[0-9]+$';
 
 insert into public.customer_access (customer_id, status) values ('ctm_access', 'grace'), ('ctm_lapsed', 'revoked');
-insert into public.subscriptions (subscription_id, subscription_status, customer_id) values
+insert into public.subscriptions (subscription_id, status, customer_id) values
   ('sub_entitled', 'past_due', 'ctm_entitled'), ('sub_lapsed', 'canceled', 'ctm_lapsed');
 insert into public.entitlements (customer_id, subscription_id, status, grace_started_at) values
   ('ctm_entitled', 'sub_entitled', 'grace', now());

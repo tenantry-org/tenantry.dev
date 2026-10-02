@@ -21,7 +21,7 @@ insert into auth.users (id, email, email_confirmed_at, aud, role) values
 insert into public.customers (customer_id, email) values
   ('ctm_buyer', 'buyer@example.com'),
   ('ctm_mixed', '  Mixed@Example.COM ');
-insert into public.subscriptions (subscription_id, subscription_status, customer_id) values
+insert into public.subscriptions (subscription_id, status, customer_id) values
   ('sub_buyer', 'active', 'ctm_buyer');
 insert into public.entitlements (customer_id, subscription_id, status) values
   ('ctm_buyer', 'sub_buyer', 'active');

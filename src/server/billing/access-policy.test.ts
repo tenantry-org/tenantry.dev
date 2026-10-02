@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { SubscriptionEntitlement } from '@/server/db/billing-store';
+import type { EntitlementRecord } from '@/server/db/billing-store';
 import { aggregateAccess, entitlementFor } from './access-policy';
 
 const NOVEMBER = new Date('2026-11-01T00:00:00Z');
 
-function entitlement(overrides: Partial<SubscriptionEntitlement> = {}): SubscriptionEntitlement {
+function entitlement(overrides: Partial<EntitlementRecord> = {}): EntitlementRecord {
   return {
     customerId: 'ctm_1',
     subscriptionId: 'sub_1',

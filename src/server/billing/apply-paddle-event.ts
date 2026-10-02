@@ -36,9 +36,9 @@ interface AdjustmentEventData {
 }
 
 /**
- * Applies one Paddle notification. Called by the inbox worker, one customer's events at a time and oldest first;
- * a subscription or customer event older than the last one applied to its subscription or customer changes
- * nothing. Throwing makes the worker retry the event later.
+ * Applies one Paddle notification. Called by the job worker, one customer's jobs at a time and oldest first; a
+ * subscription or customer event older than the last one applied to its subscription or customer changes nothing.
+ * Throwing makes the worker retry the event later.
  */
 export async function applyPaddleEvent(eventData: EventEntity, deps: BillingDeps = defaultBillingDeps): Promise<void> {
   switch (eventData.eventType) {

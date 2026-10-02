@@ -38,7 +38,7 @@ insert into auth.users (id, email, email_confirmed_at, aud, role) values
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'bob@example.com', now(), 'authenticated', 'authenticated');
 insert into public.customers (customer_id, email) values
   ('ctm_alice', 'alice@example.com'), ('ctm_bob', 'bob@example.com');
-insert into public.subscriptions (subscription_id, subscription_status, customer_id) values
+insert into public.subscriptions (subscription_id, status, customer_id) values
   ('sub_alice', 'active', 'ctm_alice'), ('sub_bob', 'active', 'ctm_bob');
 insert into public.entitlements (customer_id, subscription_id, status) values
   ('ctm_alice', 'sub_alice', 'active'), ('ctm_bob', 'sub_bob', 'active');
@@ -50,8 +50,8 @@ insert into public.licences (customer_id, jwt, revoked) values
 insert into public.github_links (customer_id, github_login, github_id) values
   ('ctm_alice', 'alice-gh', 1001), ('ctm_bob', 'bob-gh', 1002);
 insert into public.licence_failures (customer_id, attempts, last_error) values ('ctm_bob', 1, 'signing failed');
-insert into public.webhook_inbox (event_id, event_type, occurred_at, customer_id, payload) values
-  ('evt_bob', 'customer.updated', now(), 'ctm_bob', '{"data": {"email": "bob@example.com"}}');
+insert into public.customer_jobs (id, kind, customer_id, occurred_at, event_type, payload) values
+  ('evt_bob', 'paddle_event', 'ctm_bob', now(), 'customer.updated', '{"data": {"email": "bob@example.com"}}');
 
 -- As Alice.
 set local role authenticated;
@@ -73,7 +73,7 @@ select is_empty($$select 1 from public.customers where customer_id = 'ctm_bob'$$
 select is_empty($$select 1 from public.licences where customer_id = 'ctm_bob'$$,
   'asking for Bob''s licences by id returns nothing');
 -- The service-only tables have row level security and no policy, so no row is visible to any user.
-select is_empty($$select 1 from public.webhook_inbox$$, 'the webhook inbox shows no rows, not even her own events');
+select is_empty($$select 1 from public.customer_jobs$$, 'customer jobs show no rows, not even her own');
 select is_empty($$select 1 from public.licence_failures$$, 'licence failures show no rows');
 
 -- Alice cannot write, not even her own rows.
