@@ -90,7 +90,8 @@ with the Core and Pro release tags its docs come from (Core's repository, and th
 repository, which each Pro release publishes and tags). The newest is served at `/docs`, each older one at
 `/docs/v<version>` with a notice pointing to the latest; the sidebar has a version dropdown and search covers
 the version being read. The tags are read from partial clones kept in `content/_src/` (gitignored), so every
-build, local ones included, shows what the released packages do.
+build, local ones included, shows what the released packages do. Each group ends with a Changelog page, the tag's
+`CHANGELOG.md` (`scripts/docs-changelog.mjs`); tenantry-pro-docs has Pro's from 0.5.0.
 
 - **Releases publish their docs by themselves.** The versions are worked out from the release tags: a line is
   listed once both Core and Pro have a stable release in it, with the newest patch of each. The `docs-versions`

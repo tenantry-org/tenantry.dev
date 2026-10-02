@@ -6,7 +6,8 @@
  * version, preparing them for the Fumadocs render step:
  *   - injects frontmatter (`title` from the first H1, which is then removed from the body),
  *   - derives a short `description` from the first paragraph,
- *   - rewrites relative `.md` links to clean docs paths (e.g. `(tenant-stores.md)` → `(tenant-stores)`).
+ *   - rewrites relative `.md` links to clean docs paths (e.g. `(tenant-stores.md)` → `(tenant-stores)`),
+ *   - adds each tag's CHANGELOG.md as the group's Changelog page (docs-changelog.mjs).
  *
  * The versions are listed in docs-versions.json (docs-versions.mjs), each with the release tags of Core's
  * repository and of the public tenantry-pro-docs repository (which each Pro release publishes to and tags; Vercel
@@ -27,9 +28,10 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { changelogPage } from './docs-changelog.mjs';
 import { linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
-import { basePath, readVersions, versionProblems } from './docs-versions.mjs';
-import { hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
+import { basePath, compareLines, readVersions, versionProblems } from './docs-versions.mjs';
+import { fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = resolve(here, '..');
@@ -41,12 +43,16 @@ const groups = [
     title: 'Tenantry Core',
     envVar: 'CORE_DOCS_DIR',
     repository: REPOSITORIES.core,
+    // The release lines whose tags have a CHANGELOG.md: every Core tag has one at the repository's root.
+    changelogSince: '0.1',
   },
   {
     name: 'pro',
     title: 'Tenantry Pro',
     envVar: 'PRO_DOCS_DIR',
     repository: REPOSITORIES.pro,
+    // Pro's releases publish their CHANGELOG.md to tenantry-pro-docs from 0.5.0 (its scripts/publish-docs.sh).
+    changelogSince: '0.5',
   },
 ];
 
@@ -83,6 +89,7 @@ const PAGE_ORDER = [
   'aot-and-trimming',
   'compatibility',
   'troubleshooting',
+  'changelog',
 ];
 
 function orderPages(slugs) {
@@ -185,14 +192,40 @@ function fail(message) {
   process.exit(1);
 }
 
-// The docs folder of a tag, extracted to a temporary folder.
+// The docs folder of a tag, extracted to a temporary folder, with the tag's CHANGELOG.md beside it.
 function docsAt(dir, tag) {
   if (!hasTag(dir, tag)) return null;
   const out = mkdtempSync(join(tmpdir(), 'tenantry-docs-'));
   scratch.push(out);
   const archive = execFileSync('git', ['-C', dir, 'archive', '--format=tar', tag, 'docs'], { maxBuffer: 1 << 28 }); // NOSONAR
   execFileSync('tar', ['-x', '-C', out], { input: archive }); // NOSONAR: tar from the build's PATH
+  const changelog = fileAt(dir, tag, 'CHANGELOG.md');
+  if (changelog !== null) writeFileSync(join(out, 'CHANGELOG.md'), changelog);
   return join(out, 'docs');
+}
+
+// The group's Changelog page, from the CHANGELOG.md beside its docs folder (the tag's, or a local preview's
+// repository's), or null when there is none.
+function syncChangelog(source, outDir, group, linkSource, context) {
+  const file = join(source, '..', 'CHANGELOG.md');
+  if (!existsSync(file)) {
+    if (compareLines(context.version, group.changelogSince) < 0) return null;
+    const message = `no CHANGELOG.md for ${context.version} ${group.name}.`;
+    if (releaseBuild) fail(message);
+    console.warn(`sync-docs: ${message}`);
+    return null;
+  }
+  const content = toFrontmatter(
+    changelogPage(readFileSync(file, 'utf8'), group.title),
+    group.name,
+    linkSource,
+    '',
+    context,
+  );
+  for (const link of relativeLinks(content)) brokenLinks.push(`${context.version} ${group.name}/CHANGELOG.md: ${link}`);
+  writeFileSync(join(outDir, 'changelog.mdx'), content);
+  total += 1;
+  return 'changelog';
 }
 
 const versions = readVersions();
@@ -271,7 +304,8 @@ for (const [index, entry] of versions.entries()) {
     mkdirSync(outDir, { recursive: true });
 
     const slugs = syncFolder(source, outDir, group, linkSource, '', context);
-    const pages = orderPages(slugs);
+    const changelog = syncChangelog(source, outDir, group, linkSource, context);
+    const pages = orderPages(changelog ? [...slugs, changelog] : slugs);
 
     // The API reference (docs/api, generated in each repository from its XML documentation comments) is its own
     // section, last in the group, with its pages grouped by namespace.
