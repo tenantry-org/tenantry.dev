@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { requestPasswordReset } from './actions';
 
 const auth = vi.hoisted(() => ({ resetPasswordForEmail: vi.fn() }));
-vi.mock('@/utils/supabase/user-client', () => ({ createUserClient: async () => ({ auth }) }));
-vi.mock('@/utils/site-origin', () => ({ siteOrigin: async () => 'https://tenantry.dev' }));
+vi.mock('@/server/db/user-client', () => ({ createUserClient: async () => ({ auth }) }));
+vi.mock('@/server/config/site-origin', () => ({ siteOrigin: async () => 'https://tenantry.dev' }));
 
 beforeEach(() => {
   vi.clearAllMocks();

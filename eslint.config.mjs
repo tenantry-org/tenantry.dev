@@ -1,11 +1,11 @@
 import nextCoreWebVitals from 'eslint-config-next/core-web-vitals';
 import nextTypescript from 'eslint-config-next/typescript';
 
-// Supabase clients come only from the factories in src/utils/supabase, whose names say which side of RLS a query
-// is on: createUserClient (the signed-in user's session; RLS applies) or createServiceRoleClient (bypasses RLS),
-// and client.ts in the browser (the user's session).
+// Supabase clients come only from the factories, whose names say which side of RLS a query is on:
+// createUserClient (the signed-in user's session; RLS applies) or createServiceRoleClient (bypasses RLS) in
+// src/server/db, and createClient (src/lib/supabase/client.ts) in the browser.
 const useFactory =
-  'Use a factory from src/utils/supabase: createUserClient, createServiceRoleClient, or client.ts in the browser.';
+  'Use a factory: createUserClient or createServiceRoleClient (src/server/db), or createClient (src/lib/supabase/client.ts) in the browser.';
 const supabaseClients = [
   {
     name: '@supabase/supabase-js',
@@ -18,15 +18,42 @@ const supabaseClients = [
     message: useFactory,
   },
 ];
-
-// Only these modules query the database, each mapping rows to its own types: the service-role store, the webhook
-// inbox, and the dashboard's read model, which reads with the user's session.
-const databaseModules = [
-  'src/utils/entitlements/entitlements-store.ts',
-  'src/utils/webhooks/inbox.ts',
-  'src/utils/entitlements/get-entitlement.ts',
+const serverClientFactories = [
+  'src/server/db/user-client.ts',
+  'src/server/db/service-role-client.ts',
+  'src/server/db/update-session.ts',
 ];
-const queryElsewhere = 'Only the database modules (eslint.config.mjs) query Supabase: add a function to one of them.';
+const browserClientFactory = 'src/lib/supabase/client.ts';
+
+// The service-role client bypasses RLS, so only the modules in src/server/db, which query the database, use it.
+const serviceRoleClient = {
+  group: ['@/server/db/service-role-client', '**/service-role-client'],
+  message: 'The service-role client bypasses RLS: only the modules in src/server/db use it.',
+};
+
+// The server code is in layers, and imports point only down this list: billing (the rules and services) → jobs
+// (the webhook inbox's worker and leases) → integrations (Paddle, GitHub, email, licence signing) and db (the
+// Supabase clients and the modules that query the database) → config. src/lib holds isomorphic helpers and imports
+// no server code.
+const below = (layer, ...higher) => ({
+  group: higher.map((name) => `@/server/${name}/**`),
+  message: `src/server/${layer} must not import ${higher.join(', ')}: imports point down the layers (eslint.config.mjs).`,
+});
+const isomorphic = { group: ['@/server/**'], message: 'src/lib is isomorphic: it imports no server code.' };
+const dbLayer = below('db', 'billing', 'jobs', 'integrations');
+
+function importRules(files, patterns, { ignores = [], clients = true } = {}) {
+  return {
+    files,
+    ignores,
+    rules: {
+      'no-restricted-imports': ['error', { paths: clients ? supabaseClients : [], patterns }],
+    },
+  };
+}
+
+// Only the modules in src/server/db query the database, each mapping rows to its own types.
+const queryElsewhere = 'Only the modules in src/server/db query Supabase: add a function to one of them.';
 
 // Next 16 removes `next lint`; we run the ESLint CLI directly against the native flat configs.
 const eslintConfig = [
@@ -46,35 +73,25 @@ const eslintConfig = [
       'react-hooks/use-memo': 'warn',
     },
   },
-  {
-    files: ['src/utils/**/*.{ts,tsx}'],
-    ignores: ['src/utils/supabase/**'],
-    rules: { 'no-restricted-imports': ['error', { paths: supabaseClients }] },
-  },
-  {
-    // Only the server modules under src/utils use the service-role client, and they decide what a request may
-    // change: pages, routes, components, hooks and the proxy never use it themselves.
-    files: ['src/**/*.{ts,tsx}'],
-    ignores: ['src/utils/**'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: supabaseClients,
-          patterns: [
-            {
-              group: ['@/utils/supabase/service-role-client', '**/supabase/service-role-client'],
-              message: 'The service-role client bypasses RLS: call a server module under src/utils that uses it.',
-            },
-          ],
-        },
-      ],
-    },
-  },
+  importRules(['src/**/*.{ts,tsx}'], [serviceRoleClient], { ignores: ['src/server/**', 'src/lib/**'] }),
+  importRules(['src/lib/**/*.{ts,tsx}'], [isomorphic], { ignores: [browserClientFactory] }),
+  importRules([browserClientFactory], [isomorphic], { clients: false }),
+  importRules(['src/server/billing/**/*.{ts,tsx}'], [serviceRoleClient]),
+  importRules(['src/server/jobs/**/*.{ts,tsx}'], [serviceRoleClient, below('jobs', 'billing')]),
+  importRules(
+    ['src/server/integrations/**/*.{ts,tsx}'],
+    [serviceRoleClient, below('integrations', 'billing', 'jobs', 'db')],
+  ),
+  importRules(
+    ['src/server/config/**/*.{ts,tsx}'],
+    [serviceRoleClient, below('config', 'billing', 'jobs', 'integrations', 'db')],
+  ),
+  importRules(['src/server/db/**/*.{ts,tsx}'], [dbLayer], { ignores: serverClientFactories }),
+  importRules(serverClientFactories, [dbLayer], { clients: false }),
   {
     // A table query is `.from('<table>')` (not Array.from or Buffer.from); a function call is `.rpc(…)`.
     files: ['src/**/*.{ts,tsx}'],
-    ignores: [...databaseModules, 'src/**/*.test.{ts,tsx}', 'src/utils/testing/**'],
+    ignores: ['src/server/db/**', 'src/**/*.test.{ts,tsx}', 'src/test/**'],
     rules: {
       'no-restricted-syntax': [
         'error',

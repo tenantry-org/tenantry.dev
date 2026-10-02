@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { Confirmation } from '@/components/shared/confirmation/confirmation';
 import { keepSubscription, openBillingPortal, type BillingPortalTarget } from '@/app/dashboard/pro/billing-actions';
-import type { BillingSubscription, ProAccess } from '@/utils/entitlements/get-entitlement';
+import type { BillingSubscription, ProAccess } from '@/server/billing/pro-access';
 import { ProOffer } from '@/constants/pro-offer';
 
 interface Props {

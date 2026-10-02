@@ -1,9 +1,9 @@
 import { Suspense } from 'react';
 import { DashboardPageHeader } from '@/components/dashboard/layout/dashboard-page-header';
 import { LoadingScreen } from '@/components/dashboard/layout/loading-screen';
-import { getProAccess } from '@/utils/entitlements/get-entitlement';
+import { getProAccess } from '@/server/billing/pro-access';
 import { BillingView } from '@/components/dashboard/pro/pro-access-view';
-import { getCurrentUser } from '@/utils/supabase/current-user';
+import { getCurrentUser } from '@/server/db/current-user';
 
 export default function BillingPage() {
   return (

@@ -7,8 +7,8 @@ import { GithubIcon } from '@/components/icons/github-icon';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { connectGithub, switchGithubAccount } from '@/app/dashboard/pro/actions';
-import type { ProAccess } from '@/utils/entitlements/get-entitlement';
-import type { GithubState } from '@/utils/entitlements/entitlements-store';
+import type { ProAccess } from '@/server/billing/pro-access';
+import type { GithubState } from '@/server/db/billing-store';
 import { BillingCard } from '@/components/dashboard/pro/billing-card';
 import {
   CREATE_TOKEN_URL,
@@ -20,7 +20,7 @@ import {
   feedCredentials,
   licenceUserSecret,
   nugetConfig,
-} from '@/utils/pro/install-snippets';
+} from '@/lib/install-snippets';
 
 const INSTALL_GUIDE = '/docs/pro/installation';
 

@@ -1,8 +1,8 @@
 import { CheckoutPriceAmount } from '@/components/checkout/checkout-price-amount';
 import { CheckoutEventsData } from '@paddle/paddle-js/types/checkout/events';
-import { formatMoney } from '@/utils/paddle/parse-money';
+import { formatMoney } from '@/lib/paddle/parse-money';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatBillingCycle } from '@/utils/paddle/data-helpers';
+import { formatBillingCycle } from '@/lib/paddle/billing-cycle';
 
 interface Props {
   checkoutData: CheckoutEventsData | null;

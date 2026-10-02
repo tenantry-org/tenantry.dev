@@ -23,21 +23,25 @@ customer ─▶ /dashboard/pro ─▶ Connect GitHub ─▶ github_links + team 
 cron ─▶ /api/reconcile ─▶ reconcile access vs entitlements
 ```
 
-Key code:
+Key code is in `src/server`, in layers whose imports point only down this list (ESLint enforces it):
 
-- `src/utils/licensing/` — ES256 (DER) licence issuer.
-- `src/utils/paddle/process-webhook.ts` — subscription → entitlement/licence/access + lifecycle email.
-- `src/utils/github/` — App-authenticated provisioning + link sync.
-- `src/utils/entitlements/` — data access and reconciliation. With the webhook inbox (`src/utils/webhooks/inbox.ts`),
-  the service-role store (`entitlements-store.ts`) and the dashboard's read model (`get-entitlement.ts`) are the
-  only modules that query the database (ESLint enforces it).
-- `src/utils/email/` — transactional onboarding/lifecycle email (Resend).
-- `src/utils/supabase/` — `createUserClient` (the signed-in user's session; RLS applies) and
-  `createServiceRoleClient` (bypasses RLS; only server modules under `src/utils` import it), both typed by
-  `database.types.ts`, which is generated from the migrations. The server's
-  modules (Supabase, licensing, GitHub, Paddle, email, webhooks, config) import `server-only`, so a client
-  component that pulls one in fails the build.
-- `supabase/migrations/` — schema + RLS + webhook idempotency.
+- `billing/` — the rules and services: who is entitled, and until when (`access-policy.ts`); keeping a customer's
+  access, GitHub membership, licence and emails in line with their entitlements (`customer-access.ts`); applying
+  Paddle's notifications (`apply-paddle-event.ts`); linking a GitHub account (`sync-github-link.ts`); the reconcile
+  run; and the Pro pages' read model (`pro-access.ts`).
+- `jobs/` — the webhook inbox's worker, which runs each customer's Paddle events and reconcile jobs in order, and the
+  per-customer leases.
+- `integrations/` — Paddle, GitHub team provisioning (a GitHub App), email (Resend) and the licence issuer.
+- `db/` — `createUserClient` (the signed-in user's session; RLS applies) and `createServiceRoleClient` (bypasses
+  RLS), and the only modules that query the database: the billing tables' store, the webhook inbox and the
+  dashboard's reads. The clients are typed by `src/lib/supabase/database.types.ts`, which is generated from the
+  migrations.
+- `config/` — the server's environment, validated when it starts.
+
+Modules in `src/server` import `server-only` (except `db/update-session.ts`, which the proxy runs), so a client
+component that pulls one in fails the build. `src/lib` holds helpers for both sides, and `src/test` the fakes the
+tests share. The schema, RLS policies and database functions are in `supabase/migrations/`, and their tests in
+`supabase/tests/database/`.
 
 ## Develop
 
@@ -75,7 +79,7 @@ build, local ones included, shows what the released packages do.
   the test workflow on the commit, since its own pushes start none.
   `pnpm docs:update` does the same locally; `pnpm docs:check` fails unless the file matches the tags.
 - **The Pro access page's install snippets follow a Pro release line**, `PRO_RELEASE_LINE` in
-  `src/utils/pro/install-snippets.ts`. Once that line's docs are published, the tests compare the snippets with its
+  `src/lib/install-snippets.ts`. Once that line's docs are published, the tests compare the snippets with its
   installation guide, and they fail when a newer line is published. So the docs of a Pro release that starts a line
   or changes the installation guide reach production only with matching snippets: until then the test workflow
   fails on master, and production deployments, these docs' and any other change's, wait. For a new line, update the

@@ -2,7 +2,7 @@ import { ReactNode, Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { DashboardLayout } from '@/components/dashboard/layout/dashboard-layout';
 import DashboardLoading from '@/app/dashboard/loading';
-import { getCurrentUser } from '@/utils/supabase/current-user';
+import { getCurrentUser } from '@/server/db/current-user';
 
 interface Props {
   children: ReactNode;

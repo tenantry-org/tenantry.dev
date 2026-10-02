@@ -7,13 +7,13 @@ const paddle = vi.hoisted(() => ({
   customerId: 'ctm_mine',
   signedIn: true,
 }));
-vi.mock('@/utils/supabase/user-client', () => ({
+vi.mock('@/server/db/user-client', () => ({
   validateUserSession: async () => {
     if (!paddle.signedIn) throw new Error('You are not allowed to perform this action.');
   },
 }));
-vi.mock('@/utils/entitlements/get-entitlement', () => ({ getCustomerId: async () => paddle.customerId }));
-vi.mock('@/utils/paddle/get-paddle-instance', () => ({
+vi.mock('@/server/db/customer-dashboard', () => ({ getCustomerId: async () => paddle.customerId }));
+vi.mock('@/server/integrations/paddle/get-paddle-instance', () => ({
   getPaddleInstance: () => ({
     subscriptions: paddle.subscriptions,
     customerPortalSessions: paddle.customerPortalSessions,

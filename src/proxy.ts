@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { updateSession } from '@/utils/supabase/middleware';
+import { updateSession } from '@/server/db/update-session';
 
 // Next 16 renamed the `middleware` convention to `proxy` (same signature). Refreshes the Supabase
 // auth session on every matched request.

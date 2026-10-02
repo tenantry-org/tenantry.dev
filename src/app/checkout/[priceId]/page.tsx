@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { SimpleHeader } from '@/components/shared/simple-header';
 import { CheckoutContents } from '@/components/checkout/checkout-contents';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getCurrentUser } from '@/utils/supabase/current-user';
+import { getCurrentUser } from '@/server/db/current-user';
 import { checkoutEnabled, isOfferPrice } from '@/constants/pro-offer';
 
 interface Props {

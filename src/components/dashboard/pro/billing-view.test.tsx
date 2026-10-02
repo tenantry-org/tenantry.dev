@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { BillingSubscription, ProAccess } from '@/utils/entitlements/get-entitlement';
+import type { BillingSubscription, ProAccess } from '@/server/billing/pro-access';
 import { BillingView } from './pro-access-view';
 
 vi.mock('@/app/dashboard/pro/actions', () => ({ connectGithub: vi.fn(), switchGithubAccount: vi.fn() }));

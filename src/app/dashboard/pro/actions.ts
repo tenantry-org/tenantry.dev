@@ -2,9 +2,9 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createUserClient } from '@/utils/supabase/user-client';
-import { isLinkError, syncGithubLinkForCurrentUser } from '@/utils/github/sync-link';
-import { siteOrigin } from '@/utils/site-origin';
+import { createUserClient } from '@/server/db/user-client';
+import { isLinkError, syncGithubLinkForCurrentUser } from '@/server/billing/sync-github-link';
+import { siteOrigin } from '@/server/config/site-origin';
 
 /**
  * Connects the customer's GitHub account.
@@ -34,7 +34,7 @@ export async function connectGithub() {
  * Moves the customer's access to another GitHub account. The login's GitHub identity is disconnected and a new
  * one linked through GitHub, which signs in whichever account the browser is signed in to there. Access stays
  * with the previous account until the new one is linked: /auth/callback then removes the previous account and
- * grants the new one (sync-link.ts). If the customer abandons the switch, the previous account keeps access and
+ * grants the new one (sync-github-link.ts). If the customer abandons the switch, the previous account keeps access and
  * the Access page offers Connect GitHub again.
  *
  * A login that signs in only with GitHub cannot disconnect it (Supabase keeps at least one identity), so it is

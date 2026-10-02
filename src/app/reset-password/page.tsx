@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { AuthShell } from '@/components/shared/auth-shell';
 import { ResetPasswordForm } from '@/components/authentication/reset-password-form';
-import { getCurrentUser } from '@/utils/supabase/current-user';
+import { getCurrentUser } from '@/server/db/current-user';
 
 // Reached from a reset link, which signs the customer in through /auth/callback first.
 export default function ResetPasswordPage() {

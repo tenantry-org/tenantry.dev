@@ -1,10 +1,10 @@
-import { reconcileEntitlements } from '@/utils/entitlements/reconcile';
+import { reconcileEntitlements } from '@/server/billing/reconcile-entitlements';
 
 // Reconciliation endpoint, wired for Vercel Cron (see vercel.json). Vercel invokes scheduled jobs with
 // a GET request and an `Authorization: Bearer <CRON_SECRET>` header it injects automatically when the
 // CRON_SECRET env var is set — so this works out of the box. Manual/external triggers can POST with the
-// same bearer secret. Reconciling runs through the webhook inbox (see reconcile.ts), so it also retries any
-// event whose processing failed. It reads the request's headers, so it is never prerendered.
+// same bearer secret. Reconciling runs through the webhook inbox (see reconcile-entitlements.ts), so it also
+// retries any event whose processing failed. It reads the request's headers, so it is never prerendered.
 export const maxDuration = 60; // reconcile makes per-customer GitHub API calls; give it headroom
 
 function authorized(request: Request): boolean {

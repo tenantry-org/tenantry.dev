@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setNewPassword } from './actions';
 
 const auth = vi.hoisted(() => ({ getUser: vi.fn(), updateUser: vi.fn() }));
-vi.mock('@/utils/supabase/user-client', () => ({ createUserClient: async () => ({ auth }) }));
+vi.mock('@/server/db/user-client', () => ({ createUserClient: async () => ({ auth }) }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('next/navigation', () => ({
   redirect: (url: string) => {

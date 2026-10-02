@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from './route';
 
 const auth = vi.hoisted(() => ({ exchangeCodeForSession: vi.fn() }));
-vi.mock('@/utils/supabase/user-client', () => ({ createUserClient: async () => ({ auth }) }));
-vi.mock('@/utils/github/sync-link', () => ({
+vi.mock('@/server/db/user-client', () => ({ createUserClient: async () => ({ auth }) }));
+vi.mock('@/server/billing/sync-github-link', () => ({
   isLinkError: (reason?: string) => reason === 'github-in-use',
   syncGithubLinkForCurrentUser: vi.fn(async () => ({ reason: undefined })),
 }));

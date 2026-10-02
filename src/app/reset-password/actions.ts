@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { createUserClient } from '@/utils/supabase/user-client';
+import { createUserClient } from '@/server/db/user-client';
 
 export type NewPasswordResult = { error: string };
 

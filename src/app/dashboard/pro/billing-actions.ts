@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { Subscription } from '@paddle/paddle-node-sdk';
-import { validateUserSession } from '@/utils/supabase/user-client';
-import { getPaddleInstance } from '@/utils/paddle/get-paddle-instance';
-import { getCustomerId } from '@/utils/entitlements/get-entitlement';
+import { validateUserSession } from '@/server/db/user-client';
+import { getPaddleInstance } from '@/server/integrations/paddle/get-paddle-instance';
+import { getCustomerId } from '@/server/db/customer-dashboard';
 
 type Result<T> = T | { error: string };
 

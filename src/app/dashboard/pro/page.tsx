@@ -1,10 +1,10 @@
 import { Suspense } from 'react';
 import { DashboardPageHeader } from '@/components/dashboard/layout/dashboard-page-header';
 import { LoadingScreen } from '@/components/dashboard/layout/loading-screen';
-import { getProAccess } from '@/utils/entitlements/get-entitlement';
+import { getProAccess } from '@/server/billing/pro-access';
 import { AccessView } from '@/components/dashboard/pro/pro-access-view';
-import { requireEnv } from '@/utils/config/env';
-import { getCurrentUser } from '@/utils/supabase/current-user';
+import { requireEnv } from '@/server/config/env';
+import { getCurrentUser } from '@/server/db/current-user';
 
 // The Connect GitHub action runs here and holds the customer's lease, which must outlast it (customer-lease.ts).
 export const maxDuration = 60;

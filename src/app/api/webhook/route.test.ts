@@ -1,21 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
-import { subscriptionEvent } from '@/utils/testing/paddle-events';
+import { subscriptionEvent } from '@/test/paddle-events';
 import { POST } from './route';
 
 const mocks = vi.hoisted(() => ({
   after: vi.fn(),
   unmarshal: vi.fn(),
   enqueueEvent: vi.fn(),
-  drainInbox: vi.fn(),
+  processInbox: vi.fn(),
 }));
 
 vi.mock('next/server', async (original) => ({ ...(await original<object>()), after: mocks.after }));
-vi.mock('@/utils/paddle/get-paddle-instance', () => ({
+vi.mock('@/server/integrations/paddle/get-paddle-instance', () => ({
   getPaddleInstance: () => ({ webhooks: { unmarshal: mocks.unmarshal } }),
 }));
-vi.mock('@/utils/webhooks/inbox', () => ({ enqueueEvent: mocks.enqueueEvent }));
-vi.mock('@/utils/webhooks/worker', () => ({ drainInbox: mocks.drainInbox }));
+vi.mock('@/server/db/inbox', () => ({ enqueueEvent: mocks.enqueueEvent }));
+vi.mock('@/server/billing/process-inbox', () => ({ processInbox: mocks.processInbox }));
 
 const event = subscriptionEvent({ eventId: 'evt_1', occurredAt: '2026-09-28T10:00:00Z', status: 'active' });
 
@@ -40,19 +40,19 @@ describe('POST /api/webhook', () => {
   });
 
   it('stores the event and answers before processing it, however slow processing is', async () => {
-    mocks.drainInbox.mockReturnValue(new Promise(() => {})); // e.g. a GitHub call that never returns
+    mocks.processInbox.mockReturnValue(new Promise(() => {})); // e.g. a GitHub call that never returns
 
     const response = await POST(delivery());
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ status: 200, eventName: 'subscription.updated', deduped: false });
     expect(mocks.enqueueEvent).toHaveBeenCalledWith(event);
-    expect(mocks.drainInbox).not.toHaveBeenCalled();
+    expect(mocks.processInbox).not.toHaveBeenCalled();
 
     // Processing starts only after the response, from the callback registered with `after`.
     expect(mocks.after).toHaveBeenCalledOnce();
     void mocks.after.mock.calls[0][0]();
-    expect(mocks.drainInbox).toHaveBeenCalledOnce();
+    expect(mocks.processInbox).toHaveBeenCalledOnce();
   });
 
   it('answers a duplicate delivery without storing it again', async () => {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createUserClient } from '@/utils/supabase/user-client';
-import { isLinkError, syncGithubLinkForCurrentUser } from '@/utils/github/sync-link';
+import { createUserClient } from '@/server/db/user-client';
+import { isLinkError, syncGithubLinkForCurrentUser } from '@/server/billing/sync-github-link';
 
 // Linking GitHub holds the customer's lease, which must outlast this function (customer-lease.ts).
 export const maxDuration = 60;

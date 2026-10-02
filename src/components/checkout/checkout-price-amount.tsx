@@ -1,6 +1,6 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { CheckoutEventsData } from '@paddle/paddle-js/types/checkout/events';
-import { formatMoney } from '@/utils/paddle/parse-money';
+import { formatMoney } from '@/lib/paddle/parse-money';
 
 interface Props {
   checkoutData: CheckoutEventsData | null;

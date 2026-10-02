@@ -1,7 +1,7 @@
 'use server';
 
-import { createUserClient } from '@/utils/supabase/user-client';
-import { siteOrigin } from '@/utils/site-origin';
+import { createUserClient } from '@/server/db/user-client';
+import { siteOrigin } from '@/server/config/site-origin';
 
 interface FormData {
   email: string;

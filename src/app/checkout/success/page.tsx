@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { SimpleHeader } from '@/components/shared/simple-header';
 import { Footer } from '@/components/home/footer/footer';
-import { getCurrentUser } from '@/utils/supabase/current-user';
+import { getCurrentUser } from '@/server/db/current-user';
 
 export default function SuccessPage() {
   return (

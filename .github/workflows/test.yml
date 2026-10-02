@@ -65,6 +65,6 @@ jobs:
       # The committed types must describe that schema: regenerate them as `pnpm db:types` does, and fail on any
       # difference.
       - run: pnpm db:types
-      - run: git diff --exit-code -- src/utils/supabase/database.types.ts
+      - run: git diff --exit-code -- src/lib/supabase/database.types.ts
       # supabase/tests/database
       - run: supabase test db

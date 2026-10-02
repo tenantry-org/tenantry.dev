@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LogoutButton } from '@/components/dashboard/layout/logout-button';
-import { getCurrentUser } from '@/utils/supabase/current-user';
+import { getCurrentUser } from '@/server/db/current-user';
 
 export function SidebarUserInfo() {
   return (

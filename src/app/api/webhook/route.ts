@@ -1,8 +1,8 @@
 import { NextRequest, after } from 'next/server';
-import { getPaddleInstance } from '@/utils/paddle/get-paddle-instance';
-import { enqueueEvent, PaddleEventJson } from '@/utils/webhooks/inbox';
-import { drainInbox } from '@/utils/webhooks/worker';
-import { requireEnv } from '@/utils/config/env';
+import { getPaddleInstance } from '@/server/integrations/paddle/get-paddle-instance';
+import { enqueueEvent, PaddleEventJson } from '@/server/db/inbox';
+import { processInbox } from '@/server/billing/process-inbox';
+import { requireEnv } from '@/server/config/env';
 
 // Processing runs after the response (see `after` below), within this function's time limit.
 export const maxDuration = 60;
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     after(async () => {
       try {
-        await drainInbox();
+        await processInbox();
       } catch (error) {
         console.error('Paddle webhook: draining the inbox failed; the reconcile cron will retry:', error);
       }

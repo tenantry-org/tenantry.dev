@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { register } from './instrumentation';
 
 const config = vi.hoisted(() => ({ validateServerConfig: vi.fn() }));
-vi.mock('@/utils/config/server-config', () => config);
+vi.mock('@/server/config/server-config', () => config);
 
 describe('register', () => {
   afterEach(() => {
