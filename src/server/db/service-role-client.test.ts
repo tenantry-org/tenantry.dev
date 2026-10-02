@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { testServerConfig } from '@/test/server-config';
 import { createServiceRoleClient } from './service-role-client';
 
 const headers = vi.hoisted(() => ({ cookies: vi.fn() }));
@@ -10,8 +11,6 @@ describe('the service-role client', () => {
   );
 
   beforeEach(() => {
-    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:54321';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
     fetchMock.mockClear();
     vi.stubGlobal('fetch', fetchMock);
     // A signed-in user's request: before the fix, the client read these cookies and sent the user's access
@@ -24,12 +23,10 @@ describe('the service-role client', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
-    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   });
 
   it('authorises writes with the service-role key, never a signed-in session, and reads no cookies', async () => {
-    const client = createServiceRoleClient();
+    const client = createServiceRoleClient(testServerConfig().supabase);
 
     await client.from('github_links').upsert({ customer_id: 'ctm_1', github_login: 'octocat', github_id: 42 });
 

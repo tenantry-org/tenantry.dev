@@ -125,7 +125,7 @@ async function linkAndGrant(customerId: string, githubId: number, deps: BillingD
 
   // Same gate as the webhook and reconcile paths: manual mode links the account but leaves the grant to
   // the operator.
-  if (!deps.automatedProvisioningEnabled()) return { linked: true, granted: false, reason: 'provisioning-disabled' };
+  if (deps.config.provisioning !== 'auto') return { linked: true, granted: false, reason: 'provisioning-disabled' };
 
   const state = await grantAndRecord(customerId, login, deps);
   if (state === 'failed') return { linked: true, granted: false, reason: 'grant-failed' };

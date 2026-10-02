@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubscriptionEntitlement } from '@/server/db/billing-store';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
 import { memory } from '@/test/memory-billing-store';
+import { testServerConfig } from '@/test/server-config';
 import { grantAndRecord, syncCustomerAccess } from './customer-access';
 
 let deps: FakeBillingDeps;
@@ -43,6 +44,13 @@ function emailSubjects(): string[] {
   return deps.sendEmail.mock.calls.map(([message]) => message.subject);
 }
 
+/** The links in the emails sent, which go to this environment's site (testServerConfig's https://sandbox.example.com). */
+function emailLinks(): string[] {
+  return deps.sendEmail.mock.calls.flatMap(([message]) =>
+    [...message.html.matchAll(/<a href="([^"]+)" style="display/g)].map(([, href]) => href),
+  );
+}
+
 describe('syncCustomerAccess', () => {
   it('grants access, issues a licence and welcomes the customer when access starts', async () => {
     await expect(entitle()).resolves.toBe('started');
@@ -55,6 +63,7 @@ describe('syncCustomerAccess', () => {
     });
     expect(memory.liveLicences('ctm_1')).toHaveLength(1);
     expect(emailSubjects()).toEqual(['Welcome to Tenantry Pro — connect GitHub to get access']);
+    expect(emailLinks()).toEqual(['https://sandbox.example.com/dashboard/pro']);
   });
 
   it('removes a renamed GitHub account under its new login when access ends, and records the new login', async () => {
@@ -114,6 +123,7 @@ describe('syncCustomerAccess', () => {
     expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', githubState: 'none', githubInvitedAt: null });
     expect(memory.liveLicences('ctm_1')).toEqual([]);
     expect(emailSubjects()).toEqual(['Your Tenantry Pro subscription has ended']);
+    expect(emailLinks()).toEqual(['https://sandbox.example.com/#pricing']);
   });
 
   it('does nothing for a customer whose only subscription never entitled them', async () => {
@@ -124,7 +134,7 @@ describe('syncCustomerAccess', () => {
   });
 
   it('in manual mode records access but grants nothing, and still ends access and says so', async () => {
-    deps.automatedProvisioningEnabled.mockReturnValue(false);
+    deps.config = testServerConfig({ provisioning: 'manual' });
 
     await expect(entitle()).resolves.toBe('started');
     expect(memory.state.access.get('ctm_1')).toEqual({ status: 'active', githubState: 'none', githubInvitedAt: null });

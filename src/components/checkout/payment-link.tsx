@@ -1,8 +1,7 @@
 'use client';
 
-import { type Environments, initializePaddle } from '@paddle/paddle-js';
 import { useSearchParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { usePaddle } from '@/hooks/usePaddle';
 
 /**
  * Opens the checkout for a transaction Paddle created (`?_ptxn=txn_…`): the invoice, renewal and
@@ -13,28 +12,29 @@ import { useEffect } from 'react';
 export function PaymentLink() {
   const transactionId = useSearchParams().get('_ptxn');
 
-  useEffect(() => {
-    const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
-    if (!transactionId || !token || !process.env.NEXT_PUBLIC_PADDLE_ENV) return;
-
-    initializePaddle({
-      token,
-      environment: process.env.NEXT_PUBLIC_PADDLE_ENV as Environments,
-      checkout: {
-        settings: {
-          displayMode: 'overlay',
-          theme: 'dark',
-          successUrl: `${window.location.origin}/checkout/success`,
-        },
-      },
-    });
-  }, [transactionId]);
-
   return (
     <p className={'max-w-md text-center text-lg text-muted-foreground'}>
-      {transactionId
-        ? 'Opening the secure Paddle checkout…'
-        : 'This page opens payment links from Tenantry. The link you followed has no payment to open.'}
+      {transactionId ? (
+        <OpenTransaction />
+      ) : (
+        'This page opens payment links from Tenantry. The link you followed has no payment to open.'
+      )}
     </p>
   );
+}
+
+function OpenTransaction() {
+  const paddle = usePaddle(() => ({
+    checkout: {
+      settings: {
+        displayMode: 'overlay',
+        theme: 'dark',
+        successUrl: `${window.location.origin}/checkout/success`,
+      },
+    },
+  }));
+
+  return paddle.status === 'failed'
+    ? 'The checkout could not be loaded. Refresh the page to try again.'
+    : 'Opening the secure Paddle checkout…';
 }

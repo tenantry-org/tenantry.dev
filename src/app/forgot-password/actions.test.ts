@@ -3,7 +3,10 @@ import { requestPasswordReset } from './actions';
 
 const auth = vi.hoisted(() => ({ resetPasswordForEmail: vi.fn() }));
 vi.mock('@/server/db/user-client', () => ({ createUserClient: async () => ({ auth }) }));
-vi.mock('@/server/config/site-origin', () => ({ siteOrigin: async () => 'https://tenantry.dev' }));
+// This environment's site URL is https://sandbox.example.com.
+vi.mock('@/server/config/server-config', async () => ({
+  serverConfig: (await import('@/test/server-config')).testServerConfig,
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -14,7 +17,7 @@ describe('requestPasswordReset', () => {
   it('sends a link that signs in through the callback and opens the new-password page', async () => {
     expect(await requestPasswordReset('me@example.com')).toEqual({ sent: true });
     expect(auth.resetPasswordForEmail).toHaveBeenCalledWith('me@example.com', {
-      redirectTo: 'https://tenantry.dev/auth/callback?next=/reset-password',
+      redirectTo: 'https://sandbox.example.com/auth/callback?next=/reset-password',
     });
   });
 

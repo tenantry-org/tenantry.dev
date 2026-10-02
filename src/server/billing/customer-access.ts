@@ -60,7 +60,7 @@ export async function syncCustomerAccess(
 
   // Provisioning gate: in manual mode (PROVISIONING_MODE not 'auto') access is recorded but GitHub access
   // and the licence are left to the operator.
-  if (!deps.automatedProvisioningEnabled()) {
+  if (deps.config.provisioning !== 'auto') {
     console.warn(
       `Customer access: automated provisioning is off (PROVISIONING_MODE) for customer ${customerId}; ` +
         'recording access but withholding GitHub access and licence.',
@@ -76,7 +76,7 @@ export async function syncCustomerAccess(
   const licence = await ensureLicence(customerId, deps);
 
   if (email) {
-    await deps.sendEmail(welcomeProEmail(email)); // sendEmail never throws
+    await deps.sendEmail(welcomeProEmail(email, deps.config.siteUrl)); // sendEmail never throws
   } else {
     console.info(`Customer access: no email on file for customer ${customerId}; skipping the welcome email.`);
   }
@@ -249,7 +249,7 @@ async function endAccess(customerId: string, email: string | null, deps: Billing
   await forgetLicenceFailures(customerId, deps);
 
   if (email) {
-    await deps.sendEmail(accessRevokedEmail(email));
+    await deps.sendEmail(accessRevokedEmail(email, deps.config.siteUrl));
   } else {
     console.info(`Customer access: no email on file for customer ${customerId}; skipping the revocation email.`);
   }

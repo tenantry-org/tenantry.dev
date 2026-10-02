@@ -1,7 +1,7 @@
 import 'server-only';
 import { Octokit } from '@octokit/rest';
 import { createAppAuth } from '@octokit/auth-app';
-import { requireEnv } from '@/server/config/env';
+import { serverConfig } from '@/server/config/server-config';
 
 /**
  * Grants and revokes paying customers' access to the private Tenantry org via team membership.
@@ -74,23 +74,17 @@ export interface ProvisioningDeps {
 /** A team membership: 'active', or 'pending' while the org invitation it sent is not yet accepted. */
 export type Membership = 'active' | 'pending';
 
-/** Builds the default deps from env + an App-authenticated Octokit client. */
+/** Builds the default deps from the configuration and an App-authenticated Octokit client. */
 export function defaultDeps(): ProvisioningDeps {
-  const octokit = new Octokit({
-    authStrategy: createAppAuth,
-    auth: {
-      appId: requireEnv('GITHUB_APP_ID'),
-      privateKey: requireEnv('GITHUB_APP_PRIVATE_KEY'),
-      installationId: requireEnv('GITHUB_APP_INSTALLATION_ID'),
-    },
-  });
+  const { github } = serverConfig();
+  const octokit = new Octokit({ authStrategy: createAppAuth, auth: { ...github.app } });
 
   return {
     api: octokit.rest.teams as unknown as TeamMembershipApi,
     invitations: octokit.rest.orgs as unknown as OrgInvitationApi,
     users: { getById: ({ account_id }) => octokit.request('GET /user/{account_id}', { account_id }) },
-    org: requireEnv('GITHUB_ORG'),
-    team: requireEnv('GITHUB_TEAM'),
+    org: github.org,
+    team: github.team,
   };
 }
 

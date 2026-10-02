@@ -9,7 +9,6 @@ import {
   EventName,
   SubscriptionStatus,
 } from '@paddle/paddle-node-sdk';
-import { isProProduct } from '@/constants/pro-product';
 import { entitlementFor } from '@/server/billing/access-policy';
 import { syncCustomerAccess } from '@/server/billing/customer-access';
 import { normaliseEmail } from '@/server/db/customer-email';
@@ -91,7 +90,7 @@ async function handleSubscription(data: SubscriptionEventData, occurredAt: strin
   // its entitlement ends, and the customer keeps access only through their other subscriptions.
   const previous = await store.getEntitlement(data.id);
 
-  if (!isProProduct(data.items[0]?.price?.productId)) {
+  if (data.items[0]?.price?.productId !== deps.config.paddle.proProductId) {
     console.warn(
       `Paddle webhook: subscription ${data.id} is not for the Tenantry Pro product (PADDLE_PRO_PRODUCT_ID); ` +
         'it entitles to nothing.',

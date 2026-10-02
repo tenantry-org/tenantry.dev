@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubscriptionEntitlement } from '@/server/db/billing-store';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
 import { memory } from '@/test/memory-billing-store';
+import { testServerConfig } from '@/test/server-config';
 import { syncCustomerAccess } from './customer-access';
 import { reconcileCustomer } from './reconcile-customer';
 
@@ -124,7 +125,7 @@ describe('reconcileCustomer', () => {
     });
 
     it('cancels the pending invitation of a customer who is no longer entitled', async () => {
-      deps.automatedProvisioningEnabled.mockReturnValue(false);
+      deps.config = testServerConfig({ provisioning: 'manual' });
       await record({ status: 'revoked' });
       await syncCustomerAccess('ctm_1', deps);
       deps.github.membershipOf.mockResolvedValue('pending');
@@ -170,18 +171,18 @@ describe('reconcileCustomer', () => {
     await startAccess();
     memory.linkGithub('ctm_1', 'octocat');
 
-    deps.automatedProvisioningEnabled.mockReturnValue(false);
+    deps.config = testServerConfig({ provisioning: 'manual' });
     await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ github: 'withheld' });
     expect(deps.github.grantAccess).not.toHaveBeenCalled();
 
-    deps.automatedProvisioningEnabled.mockReturnValue(true);
+    deps.config = testServerConfig({ provisioning: 'auto' });
     await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ github: 'granted' });
     expect(deps.github.grantAccess).toHaveBeenCalledWith('octocat');
     expect(githubState()).toBe('active');
   });
 
   it('removes a customer who is not entitled from the team and revokes licences left live, whatever the mode', async () => {
-    deps.automatedProvisioningEnabled.mockReturnValue(false);
+    deps.config = testServerConfig({ provisioning: 'manual' });
     await record({ status: 'revoked' });
     await syncCustomerAccess('ctm_1', deps);
     await memory.store.recordLicence({ customerId: 'ctm_1', jwt: 'left-over' });

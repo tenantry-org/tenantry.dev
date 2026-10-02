@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall, FakeTable } from '@/test/fake-supabase';
+import { testServerConfig } from '@/test/server-config';
 import { getProAccess } from './pro-access';
 
 const state = vi.hoisted(() => ({
@@ -17,11 +18,13 @@ vi.mock('@/server/db/user-client', async () => {
   };
 });
 
+// The Pro product is pro_01, its prices pri_01month and pri_01year.
+const { paddle } = testServerConfig();
+
 const BUYER = { email: 'buyer@example.com', email_confirmed_at: '2026-09-01T00:00:00Z' };
 
 describe('getProAccess', () => {
   beforeEach(() => {
-    vi.stubEnv('PADDLE_PRO_PRODUCT_ID', 'pro_01');
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-20T00:00:00Z'));
     state.user = BUYER;
@@ -40,11 +43,10 @@ describe('getProAccess', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    vi.unstubAllEnvs();
   });
 
   it('says when grace ends for a customer whose subscriptions are all past due', async () => {
-    await expect(getProAccess()).resolves.toMatchObject({
+    await expect(getProAccess(paddle)).resolves.toMatchObject({
       entitlement: { status: 'grace', grace: { endsAt: '2026-11-04T00:00:00.000Z', ended: false } },
     });
   });
@@ -52,25 +54,25 @@ describe('getProAccess', () => {
   it('says when grace has ended but access has not been removed yet', async () => {
     vi.setSystemTime(new Date('2026-11-04T01:00:00Z'));
 
-    await expect(getProAccess()).resolves.toMatchObject({ entitlement: { grace: { ended: true } } });
+    await expect(getProAccess(paddle)).resolves.toMatchObject({ entitlement: { grace: { ended: true } } });
   });
 
   it('has no grace for an active customer', async () => {
     state.tables.customer_access = { single: { status: 'active', github_state: 'active', github_invited_at: null } };
 
-    await expect(getProAccess()).resolves.toMatchObject({ entitlement: { status: 'active', grace: null } });
+    await expect(getProAccess(paddle)).resolves.toMatchObject({ entitlement: { status: 'active', grace: null } });
   });
 
   it('says when a pending org invitation lapses, and nothing for a member', async () => {
     state.tables.customer_access = {
       single: { status: 'active', github_state: 'invited', github_invited_at: '2026-10-18T09:00:00Z' },
     };
-    await expect(getProAccess()).resolves.toMatchObject({
+    await expect(getProAccess(paddle)).resolves.toMatchObject({
       entitlement: { github: 'invited', invitationExpiresAt: '2026-10-25T09:00:00.000Z' },
     });
 
     state.tables.customer_access = { single: { status: 'active', github_state: 'active', github_invited_at: null } };
-    await expect(getProAccess()).resolves.toMatchObject({
+    await expect(getProAccess(paddle)).resolves.toMatchObject({
       entitlement: { github: 'active', invitationExpiresAt: null },
     });
   });
@@ -103,7 +105,7 @@ describe('getProAccess', () => {
         ],
       };
 
-      await expect(getProAccess()).resolves.toMatchObject({
+      await expect(getProAccess(paddle)).resolves.toMatchObject({
         subscriptions: [
           { id: 'sub_renews', status: 'active', renewsAt: '2026-11-01T00:00:00Z', endsAt: null },
           { id: 'sub_ends', renewsAt: null, endsAt: '2026-11-15T00:00:00Z' },
@@ -118,8 +120,26 @@ describe('getProAccess', () => {
         ],
       };
 
-      await expect(getProAccess()).resolves.toMatchObject({
+      await expect(getProAccess(paddle)).resolves.toMatchObject({
         subscriptions: [{ id: 'sub_renews', renewsAt: '2026-11-01T00:00:00Z', endsAt: null }],
+      });
+    });
+
+    it("names each subscription's billing interval by its price", async () => {
+      state.tables.subscriptions = {
+        list: [
+          subscription('sub_renews', { price_id: 'pri_01month' }),
+          subscription('sub_ends', { price_id: 'pri_01year' }),
+          subscription('sub_other_price'),
+        ],
+      };
+
+      await expect(getProAccess(paddle)).resolves.toMatchObject({
+        subscriptions: [
+          { id: 'sub_renews', interval: 'month' },
+          { id: 'sub_ends', interval: 'year' },
+          { id: 'sub_other_price', interval: null },
+        ],
       });
     });
 
@@ -131,7 +151,7 @@ describe('getProAccess', () => {
         ],
       };
 
-      await expect(getProAccess()).resolves.toMatchObject({ subscriptions: [] });
+      await expect(getProAccess(paddle)).resolves.toMatchObject({ subscriptions: [] });
     });
   });
 });

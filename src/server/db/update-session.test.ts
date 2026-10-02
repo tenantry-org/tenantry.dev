@@ -8,6 +8,7 @@ vi.mock('@supabase/ssr', () => ({
 }));
 
 const request = (path: string) => new NextRequest(new URL(path, 'https://tenantry.dev'));
+const supabase = { url: 'http://127.0.0.1:54321', anonKey: 'anon-key' };
 
 describe('updateSession', () => {
   beforeEach(() => {
@@ -15,7 +16,7 @@ describe('updateSession', () => {
   });
 
   it('redirects a signed-out dashboard request to the login page', async () => {
-    const response = await updateSession(request('/dashboard/pro?tab=licence'));
+    const response = await updateSession(request('/dashboard/pro?tab=licence'), supabase);
 
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toBe('https://tenantry.dev/login');
@@ -24,13 +25,13 @@ describe('updateSession', () => {
   it('lets a signed-in user reach the dashboard', async () => {
     session.user = { id: 'user-1' };
 
-    const response = await updateSession(request('/dashboard/pro'));
+    const response = await updateSession(request('/dashboard/pro'), supabase);
 
     expect(response.headers.get('location')).toBeNull();
   });
 
   it('lets a signed-out visitor reach public pages', async () => {
-    const response = await updateSession(request('/docs/core'));
+    const response = await updateSession(request('/docs/core'), supabase);
 
     expect(response.headers.get('location')).toBeNull();
   });

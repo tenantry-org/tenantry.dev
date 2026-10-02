@@ -107,6 +107,28 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    // The configuration is read and checked in one place each: serverConfig() for the server, publicConfig() for what
+    // is compiled into the build. instrumentation.ts reads only Next's own runtime and build-phase variables.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: [
+      'src/server/config/server-config.ts',
+      'src/lib/public-config.ts',
+      'src/instrumentation.ts',
+      'src/**/*.test.{ts,tsx}',
+      'src/test/**',
+    ],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message: 'Read configuration through serverConfig() (src/server/config) or publicConfig() (src/lib).',
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

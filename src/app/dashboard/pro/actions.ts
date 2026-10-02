@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createUserClient } from '@/server/db/user-client';
 import { isLinkError, syncGithubLinkForCurrentUser } from '@/server/billing/sync-github-link';
-import { siteOrigin } from '@/server/config/site-origin';
+import { serverConfig } from '@/server/config/server-config';
 
 /**
  * Connects the customer's GitHub account.
@@ -69,7 +69,7 @@ export async function switchGithubAccount() {
 async function startGithubLink(supabase: Awaited<ReturnType<typeof createUserClient>>) {
   const { data, error } = await supabase.auth.linkIdentity({
     provider: 'github',
-    options: { redirectTo: `${await siteOrigin()}/auth/callback?next=/dashboard/pro` },
+    options: { redirectTo: `${serverConfig().siteUrl}/auth/callback?next=/dashboard/pro` },
   });
 
   if (error) {

@@ -1,5 +1,6 @@
 import 'server-only';
-import { createHash, createPrivateKey, createPublicKey, KeyObject, sign as cryptoSign } from 'crypto';
+import { createHash, createPublicKey, KeyObject, sign as cryptoSign } from 'crypto';
+import { serverConfig } from '@/server/config/server-config';
 
 /**
  * Mints Tenantry.Pro licence keys.
@@ -15,8 +16,9 @@ import { createHash, createPrivateKey, createPublicKey, KeyObject, sign as crypt
  * issued one when their access starts and keeps it; the subscription gates the private package feed (and so
  * new versions), not the key.
  *
- * The private key lives ONLY in the portal's secret store as `LICENCE_SIGNING_PRIVATE_KEY`
- * (PKCS#8 PEM). The matching public half is embedded in the published `Tenantry.Pro` package.
+ * The private key lives ONLY in the portal's secret store as `LICENCE_SIGNING_PRIVATE_KEY` (PKCS#8 PEM), checked
+ * when the server starts (server-config.ts). The matching public half is embedded in the published `Tenantry.Pro`
+ * package.
  */
 
 const ISSUER = 'Tenantry';
@@ -31,19 +33,6 @@ export interface LicenceClaims {
 
 function base64Url(input: Buffer | string): string {
   return Buffer.from(input).toString('base64url');
-}
-
-function loadSigningKey(): KeyObject {
-  const pem = process.env.LICENCE_SIGNING_PRIVATE_KEY;
-
-  if (!pem) {
-    throw new Error(
-      'LICENCE_SIGNING_PRIVATE_KEY is not configured. Set the P-256 PKCS#8 private key (matching the ' +
-        'public key Tenantry.Pro embeds) in the portal secret store.',
-    );
-  }
-
-  return createPrivateKey(pem);
 }
 
 /**
@@ -63,10 +52,9 @@ export function licenceKeyId(key: KeyObject): string {
  * Signs a Tenantry.Pro licence (ES256) and returns the compact JWT string.
  *
  * @param claims The licence claims.
- * @param signingKey Optional pre-loaded key (used in tests). Defaults to `LICENCE_SIGNING_PRIVATE_KEY`.
+ * @param key The signing key; by default, this environment's (`LICENCE_SIGNING_PRIVATE_KEY`).
  */
-export function issueLicence(claims: LicenceClaims, signingKey?: KeyObject): string {
-  const key = signingKey ?? loadSigningKey();
+export function issueLicence(claims: LicenceClaims, key: KeyObject = serverConfig().licenceSigningKey): string {
   const nowSeconds = Math.floor(Date.now() / 1000);
 
   const header = base64Url(JSON.stringify({ alg: 'ES256', typ: 'JWT', kid: licenceKeyId(key) }));

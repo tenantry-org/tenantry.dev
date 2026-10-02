@@ -1,7 +1,7 @@
 'use server';
 
 import { createUserClient } from '@/server/db/user-client';
-import { siteOrigin } from '@/server/config/site-origin';
+import { serverConfig } from '@/server/config/server-config';
 
 export type ResetRequestResult = { sent: true } | { error: string };
 
@@ -21,7 +21,7 @@ const MESSAGES: Record<string, string> = {
 export async function requestPasswordReset(email: string): Promise<ResetRequestResult> {
   const supabase = await createUserClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${await siteOrigin()}/auth/callback?next=/reset-password`,
+    redirectTo: `${serverConfig().siteUrl}/auth/callback?next=/reset-password`,
   });
 
   if (error) {

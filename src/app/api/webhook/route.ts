@@ -2,7 +2,7 @@ import { NextRequest, after } from 'next/server';
 import { getPaddleInstance } from '@/server/integrations/paddle/get-paddle-instance';
 import { enqueueEvent, PaddleEventJson } from '@/server/db/inbox';
 import { processInbox } from '@/server/billing/process-inbox';
-import { requireEnv } from '@/server/config/env';
+import { serverConfig } from '@/server/config/server-config';
 
 // Processing runs after the response (see `after` below), within this function's time limit.
 export const maxDuration = 60;
@@ -14,8 +14,7 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('paddle-signature') || '';
   const rawRequestBody = await request.text();
-  // No fallback: without the secret no notification can be verified, so the request fails and Paddle retries.
-  const secret = requireEnv('PADDLE_NOTIFICATION_WEBHOOK_SECRET');
+  const secret = serverConfig().paddle.webhookSecret;
 
   if (!signature || !rawRequestBody) {
     return Response.json({ error: 'Missing signature from header' }, { status: 400 });

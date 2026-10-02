@@ -1,18 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { register } from './instrumentation';
 
-const config = vi.hoisted(() => ({ validateServerConfig: vi.fn() }));
+const config = vi.hoisted(() => ({ serverConfig: vi.fn() }));
 vi.mock('@/server/config/server-config', () => config);
 
 describe('register', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
-    config.validateServerConfig.mockReset();
+    config.serverConfig.mockReset();
   });
 
   it('validates the configuration when a Node.js server starts, and fails with it', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    config.validateServerConfig.mockImplementation(() => {
+    config.serverConfig.mockImplementation(() => {
       throw new Error('The server configuration is invalid');
     });
 
@@ -27,6 +27,6 @@ describe('register', () => {
     vi.stubEnv('NEXT_PHASE', 'phase-production-build');
     await register();
 
-    expect(config.validateServerConfig).not.toHaveBeenCalled();
+    expect(config.serverConfig).not.toHaveBeenCalled();
   });
 });

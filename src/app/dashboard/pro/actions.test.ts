@@ -12,7 +12,10 @@ vi.mock('@/server/billing/sync-github-link', () => ({
   isLinkError: () => false,
   syncGithubLinkForCurrentUser: vi.fn(),
 }));
-vi.mock('@/server/config/site-origin', () => ({ siteOrigin: async () => 'https://tenantry.dev' }));
+// This environment's site URL is https://sandbox.example.com.
+vi.mock('@/server/config/server-config', async () => ({
+  serverConfig: (await import('@/test/server-config')).testServerConfig,
+}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('next/navigation', () => ({
   redirect: (url: string) => {
@@ -44,7 +47,7 @@ describe('switchGithubAccount', () => {
     expect(auth.unlinkIdentity).toHaveBeenCalledWith(github);
     expect(auth.linkIdentity).toHaveBeenCalledWith({
       provider: 'github',
-      options: { redirectTo: 'https://tenantry.dev/auth/callback?next=/dashboard/pro' },
+      options: { redirectTo: 'https://sandbox.example.com/auth/callback?next=/dashboard/pro' },
     });
     expect(auth.unlinkIdentity.mock.invocationCallOrder[0]).toBeLessThan(auth.linkIdentity.mock.invocationCallOrder[0]);
   });

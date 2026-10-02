@@ -1,23 +1,23 @@
-import { Offer } from '@/constants/pro-offer';
+import type { PricesState } from '@/hooks/usePaddlePrices';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface Props {
-  loading: boolean;
-  offer: Offer;
-  priceMap: Record<string, string>;
-  value: string;
+  prices: PricesState;
+  priceId: string;
   priceSuffix: string;
 }
 
-export function PriceAmount({ loading, offer, priceMap, priceSuffix, value }: Props) {
+export function PriceAmount({ prices, priceId, priceSuffix }: Props) {
   return (
     <div className={'flex flex-col gap-1'}>
-      {loading ? (
-        <Skeleton className={'h-[60px] w-48'} />
-      ) : (
+      {prices.status === 'loading' && <Skeleton className={'h-[60px] w-48'} />}
+      {prices.status === 'ready' && (
         <div className={'text-5xl leading-[60px] font-bold tracking-tight'}>
-          {priceMap[offer.priceId[value]]?.replace(/\.00$/, '')}
+          {prices.prices[priceId]?.replace(/\.00$/, '')}
         </div>
+      )}
+      {prices.status === 'failed' && (
+        <div className={'flex h-[60px] items-center text-muted-foreground'}>The price could not be loaded.</div>
       )}
       <div className={'text-sm text-muted-foreground'}>{priceSuffix}</div>
     </div>

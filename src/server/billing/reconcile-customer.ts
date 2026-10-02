@@ -91,7 +91,7 @@ async function reconcileGrant(
   }
 
   // Honour the provisioning gate, so reconcile cannot backfill a grant the webhook withheld.
-  if (!deps.automatedProvisioningEnabled()) return 'withheld';
+  if (deps.config.provisioning !== 'auto') return 'withheld';
 
   const state = await grantAndRecord(customerId, githubLogin, deps);
   if (state === 'failed') throw new Error(`GitHub grant failed for customer ${customerId}`);

@@ -1,11 +1,11 @@
 import 'server-only';
 import type { SubscriptionStatus } from '@paddle/paddle-node-sdk';
 import type { Tables } from '@/lib/supabase/database.types';
+import type { OfferPrices } from '@/lib/public-config';
 import { getCustomerId, readDashboardRows } from '@/server/db/customer-dashboard';
 import { graceEndsAt } from '@/server/billing/access-policy';
 import type { EntitlementStatus, GithubState } from '@/server/db/billing-store';
-import { isProProduct } from '@/constants/pro-product';
-import { ProOffer } from '@/constants/pro-offer';
+import { type ServerConfig, serverConfig } from '@/server/config/server-config';
 
 /** GitHub drops an org invitation that is not accepted within 7 days; reconcile then sends a new one. */
 const INVITATION_DAYS = 7;
@@ -46,7 +46,12 @@ export interface BillingSubscription {
   endsAt: string | null;
 }
 
-export async function getProAccess(): Promise<ProAccess> {
+/**
+ * The signed-in customer's access. `paddle` is the Pro product and prices, by default the server's: read only after
+ * the request's session, since the build prerenders the pages that call this until they read the request, and the
+ * server's configuration is not read during the build.
+ */
+export async function getProAccess(paddle?: ServerConfig['paddle']): Promise<ProAccess> {
   const customerId = await getCustomerId();
 
   if (!customerId) {
@@ -54,6 +59,7 @@ export async function getProAccess(): Promise<ProAccess> {
   }
 
   const { access, licence, link, entitlements, subscriptions } = await readDashboardRows(customerId);
+  const { proProductId, prices } = paddle ?? serverConfig().paddle;
 
   const graceEnds = entitlements
     .filter(({ status, grace_started_at }) => status === 'grace' && grace_started_at)
@@ -82,8 +88,8 @@ export async function getProAccess(): Promise<ProAccess> {
     licence: licence ? { jwt: licence.jwt } : null,
     githubLogin: link?.github_login ?? null,
     subscriptions: subscriptions
-      .filter((row) => isProProduct(row.product_id) && row.subscription_status !== 'canceled')
-      .map((row) => billingSubscription(row, entitlements)),
+      .filter((row) => row.product_id === proProductId && row.subscription_status !== 'canceled')
+      .map((row) => billingSubscription(row, entitlements, prices)),
   };
 }
 
@@ -94,7 +100,11 @@ type SubscriptionRow = Pick<
   'subscription_id' | 'subscription_status' | 'price_id' | 'scheduled_change' | 'scheduled_change_action'
 >;
 
-function billingSubscription(row: SubscriptionRow, entitlements: EntitlementRow[]): BillingSubscription {
+function billingSubscription(
+  row: SubscriptionRow,
+  entitlements: EntitlementRow[],
+  prices: OfferPrices,
+): BillingSubscription {
   const endsAt = row.scheduled_change_action === 'cancel' ? row.scheduled_change : null;
   const periodEndsAt = entitlements.find((e) => e.subscription_id === row.subscription_id)?.current_period_ends_at;
 
@@ -102,8 +112,7 @@ function billingSubscription(row: SubscriptionRow, entitlements: EntitlementRow[
     id: row.subscription_id,
     // Paddle's status, as record_subscription_event stored it; canceled ones are filtered out above.
     status: row.subscription_status as BillingSubscription['status'],
-    interval:
-      row.price_id === ProOffer.priceId.month ? 'month' : row.price_id === ProOffer.priceId.year ? 'year' : null,
+    interval: row.price_id === prices.month ? 'month' : row.price_id === prices.year ? 'year' : null,
     renewsAt: endsAt ? null : (periodEndsAt ?? null),
     endsAt,
   };

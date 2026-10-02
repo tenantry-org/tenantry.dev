@@ -40,15 +40,4 @@ describe('issueLicence', () => {
     expect(licenceKeyId(privateKey)).toBe(await calculateJwkThumbprint(await exportJWK(publicKey), 'sha256'));
     expect(licenceKeyId(publicKey)).toBe(licenceKeyId(privateKey));
   });
-
-  it('throws a clear error when no signing key is configured', () => {
-    const previous = process.env.LICENCE_SIGNING_PRIVATE_KEY;
-    delete process.env.LICENCE_SIGNING_PRIVATE_KEY;
-
-    try {
-      expect(() => issueLicence({ customerId: 'ctm_123' })).toThrow(/LICENCE_SIGNING_PRIVATE_KEY/);
-    } finally {
-      if (previous !== undefined) process.env.LICENCE_SIGNING_PRIVATE_KEY = previous;
-    }
-  });
 });

@@ -1,4 +1,5 @@
 import { reconcileEntitlements } from '@/server/billing/reconcile-entitlements';
+import { serverConfig } from '@/server/config/server-config';
 
 // Reconciliation endpoint, wired for Vercel Cron (see vercel.json). Vercel invokes scheduled jobs with
 // a GET request and an `Authorization: Bearer <CRON_SECRET>` header it injects automatically when the
@@ -8,8 +9,7 @@ import { reconcileEntitlements } from '@/server/billing/reconcile-entitlements';
 export const maxDuration = 60; // reconcile makes per-customer GitHub API calls; give it headroom
 
 function authorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  return Boolean(secret) && request.headers.get('authorization') === `Bearer ${secret}`;
+  return request.headers.get('authorization') === `Bearer ${serverConfig().cronSecret}`;
 }
 
 async function handle(request: Request) {

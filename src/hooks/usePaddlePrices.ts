@@ -1,33 +1,48 @@
-import { Paddle, PricePreviewParams, PricePreviewResponse } from '@paddle/paddle-js';
+import type { Paddle, PricePreviewResponse } from '@paddle/paddle-js';
 import { useEffect, useState } from 'react';
-import { ProOffer } from '@/constants/pro-offer';
+import type { PaddleState } from '@/hooks/usePaddle';
+import { publicConfig } from '@/lib/public-config';
 
+/** Each Pro price's total, formatted for the visitor, by Paddle price id. */
 export type PaddlePrices = Record<string, string>;
 
-function getLineItems(): PricePreviewParams['items'] {
-  return Object.values(ProOffer.priceId).map((priceId) => ({ priceId, quantity: 1 }));
-}
+export type PricesState = { status: 'loading' } | { status: 'ready'; prices: PaddlePrices } | { status: 'failed' };
 
-function getPriceAmounts(prices: PricePreviewResponse) {
-  return prices.data.details.lineItems.reduce((acc, item) => {
-    acc[item.price.id] = item.formattedTotals.total;
-    return acc;
-  }, {} as PaddlePrices);
+/** The Pro offer's prices for the visitor, once Paddle.js is ready; 'failed' when it or the preview fails. */
+export function usePaddlePrices(paddle: PaddleState): PricesState {
+  const [preview, setPreview] = useState<PricesState>({ status: 'loading' });
+
+  useEffect(() => {
+    if (paddle.status !== 'ready') return;
+    let mounted = true;
+
+    void previewPrices(paddle.paddle).then((previewed) => {
+      if (mounted) setPreview(previewed);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [paddle]);
+
+  return paddle.status === 'failed' ? paddle : preview;
 }
 
 /**
- * The Pro offer's prices for the visitor. No address is passed, so Paddle localises them (currency and
- * tax) from the visitor's IP address, as the checkout does.
+ * Previews the Pro offer's prices. No address is passed, so Paddle localises them (currency and tax) from the
+ * visitor's IP address, as the checkout does. 'failed', logged, when the preview fails. Never throws.
  */
-export function usePaddlePrices(paddle: Paddle | undefined): { prices: PaddlePrices; loading: boolean } {
-  const [prices, setPrices] = useState<PaddlePrices>({});
-  const [loading, setLoading] = useState<boolean>(true);
+export async function previewPrices(paddle: Paddle): Promise<PricesState> {
+  try {
+    const { month, year } = publicConfig().paddle.prices;
+    const preview = await paddle.PricePreview({ items: [month, year].map((priceId) => ({ priceId, quantity: 1 })) });
+    return { status: 'ready', prices: priceAmounts(preview) };
+  } catch (error) {
+    console.error('Paddle price preview failed:', error);
+    return { status: 'failed' };
+  }
+}
 
-  useEffect(() => {
-    paddle?.PricePreview({ items: getLineItems() } as PricePreviewParams).then((prices) => {
-      setPrices(getPriceAmounts(prices));
-      setLoading(false);
-    });
-  }, [paddle]);
-  return { prices, loading };
+function priceAmounts(preview: PricePreviewResponse): PaddlePrices {
+  return Object.fromEntries(preview.data.details.lineItems.map((item) => [item.price.id, item.formattedTotals.total]));
 }

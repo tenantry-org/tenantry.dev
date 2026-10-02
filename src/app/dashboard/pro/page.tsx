@@ -3,7 +3,7 @@ import { DashboardPageHeader } from '@/components/dashboard/layout/dashboard-pag
 import { LoadingScreen } from '@/components/dashboard/layout/loading-screen';
 import { getProAccess } from '@/server/billing/pro-access';
 import { AccessView } from '@/components/dashboard/pro/pro-access-view';
-import { requireEnv } from '@/server/config/env';
+import { serverConfig } from '@/server/config/server-config';
 import { getCurrentUser } from '@/server/db/current-user';
 
 // The Connect GitHub action runs here and holds the customer's lease, which must outlast it (customer-lease.ts).
@@ -29,7 +29,7 @@ async function Access({ searchParams }: Props) {
   return (
     <AccessView
       access={access}
-      githubOrg={requireEnv('GITHUB_ORG')}
+      githubOrg={serverConfig().github.org}
       linkError={error}
       accountEmail={user?.email ?? null}
     />

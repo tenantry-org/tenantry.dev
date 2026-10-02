@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createUserClient } from '@/server/db/user-client';
-import { siteOrigin } from '@/server/config/site-origin';
+import { serverConfig } from '@/server/config/server-config';
 
 interface FormData {
   email: string;
@@ -26,7 +26,7 @@ export async function signInWithGithub() {
   const { data } = await supabase.auth.signInWithOAuth({
     provider: 'github',
     options: {
-      redirectTo: `${await siteOrigin()}/auth/callback`,
+      redirectTo: `${serverConfig().siteUrl}/auth/callback`,
     },
   });
   if (data.url) {

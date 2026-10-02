@@ -42,8 +42,16 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       # As Vercel builds: the docs sync (the pinned releases' docs, with its link check), MDX, Next's type check and
-      # prerendering. It needs no configuration: the server validates its own when it starts (instrumentation.ts).
+      # prerendering. It needs only the public configuration, which is compiled into the build and checked while the
+      # pages prerender (src/lib/public-config.ts): stand-ins here. The server validates the rest when it starts.
       - run: pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key
+          NEXT_PUBLIC_PADDLE_ENV: sandbox
+          NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: test_ci
+          NEXT_PUBLIC_PADDLE_PRICE_MONTHLY: pri_cimonth
+          NEXT_PUBLIC_PADDLE_PRICE_YEARLY: pri_ciyear
 
   database:
     name: Database tests (pgTAP)

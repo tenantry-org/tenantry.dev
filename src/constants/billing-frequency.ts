@@ -1,5 +1,7 @@
+import type { OfferPrices } from '@/lib/public-config';
+
 export interface IBillingFrequency {
-  value: string;
+  value: keyof OfferPrices;
   label: string;
   priceSuffix: string;
 }

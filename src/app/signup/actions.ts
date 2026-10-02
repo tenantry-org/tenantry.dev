@@ -1,7 +1,7 @@
 'use server';
 
 import { createUserClient } from '@/server/db/user-client';
-import { siteOrigin } from '@/server/config/site-origin';
+import { serverConfig } from '@/server/config/server-config';
 
 interface FormData {
   email: string;
@@ -28,7 +28,7 @@ export async function signup(data: FormData): Promise<SignupResult> {
   const supabase = await createUserClient();
   const { error } = await supabase.auth.signUp({
     ...data,
-    options: { emailRedirectTo: `${await siteOrigin()}/auth/callback?next=/dashboard/pro` },
+    options: { emailRedirectTo: `${serverConfig().siteUrl}/auth/callback?next=/dashboard/pro` },
   });
 
   if (error) {

@@ -4,14 +4,17 @@ import { SimpleHeader } from '@/components/shared/simple-header';
 import { CheckoutContents } from '@/components/checkout/checkout-contents';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getCurrentUser } from '@/server/db/current-user';
-import { checkoutEnabled, isOfferPrice } from '@/constants/pro-offer';
+import { isOfferPrice } from '@/constants/pro-offer';
+import { publicConfig } from '@/lib/public-config';
 
 interface Props {
   params: Promise<{ priceId: string }>;
 }
 
+// The page sells what the pricing section offers, so it reads the same compiled public configuration. Its shell
+// prerenders during the build, where the server's configuration is not read.
 export default function CheckoutPage({ params }: Props) {
-  if (!checkoutEnabled) notFound();
+  if (!publicConfig().checkoutEnabled) notFound();
 
   return (
     <div className={'min-h-screen bg-surface'}>
@@ -31,5 +34,6 @@ async function Checkout({ params }: Props) {
   if (!isOfferPrice(priceId)) notFound();
 
   const user = await getCurrentUser();
-  return <CheckoutContents priceId={priceId} userEmail={user?.email} />;
+  // Keyed by price, so another price gets a checkout of its own.
+  return <CheckoutContents key={priceId} priceId={priceId} userEmail={user?.email} />;
 }

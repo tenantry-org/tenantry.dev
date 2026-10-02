@@ -36,7 +36,7 @@ Key code is in `src/server`, in layers whose imports point only down this list (
   RLS), and the only modules that query the database: the billing tables' store, the webhook inbox and the
   dashboard's reads. The clients are typed by `src/lib/supabase/database.types.ts`, which is generated from the
   migrations.
-- `config/` — the server's environment, validated when it starts.
+- `config/` — the server's configuration, `serverConfig()`: every setting, validated when the server starts.
 
 Modules in `src/server` import `server-only` (except `db/update-session.ts`, which the proxy runs), so a client
 component that pulls one in fails the build. The services that change a customer's access (`customer-access.ts`,
@@ -95,5 +95,9 @@ build, local ones included, shows what the released packages do.
 ## Configuration
 
 See [`.env.example`](.env.example) for the full list of environment variables (Supabase, Paddle,
-GitHub App, licensing, and email). Operational runbooks (provisioning, key rotation, reconcile) are
-maintained privately by the maintainers.
+GitHub App, licensing, and email). Nothing has a default: each environment sets its own. Server code reads them
+through `serverConfig()` (`src/server/config/server-config.ts`), which the server validates when it starts, and the
+browser through `publicConfig()` (`src/lib/public-config.ts`): the `NEXT_PUBLIC_` variables it uses, which are
+compiled into the build, so the build checks them too and a change needs a redeploy. (`NEXT_PUBLIC_SITE_URL` is read
+by the server only.) ESLint keeps `process.env` out of other code.
+Operational runbooks (provisioning, key rotation, reconcile) are maintained privately by the maintainers.

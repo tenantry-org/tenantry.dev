@@ -1,6 +1,7 @@
 import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
+import { serverConfig } from '@/server/config/server-config';
 
 /**
  * The service-role client for server-side writes (webhooks, reconcile, account linking). It bypasses RLS,
@@ -8,8 +9,8 @@ import type { Database } from '@/lib/supabase/database.types';
  * user's access token instead of the service-role key, and its writes then run as that user and fail RLS.
  * This one reads no cookies and keeps no session. Only the modules in src/server/db may import it (eslint.config.mjs).
  */
-export function createServiceRoleClient() {
-  return createClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+export function createServiceRoleClient(supabase = serverConfig().supabase) {
+  return createClient<Database>(supabase.url, supabase.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }

@@ -43,7 +43,6 @@ const cancelled = subscriptionEvent({
 describe('applyPaddleEvent', () => {
   beforeEach(() => {
     deps = fakeBillingDeps();
-    vi.stubEnv('PADDLE_PRO_PRODUCT_ID', 'pro_01');
     memory.reset();
     memory.state.emails.set('ctm_01', 'buyer@example.com');
     memory.linkGithub('ctm_01', 'octocat');
@@ -64,10 +63,6 @@ describe('applyPaddleEvent', () => {
     expect(memory.liveLicences('ctm_01')).toEqual([]);
     expect(deps.github.grantAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
   });
 
   it('records a subscription to another product but entitles its customer to nothing', async () => {

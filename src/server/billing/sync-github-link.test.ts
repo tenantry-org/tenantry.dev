@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CUSTOMER_BUSY } from '@/server/jobs/customer-lease';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
 import { memory } from '@/test/memory-billing-store';
+import { testServerConfig } from '@/test/server-config';
 import { syncGithubLinkForCurrentUser } from './sync-github-link';
 
 let deps: FakeBillingDeps;
@@ -40,7 +41,7 @@ describe('syncGithubLinkForCurrentUser', () => {
   });
 
   it('links the account but does not grant access while provisioning is manual', async () => {
-    deps.automatedProvisioningEnabled.mockReturnValue(false);
+    deps.config = testServerConfig({ provisioning: 'manual' });
 
     const result = await syncGithubLinkForCurrentUser(deps);
 

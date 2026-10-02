@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 import { subscriptionEvent } from '@/test/paddle-events';
 import { POST } from './route';
@@ -15,6 +15,9 @@ vi.mock('@/server/integrations/paddle/get-paddle-instance', () => ({
   getPaddleInstance: () => ({ webhooks: { unmarshal: mocks.unmarshal } }),
 }));
 vi.mock('@/server/db/inbox', () => ({ enqueueEvent: mocks.enqueueEvent }));
+vi.mock('@/server/config/server-config', async () => ({
+  serverConfig: (await import('@/test/server-config')).testServerConfig,
+}));
 vi.mock('@/server/billing/process-inbox', () => ({ processInbox: mocks.processInbox }));
 
 const event = subscriptionEvent({ eventId: 'evt_1', occurredAt: '2026-09-28T10:00:00Z', status: 'active' });
@@ -30,13 +33,8 @@ function delivery(body = JSON.stringify(event), signature = 'ts=1;h1=abc') {
 describe('POST /api/webhook', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.stubEnv('PADDLE_NOTIFICATION_WEBHOOK_SECRET', 'secret');
     mocks.unmarshal.mockResolvedValue({ eventId: 'evt_1' });
     mocks.enqueueEvent.mockResolvedValue(true);
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
   });
 
   it('stores the event and answers before processing it, however slow processing is', async () => {
@@ -46,6 +44,7 @@ describe('POST /api/webhook', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ status: 200, eventName: 'subscription.updated', deduped: false });
+    expect(mocks.unmarshal).toHaveBeenCalledWith(JSON.stringify(event), 'webhook-secret', 'ts=1;h1=abc');
     expect(mocks.enqueueEvent).toHaveBeenCalledWith(event);
     expect(mocks.processInbox).not.toHaveBeenCalled();
 
