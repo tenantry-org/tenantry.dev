@@ -28,19 +28,11 @@ const PRINCIPLES = [
   },
 ];
 
+// What Core is, beyond the principles above.
 const CORE = [
-  'Tenant resolution, stores and access control, in ASP.NET Core and in console, worker and desktop hosts',
-  'Isolation in a shared database, with a TenantId column that EF Core scopes reads and writes to',
-  'A database per tenant, with per-tenant connection strings and DbContext pooling',
-  'Worker scopes for running background work as a tenant',
-];
-
-const PRO = [
-  'Provisioning of tenant databases on SQL Server, PostgreSQL and MySQL, and of schemas on SQL Server and PostgreSQL',
-  'Migrations across every tenant database or schema, as a deployment step, and the provision → migrate → seed lifecycle',
-  'A schema per tenant (SQL Server, PostgreSQL), and mixed mode: a database, a schema or the shared one per tenant',
-  'The tenant carried through Hangfire, MassTransit, Quartz.NET and Rebus',
-  'Audit logging, tenant health checks, per-tenant metrics and connection-string caching',
+  'A shared database, or a database per tenant with pooled contexts',
+  'Tenant resolution, your tenant store and access validation',
+  'Worker scopes for background work as a tenant',
 ];
 
 function Edition({
@@ -117,8 +109,8 @@ export function Features() {
       <div className={'mt-24 max-w-2xl'}>
         <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>Open-source Core. Pro for running tenants.</h2>
         <p className={'mt-4 text-lg text-muted-foreground'}>
-          Core identifies tenants and isolates their data, free and complete on its own. Pro adds the work around them:
-          creating and migrating their databases, the tenant in jobs and messages, and auditing and monitoring.
+          Core is free and complete for isolating tenant data. Pro is for running a database or schema per tenant:
+          provisioning, migrations, jobs and audit.
         </p>
       </div>
       <div className={'mt-10 grid gap-6 lg:grid-cols-2'}>
@@ -136,7 +128,7 @@ export function Features() {
           name={'Tenantry Pro'}
           badge={'Subscription'}
           summary={ProOffer.description}
-          items={PRO}
+          items={ProOffer.features}
           links={[
             { label: 'What Pro adds', href: '/pro' },
             { label: 'Pro docs', href: '/docs/pro' },
