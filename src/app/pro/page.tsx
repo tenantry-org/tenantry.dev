@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 const WORKFLOWS = [
   {
     title: 'Onboard a tenant',
-    text: 'One call creates the tenant’s database or schema, applies your migrations and runs your seeders, in order. The result reports each step: succeeded, failed, skipped or not run. Every built-in step is safe to repeat, so a failed onboarding is retried by running it again.',
+    text: 'One call creates the tenant’s database or schema, migrates it and runs your seeders. The result reports each step, and every built-in step is safe to repeat, so you retry a failed onboarding by running it again.',
     caption: 'TenantOnboarding.cs',
     code: `tenant.UsePro(pro => pro
     .AddSeeder<DefaultDataSeeder>()               // your seeder, last
@@ -33,7 +33,7 @@ if (result.Succeeded)
   },
   {
     title: 'Keep every tenant database migrated',
-    text: 'Run your application with migrate-tenants as a deployment step: it applies the pending EF Core migrations to every tenant’s database or schema, one at a time or several at once, each once however many tenants share it. One database’s failure does not stop the others; each is logged, and the step fails so the release waits. The status is readable without migrating.',
+    text: 'Run migrate-tenants as a deployment step. It applies pending migrations to every tenant database or schema. One failure doesn’t stop the rest, and the step exits non-zero so the release waits. You can also read where each database stands without migrating.',
     caption: 'Program.cs',
     code: `await using var app = builder.Build();
 
@@ -47,7 +47,7 @@ return 0;`,
   },
   {
     title: 'Run background work as the tenant',
-    text: 'A Hangfire job, a Quartz.NET job, or a MassTransit or Rebus message carries the tenant it was created for, and runs as that tenant, with its DbContext isolated as in a request. Recurring work can run once for each tenant. A job whose tenant no longer exists is rejected rather than run as nobody.',
+    text: 'Hangfire and Quartz.NET jobs and MassTransit and Rebus messages run as the tenant they were created for, with the DbContext isolated as in a request. Recurring work can run once per tenant. By default, a job whose tenant no longer exists is rejected.',
     caption: 'Program.cs',
     code: `tenant.UsePro(pro => pro.AddHangfirePropagation());
 
@@ -93,7 +93,7 @@ const QUESTIONS = [
   {
     question: 'How do I install it, locally and in CI?',
     answer:
-      'Connect your GitHub account on your Pro access page, then add the feed to a nuget.config with a read-only GitHub token. In CI the token is a secret, and so is the licence key; the installation guide has the steps for GitHub Actions and Docker builds.',
+      'Connect GitHub on your Pro access page, then add the feed to your nuget.config with a read-only token. The guide covers CI and Docker builds.',
     link: { label: 'Installation', href: '/docs/pro/installation' },
   },
   {
