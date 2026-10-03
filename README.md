@@ -23,6 +23,11 @@ customer ─▶ /dashboard/pro ─▶ Connect GitHub ─▶ github_links + team 
 cron ─▶ /api/reconcile ─▶ reconcile access vs entitlements
 ```
 
+The package feed is GitHub Packages, reached through membership of a team in the customers' GitHub org. The
+subscription system has been built and tested with it, and the site and Pro's docs describe it. A private Tenantry
+feed replaces it before subscriptions go on sale, so that a lapsed subscriber can still restore the versions released
+while they subscribed.
+
 Key code is in `src/server`, in layers whose imports point only down this list (ESLint enforces it):
 
 - `billing/` — the rules and services: who is entitled, and until when (`access-policy.ts`); keeping a customer's

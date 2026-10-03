@@ -114,6 +114,11 @@ const QUESTIONS = [
     link: { label: 'Installation', href: '/docs/pro/installation' },
   },
   {
+    question: 'Will the package feed change?',
+    answer:
+      'Yes, before Tenantry Pro goes on sale. The packages are on GitHub Packages today, the feed the subscription system has been built and tested with, so the docs describe it. A private Tenantry feed will replace it, and after a subscription ends it will still let you restore the versions released while you subscribed.',
+  },
+  {
     question: 'Which versions and databases?',
     answer:
       '.NET 10 with EF Core 10. .NET 8 and 9, with their EF Core, until 10 November 2027, a year after Microsoft’s support ends. Provisioning and migrations on SQL Server, PostgreSQL and MySQL; schema per tenant on SQL Server and PostgreSQL.',
@@ -139,7 +144,7 @@ const QUESTIONS = [
   {
     question: 'What happens when the subscription ends?',
     answer:
-      'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.5 on Core 0.5.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Security fixes are released as a patch to every affected minor version. Restoring them from the feed needs an active subscription, so after it ends, email support@tenantry.dev for the latest patch of any minor version released while you subscribed.',
+      'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.5 on Core 0.5.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Security fixes are released as a patch to every affected minor version. Restoring them from today’s GitHub feed needs an active subscription, so after it ends, email support@tenantry.dev for the latest patch of any minor version released while you subscribed. The private feed that replaces it will let you restore those yourself.',
     link: { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
   },
   {
