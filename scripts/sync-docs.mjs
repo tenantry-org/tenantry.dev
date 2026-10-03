@@ -335,12 +335,12 @@ title: "Tenantry documentation"
 description: "Guides for Tenantry Core (open source) and Tenantry Pro${latest ? '' : `, version ${entry.version}`}."
 ---
 
-Tenantry is a production-grade multi-tenancy toolkit for .NET.
+Tenantry adds tenant isolation to ASP.NET Core and EF Core applications. It is in beta until 1.0.
 
-- **[Tenantry Core](${base}/core)** — open source: tenant resolution, and isolation in a shared database or a
+- **[Tenantry Core](${base}/core)**, open source: tenant resolution, and isolation in a shared database or a
   database per tenant.
-- **[Tenantry Pro](${base}/pro)** — schema-per-tenant and mixed mode, provisioning, migration orchestration
-  across tenant databases, tenant lifecycle, and background-job / message-bus integrations.
+- **[Tenantry Pro](${base}/pro)**: provisioning, migrations across tenant databases, schema per tenant and mixed
+  mode, and the tenant in background jobs and messages.
 
 Use the sidebar to browse, or press <kbd>⌘</kbd> <kbd>K</kbd> to search.
 `,
