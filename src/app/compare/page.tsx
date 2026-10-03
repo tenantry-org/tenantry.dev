@@ -23,7 +23,7 @@ const NOTES = [
   },
   {
     title: 'A database per tenant',
-    text: 'Tenantry supports a database per tenant with pooled contexts (AddDbContextPool, AddPooledDbContextFactory). Finbuckle’s docs do not cover pooling. ABP’s SaaS module, and Tenantry Pro, create and migrate tenant databases; Finbuckle leaves that to you.',
+    text: 'Tenantry supports a database per tenant with pooled contexts (AddDbContextPerTenantDatabase with pooled: true). Finbuckle’s docs do not cover pooling. ABP’s SaaS module, and Tenantry Pro, create and migrate tenant databases; Finbuckle leaves that to you.',
   },
   {
     title: 'What Tenantry does not do',

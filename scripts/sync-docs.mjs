@@ -93,6 +93,7 @@ const PAGE_ORDER = [
   'aot-and-trimming',
   'compatibility',
   'troubleshooting',
+  'migrating-from-finbuckle',
   'changelog',
 ];
 
