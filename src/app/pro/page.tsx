@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/pro' },
 };
 
-// Excerpts of Tenantry Pro's guides (tenant lifecycle, migrations, Hangfire), whose code blocks Pro's CI builds.
+// From Tenantry Pro's guides (tenant lifecycle, migrations, Hangfire), shortened; each compiles against Pro 0.5.
 const WORKFLOWS = [
   {
     title: 'Onboard a tenant',
@@ -33,7 +33,7 @@ if (result.Succeeded)
   },
   {
     title: 'Keep every tenant database migrated',
-    text: 'Run your application with migrate-tenants as a deployment step: it applies the pending EF Core migrations to every tenant’s database or schema, a few at a time, each once however many tenants share it. One database’s failure does not stop the others; each is logged, and the step fails so the release waits. The status is readable without migrating.',
+    text: 'Run your application with migrate-tenants as a deployment step: it applies the pending EF Core migrations to every tenant’s database or schema, one at a time or several at once, each once however many tenants share it. One database’s failure does not stop the others; each is logged, and the step fails so the release waits. The status is readable without migrating.',
     caption: 'Program.cs',
     code: `await using var app = builder.Build();
 
