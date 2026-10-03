@@ -4,6 +4,7 @@ import { TrackedLink } from '@/components/shared/tracked-link';
 import { highlight } from 'fumadocs-core/highlight';
 import { Button } from '@/components/ui/button';
 import { GithubIcon } from '@/components/icons/github-icon';
+import { latestDocsVersion } from '@/lib/docs-versions';
 
 // From Tenantry Core's README and getting-started guide.
 const SNIPPET = `builder.Services.AddTenantry<Guid>(tenant => tenant
@@ -52,7 +53,7 @@ export async function HeroSection() {
               'inline-flex items-center gap-2 rounded-full border border-accent-foreground/15 bg-accent px-3 py-1 text-xs font-medium text-accent-foreground'
             }
           >
-            Modern multi-tenancy for .NET
+            Beta · {latestDocsVersion.version} · 1.0 not before November 2027
           </span>
           <h1
             className={

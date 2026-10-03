@@ -57,6 +57,9 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
       <div className={'flex flex-col gap-10 md:flex-row md:gap-16'}>
         <div className={'w-full md:w-[360px] md:shrink-0'}>
           <PriceSection checkoutData={checkoutData} />
+          <p className={'mt-6 text-sm text-muted-foreground'}>
+            Tenantry is in beta until 1.0, so a minor release can change the API. Each release says how to update.
+          </p>
         </div>
         <div className={'min-w-0 flex-1'}>
           <h2 className={'mb-6 text-base font-semibold'}>Payment details</h2>

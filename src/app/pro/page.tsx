@@ -121,9 +121,9 @@ const QUESTIONS = [
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
-    question: 'What does the beta mean?',
+    question: 'Is it production-ready?',
     answer:
-      "Tenantry Core and Pro are in beta until 1.0, which comes no earlier than 10 November 2027. Releases are numbered 0.x, and a minor release (0.5 to 0.6) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.",
+      "Tenantry Core and Pro are in beta until 1.0, which comes no earlier than 10 November 2027. The isolation is tested on every build against SQL Server, PostgreSQL, MySQL and SQLite. Releases are numbered 0.x, and a minor release (0.5 to 0.6) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.",
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
