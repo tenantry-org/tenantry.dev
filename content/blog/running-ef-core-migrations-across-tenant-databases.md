@@ -8,7 +8,6 @@ tags: [dotnet, efcore, multitenancy, devops]
 next:
   label: Read the tenant migrations guide
   href: /docs/pro/migration-orchestration
-draft: true
 ---
 
 With one database for everyone, a release applies its EF Core migrations once, with `dotnet ef database update` or a
@@ -34,8 +33,8 @@ foreach (var tenant in await tenants.GetAllTenantsAsync(ct))
 It works for a handful of tenants, and then:
 
 - **One failure stops the rest.** A tenant whose database is unreachable, or whose data breaks a migration, throws,
-  and every tenant after it in the list stays on the old schema while the new code starts. Catching the exception
-  keeps the loop going, but then something has to record which databases failed and why.
+  and the application fails to start, with the tenants before it on the new schema and those after it on the old one.
+  Catching the exception keeps the loop going, but then something has to record which databases failed and why.
 - **It runs on every instance.** At startup, each replica migrates every tenant, and startup time grows with the
   number of tenants times the number of replicas.
 - **It takes as long as all the databases together.** Migrating them one after another is slow once there are
@@ -64,8 +63,8 @@ schema and interceptors are the ones your application uses.
 ### As a deployment step
 
 The recommended way to run it is once per release, from one process, before the new version takes traffic: a CI/CD
-stage, a Kubernetes `Job` or an init container. The application runs the migrations and exits when it is started with
-`migrate-tenants`:
+stage or a Kubernetes `Job`. (An init container runs in every replica, which is the case to avoid.) The application
+runs the migrations and exits when it is started with `migrate-tenants`:
 
 ```csharp
 await using var app = builder.Build();   // disposing it at exit writes out the last log messages

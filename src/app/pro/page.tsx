@@ -110,7 +110,7 @@ const QUESTIONS = [
   {
     question: 'What happens when the subscription ends?',
     answer:
-      'The versions you have keep working, under the licence: the key keeps validating. You can no longer restore new versions from the feed until you subscribe again.',
+      'The versions you have keep working, under the licence: the key keeps validating. Your access to the package feed ends, so keep copies of the packages you build with, in an internal feed or a local package folder, until you subscribe again.',
   },
 ];
 

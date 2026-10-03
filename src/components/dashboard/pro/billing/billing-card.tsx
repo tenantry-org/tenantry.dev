@@ -177,7 +177,7 @@ export function BillingCard({ access, subscriptions }: Readonly<Props>) {
         description={
           confirming?.kind === 'keep'
             ? 'The scheduled cancellation is removed, and the subscription renews as normal.'
-            : 'It ends at the end of the billing period you have paid for. Until then nothing changes. After it, your access to the private package feed ends, so you cannot install new versions of Tenantry Pro; the versions you already have keep working with your licence key. Paddle, our reseller, asks you to confirm on the next page.'
+            : 'It ends at the end of the billing period you have paid for. Until then nothing changes. After it, your access to the private package feed ends, so restores from it fail; the versions you already have keep working with your licence key, so keep copies of the packages you build with. Paddle, our reseller, asks you to confirm on the next page.'
         }
         confirmLabel={confirming?.kind === 'keep' ? 'Keep subscription' : 'Continue to cancel'}
         destructive={confirming?.kind === 'cancel'}

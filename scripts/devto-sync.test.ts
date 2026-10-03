@@ -31,6 +31,7 @@ describe('publishedSources', () => {
     const published = '---\ntitle: A\ndraft: false\n---\n\nBody.\n';
     writeFileSync(join(dir, 'a.md'), published);
     writeFileSync(join(dir, 'b.md'), '---\ntitle: B\ndraft: true\n---\n\nBody.\n');
+    writeFileSync(join(dir, 'c.md'), '---\ntitle: C\ndraft: True # until it is ready\n---\n\nBody.\n');
     writeFileSync(join(dir, 'notes.txt'), 'not a post');
     expect(publishedSources(dir)).toEqual(new Map([['a', sourceHash(published)]]));
   });

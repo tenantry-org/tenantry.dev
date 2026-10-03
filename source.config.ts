@@ -25,7 +25,7 @@ export const blog = defineCollections({
     tags: z.array(z.string().regex(/^[a-z0-9]+$/)).max(4),
     /** The one next step the post ends with. */
     next: z.object({ label: z.string(), href: z.string() }),
-    /** Not published: shown only outside production, and never listed, fed, indexed or copied to dev.to. */
+    /** Not published: has a page and is listed only outside production; never fed, put in the sitemap, indexed or copied to dev.to. */
     draft: z.boolean().default(false),
   }),
 });

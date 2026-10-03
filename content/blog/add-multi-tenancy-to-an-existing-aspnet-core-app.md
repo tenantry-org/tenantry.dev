@@ -8,7 +8,6 @@ tags: [dotnet, aspnetcore, efcore, multitenancy]
 next:
   label: Get started with Tenantry Core
   href: /docs/core/getting-started
-draft: true
 ---
 
 Most applications do not start multi-tenant. They gain a second customer, then a third, and every query gains a

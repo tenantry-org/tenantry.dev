@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Copies the blog's published posts to dev.to, after each production deployment (.github/workflows/devto.yml).
+ * Copies the blog's published posts to dev.to, after each push to master (.github/workflows/devto.yml).
  *
  * The posts come from the production site's /blog/posts.json, so dev.to gets only what the site has published. It
  * waits until the site serves the posts of the commit it runs on: each published post in content/blog, by the hash of
- * its file (a deployment can report success before tenantry.dev serves it). Each post's dev.to article is found by its
+ * its file (production deploys a commit only once its checks pass). Each post's dev.to article is found by its
  * canonical URL, the post's address on the site: one is created, published, when there is none, and updated when its
  * title, description, tags or Markdown differ. Run again, it changes nothing.
  *
@@ -28,7 +28,8 @@ export function publishedSources(dir) {
   for (const file of readdirSync(dir).filter((f) => /\.mdx?$/.test(f))) {
     const text = readFileSync(join(dir, file), 'utf8');
     const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? '';
-    if (/^draft:\s*true\s*$/m.test(frontmatter)) continue;
+    // As YAML reads it: true in any of its spellings, and a comment after it.
+    if (/^draft:\s*(?:true|True|TRUE)\s*(?:#.*)?$/m.test(frontmatter)) continue;
     sources.set(file.replace(/\.mdx?$/, ''), sourceHash(text));
   }
   return sources;
@@ -138,13 +139,13 @@ async function main() {
   const expected = publishedSources(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'content', 'blog'));
 
   let posts = null;
-  for (let attempt = 1; attempt <= 20 && !posts; attempt += 1) {
+  for (let attempt = 1; attempt <= 40 && !posts; attempt += 1) {
     const response = await fetch(`${site}/blog/posts.json`, { cache: 'no-store' });
     posts = response.ok ? servedPosts(await response.json(), expected) : null;
-    if (!posts && attempt < 20) await sleep(30_000);
+    if (!posts && attempt < 40) await sleep(30_000);
   }
   if (!posts)
-    throw new Error(`${site} does not serve this commit's posts after ten minutes; the next deployment retries.`);
+    throw new Error(`${site} does not serve this commit's posts after twenty minutes; the next push retries.`);
 
   const request = devto(apiKey);
   const { creates, updates } = plan(posts, await accountArticles(request), process.env.DEVTO_ORGANIZATION_ID);
