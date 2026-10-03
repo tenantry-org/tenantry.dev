@@ -24,7 +24,7 @@ const PRINCIPLES = [
   {
     icon: ServerCog,
     title: 'HTTP and beyond',
-    text: 'ASP.NET Core middleware and access validation, and the same isolation in workers, console and desktop apps. .NET 8, 9 and 10; Native AOT for the core and ASP.NET Core packages.',
+    text: 'ASP.NET Core middleware and access validation, and the same isolation in workers, console and desktop apps. .NET 10, and .NET 8 and 9 until November 2027; Native AOT for the core and ASP.NET Core packages.',
   },
 ];
 

@@ -117,7 +117,7 @@ const QUESTIONS = [
   {
     question: 'Which versions and databases?',
     answer:
-      '.NET 8, 9 and 10, with the EF Core of each. Provisioning and migrations on SQL Server, PostgreSQL and MySQL; schema per tenant on SQL Server and PostgreSQL.',
+      '.NET 10 with EF Core 10. .NET 8 and 9, with their EF Core, until 10 November 2027, a year after Microsoft’s support ends. Provisioning and migrations on SQL Server, PostgreSQL and MySQL; schema per tenant on SQL Server and PostgreSQL.',
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
