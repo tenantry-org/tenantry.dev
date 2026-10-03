@@ -121,8 +121,13 @@ const QUESTIONS = [
   },
   {
     question: 'What happens when the subscription ends?',
+    // TODO(maintainer): replace the bracketed placeholder with the security back-port policy for lapsed subscribers.
+    // None is written down yet: Core's SECURITY.md fixes only the latest Core minor, and Pro's docs say nothing. A
+    // possible wording: "Security fixes are back-ported to the last Pro minor you received, and to its Core minor,
+    // for 12 months after it is replaced."
     answer:
-      'The versions you have keep working, under the licence: the key keeps validating. Your access to the package feed ends, so keep copies of the packages you build with, in an internal feed or a local package folder, until you subscribe again.',
+      'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.5 on Core 0.5.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. [Security fixes after your subscription ends: policy to be decided.]',
+    link: { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
   },
 ];
 
