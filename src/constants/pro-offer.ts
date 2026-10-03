@@ -19,6 +19,7 @@ export const ProOffer: Offer = {
   description: 'For a database or schema per tenant: provisioning, migrations, and the tenant in jobs and messages.',
   features: [
     'Tenant databases created, migrated and seeded, on SQL Server, PostgreSQL and MySQL',
+    'Offboarding that runs your export steps, then removes the tenant’s database, schema or rows',
     'Migrations across every tenant database or schema, as a deployment step',
     'A schema per tenant (SQL Server, PostgreSQL), and mixed mode',
     'The tenant carried through Hangfire, MassTransit, Quartz.NET and Rebus',

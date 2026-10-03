@@ -33,6 +33,9 @@ const CORE = [
   'A shared database, or a database per tenant with pooled contexts',
   'Tenant resolution, your tenant store and access validation',
   'Worker scopes for background work as a tenant',
+  'Options per tenant, authentication settings included (Tenantry.Options)',
+  'HybridCache entries (Tenantry.Caching) and cached responses kept per tenant',
+  'The current tenant sent with HttpClient and gRPC calls (Tenantry.Http)',
 ];
 
 function Edition({

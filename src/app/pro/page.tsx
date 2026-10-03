@@ -17,8 +17,8 @@ export const metadata: Metadata = {
 // From Tenantry Pro's guides (tenant lifecycle, migrations, Hangfire), shortened; each compiles against Pro 0.5.
 const WORKFLOWS = [
   {
-    title: 'Onboard a tenant',
-    text: 'One call creates the tenant’s database or schema, migrates it and runs your seeders. The result reports each step, and every built-in step is safe to repeat, so you retry a failed onboarding by running it again.',
+    title: 'Onboard and offboard tenants',
+    text: 'One call creates the tenant’s database or schema, migrates it and runs your seeders. The result reports each step, and every built-in step is safe to repeat, so you retry a failed onboarding by running it again. Offboarding runs your export steps, then can drop the tenant’s database or schema, or delete its rows from a shared database.',
     caption: 'TenantOnboarding.cs',
     code: `tenant.UsePro(pro => pro
     .AddSeeder<DefaultDataSeeder>()               // your seeder, last

@@ -27,7 +27,7 @@ const NOTES = [
   },
   {
     title: 'Options and authentication',
-    text: 'Core gives options, named options included, the current tenant’s values, so each authentication scheme can have a tenant’s own settings. app.UseTenantResolution() makes the tenant current before authentication, and tenants on different identity providers each get a scheme of their own. ASP.NET Core Identity works with a user type that implements ITenantEntity, with no base context class.',
+    text: 'Core gives options, named options included, the current tenant’s values, so each authentication scheme can have a tenant’s own settings. app.UseTenantResolution() makes the tenant current before authentication, and tenants on different identity providers each get a scheme of their own. ASP.NET Core Identity works with its own IdentityDbContext and a user type that implements ITenantEntity.',
   },
   {
     title: 'What Tenantry does not do',
