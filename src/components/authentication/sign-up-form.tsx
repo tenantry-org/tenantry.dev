@@ -6,7 +6,12 @@ import { AuthenticationForm } from '@/components/authentication/authentication-f
 import { signup } from '@/app/signup/actions';
 import { useToast } from '@/components/ui/use-toast';
 
-export function SignupForm() {
+interface Props {
+  /** The page the confirmation link continues to, such as the checkout. */
+  next?: string;
+}
+
+export function SignupForm({ next }: Props) {
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,7 +22,7 @@ export function SignupForm() {
   function handleSignup(event: FormEvent) {
     event.preventDefault();
     startTransition(async () => {
-      const result = await signup({ email, password });
+      const result = await signup({ email, password }, next);
       if ('error' in result) toast({ description: result.error, variant: 'destructive' });
       else setSentTo(email);
     });
@@ -39,7 +44,7 @@ export function SignupForm() {
     <form onSubmit={handleSignup} className={'flex flex-col gap-5'}>
       <h1 className={'text-2xl font-semibold tracking-tight'}>Create an account</h1>
       <p className={'text-sm text-muted-foreground'}>
-        Use the email address you buy Tenantry Pro with: your purchase is matched to your account by it.
+        You need an account to buy Tenantry Pro. Your subscription, licence key and GitHub access are managed from it.
       </p>
       <AuthenticationForm
         email={email}

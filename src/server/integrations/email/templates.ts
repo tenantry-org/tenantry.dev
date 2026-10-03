@@ -23,13 +23,12 @@ ${body}
 export function welcomeProEmail(to: string, siteUrl: string): EmailMessage {
   return {
     to,
-    subject: 'Welcome to Tenantry Pro — connect GitHub to get access',
+    subject: 'Welcome to Tenantry Pro: connect GitHub to get access',
     html: layout(
-      `<h1 style="font-size:20px">Welcome to Tenantry Pro 🎉</h1>
-<p>Thanks for subscribing. One step to unlock everything:</p>
-<p><strong>Connect your GitHub account</strong> so we can give you access to the private package feed.</p>
-<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">Open your Pro dashboard</a></p>
-<p>From there you can copy your licence key and the <code>nuget.config</code> to start restoring packages.</p>`,
+      `<h1 style="font-size:20px">Welcome to Tenantry Pro</h1>
+<p>Thanks for subscribing. Log in to Tenantry with this email address and <strong>connect your GitHub account</strong> to get the private package feed.</p>
+<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">Connect GitHub</a></p>
+<p>The same page has your licence key and the <code>nuget.config</code> for restoring packages.</p>`,
     ),
   };
 }

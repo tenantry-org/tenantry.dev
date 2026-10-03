@@ -8,7 +8,8 @@ import { usePaddle } from '@/hooks/use-paddle';
 
 interface Props {
   priceId: string;
-  userEmail?: string;
+  /** The signed-in buyer's email: the checkout is opened with it, and it cannot be changed there. */
+  userEmail: string;
 }
 
 export function CheckoutContents({ priceId, userEmail }: Props) {
@@ -28,7 +29,7 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
         variant: 'one-page',
         displayMode: 'inline',
         theme: 'dark',
-        allowLogout: !userEmail,
+        allowLogout: false,
         frameTarget: 'paddle-checkout-frame',
         frameInitialHeight: 450,
         frameStyle: 'width: 100%; background-color: transparent; border: none',
@@ -46,7 +47,7 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
     opened.current = true;
     // One subscription per purchase: the offer has no seats, so there is no quantity to choose.
     paddle.paddle.Checkout.open({
-      ...(userEmail && { customer: { email: userEmail } }),
+      customer: { email: userEmail },
       items: [{ priceId: priceId, quantity: 1 }],
     });
   }, [paddle, priceId, userEmail]);

@@ -39,6 +39,10 @@ describe('email templates', () => {
     expect(msg.html).toContain(`href="${SITE}/dashboard/pro"`);
   });
 
+  it('welcomeProEmail says which account to log in with: purchases are matched to accounts by email address', () => {
+    expect(welcomeProEmail('cust@example.com', SITE).html).toContain('Log in to Tenantry with this email address');
+  });
+
   it("accessRevokedEmail targets the customer, mentions ending, and links this environment's pricing", () => {
     const msg = accessRevokedEmail('cust@example.com', SITE);
 

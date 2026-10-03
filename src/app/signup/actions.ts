@@ -2,6 +2,7 @@
 
 import { createUserClient } from '@/server/db/user-client';
 import { serverConfig } from '@/server/config/server-config';
+import { sitePath } from '@/lib/site-path';
 
 interface FormData {
   email: string;
@@ -21,14 +22,16 @@ const MESSAGES: Record<string, string> = {
 
 /**
  * Creates the account and sends the confirmation email. The link in it comes back through /auth/callback,
- * which signs the customer in and takes them to their Pro access page. Supabase answers an address that is
+ * which signs the customer in and takes them to `next` when it is a page on the site, such as the checkout, or else
+ * to their Pro access page. Supabase answers an address that is
  * already registered as if it were new (so accounts cannot be discovered), and sends no email for it.
  */
-export async function signup(data: FormData): Promise<SignupResult> {
+export async function signup(data: FormData, next?: string): Promise<SignupResult> {
+  const page = sitePath(next) ?? '/dashboard/pro';
   const supabase = await createUserClient();
   const { error } = await supabase.auth.signUp({
     ...data,
-    options: { emailRedirectTo: `${serverConfig().siteUrl}/auth/callback?next=/dashboard/pro` },
+    options: { emailRedirectTo: `${serverConfig().siteUrl}/auth/callback?next=${encodeURIComponent(page)}` },
   });
 
   if (error) {

@@ -19,7 +19,7 @@ function emailSubjects(): string[] {
   return deps.sendEmail.mock.calls.map(([message]) => message.subject);
 }
 
-const WELCOME = 'Welcome to Tenantry Pro — connect GitHub to get access';
+const WELCOME = 'Welcome to Tenantry Pro: connect GitHub to get access';
 const ENDED = 'Your Tenantry Pro subscription has ended';
 
 const created = subscriptionEvent({
