@@ -126,6 +126,12 @@ const QUESTIONS = [
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
+    question: 'Can I ship Pro inside software my customers install?',
+    answer:
+      'Yes, as part of your application, including one your customers install or host themselves. They may not use Pro on its own.',
+    link: { label: 'EULA', href: '/legal/eula' },
+  },
+  {
     question: 'Does it phone home?',
     answer: 'No. The licence key is checked offline when the application starts, and it does not expire.',
     link: { label: 'Licensing', href: '/docs/pro/licensing' },
