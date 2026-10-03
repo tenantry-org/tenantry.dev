@@ -139,7 +139,7 @@ const QUESTIONS = [
   {
     question: 'What happens when the subscription ends?',
     answer:
-      'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.5 on Core 0.5.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Security fixes are back-ported to every affected version.',
+      'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.5 on Core 0.5.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Security fixes are released as a patch to every affected minor version. Restoring them from the feed needs an active subscription, so after it ends, email support@tenantry.dev for the latest patch of any minor version released while you subscribed.',
     link: { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
   },
   {
