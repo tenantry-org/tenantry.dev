@@ -88,7 +88,13 @@ const QUESTIONS = [
   {
     question: 'What does the subscription include?',
     answer:
-      'Every Tenantry Pro package, from a private NuGet feed, with each release while the subscription lasts, a licence key, and email support. One subscription, billed monthly or yearly: no tiers or seats.',
+      'Every Tenantry Pro package from a private NuGet feed, each release while you subscribe, a licence key and email support. One price for your whole company, billed monthly or yearly.',
+  },
+  {
+    question: 'How does my team install it?',
+    answer:
+      'A subscription gives one GitHub account access to the feed. Connect an account your team controls, such as a machine account, create a read-only token from it, and share the token with your developers and CI as a secret. A classic token reads every package its account can see, which is another reason to use a machine account. Everyone in your company may use Pro.',
+    link: { label: 'Installation', href: '/docs/pro/installation' },
   },
   {
     question: 'How do I install it, locally and in CI?',

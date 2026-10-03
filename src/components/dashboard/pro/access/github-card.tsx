@@ -77,6 +77,10 @@ export function GithubCard({ github, githubOrg, linkError }: Readonly<Props>) {
               Connect GitHub to get added to the <span className={'font-medium text-foreground'}>{githubOrg}</span> org,
               which grants access to the private Tenantry Pro package feed.
             </p>
+            <p className={'text-sm text-muted-foreground'}>
+              One GitHub account per subscription has access. For a team, connect an account you share, such as a
+              machine account, and give its token to your developers and CI.
+            </p>
             <form action={connectGithub}>
               <Button type={'submit'}>
                 <GithubIcon className={'h-4 w-4'} /> Connect GitHub
