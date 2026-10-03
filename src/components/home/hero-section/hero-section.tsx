@@ -5,19 +5,19 @@ import { Button } from '@/components/ui/button';
 import { GithubIcon } from '@/components/icons/github-icon';
 
 // From Tenantry Core's README and getting-started guide.
-const SNIPPET = `builder.Services.AddTenantry<Guid>(tenant =>
-{
-    tenant.ResolveFromHeader("X-Tenant-Id");
-    tenant.UseInMemoryStore(tenants);
-    tenant.AddEfCoreIsolation(options =>
-        options.DetectSpoofedWrites = true);
-});
+const SNIPPET = `builder.Services.AddTenantry<Guid>(tenant => tenant
+    .ResolveFromHeader("X-Tenant-Id")   // where the tenant comes from
+    .UseInMemoryStore(tenants));        // where tenants are defined
 
-// Tenant-owned: EF Core stamps TenantId on insert
-// and scopes every query to the current tenant.
-public class Order : TenantScoped<Guid>
+builder.Services.AddDbContext<AppDbContext>(options => options
+    .UseSqlServer(connectionString)
+    .UseTenantry());                    // how data is isolated
+
+// Tenant-owned: stamped on insert, filtered in every query.
+public class Order : ITenantEntity<Guid>
 {
     public int Id { get; set; }
+    public Guid TenantId { get; private set; }
 }`;
 
 // Highlighted once and cached: highlighting reads the clock (Date.now()), which prerendering refuses otherwise.
