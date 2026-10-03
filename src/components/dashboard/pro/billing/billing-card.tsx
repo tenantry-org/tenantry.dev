@@ -156,7 +156,7 @@ export function BillingCard({ access, subscriptions }: Readonly<Props>) {
         <div className={'flex flex-col gap-2 border-t border-border pt-4'}>
           <p className={'text-sm text-muted-foreground'}>
             Invoices, the company name and tax ID on them, and your payment methods are in the billing portal, run by
-            Paddle, our reseller.
+            Paddle, our merchant of record.
           </p>
           <Button
             className={'w-fit'}
@@ -177,7 +177,7 @@ export function BillingCard({ access, subscriptions }: Readonly<Props>) {
         description={
           confirming?.kind === 'keep'
             ? 'The scheduled cancellation is removed, and the subscription renews as normal.'
-            : 'It ends at the end of the billing period you have paid for. Until then nothing changes. After it, your access to the private package feed ends, so restores from it fail; the versions you already have keep working with your licence key, so keep copies of the packages you build with. Paddle, our reseller, asks you to confirm on the next page.'
+            : 'Your subscription runs to the end of the period you have paid for. After that, restores from the private package feed fail, but the versions you have keep working with your licence key, so keep copies of them. Paddle asks you to confirm on the next page.'
         }
         confirmLabel={confirming?.kind === 'keep' ? 'Keep subscription' : 'Continue to cancel'}
         destructive={confirming?.kind === 'cancel'}
