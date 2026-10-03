@@ -35,8 +35,8 @@ It works for a handful of tenants, and then:
 - **One failure stops the rest.** A tenant whose database is unreachable, or whose data breaks a migration, throws,
   and the application fails to start, with the tenants before it on the new schema and those after it on the old one.
   Catching the exception keeps the loop going, but then something has to record which databases failed and why.
-- **It runs on every instance.** At startup, each replica migrates every tenant, and startup time grows with the
-  number of tenants times the number of replicas.
+- **It runs on every instance.** At startup, each replica migrates every tenant, so each one's startup grows with the
+  number of tenants, and the load on your databases with tenants times replicas.
 - **It takes as long as all the databases together.** Migrating them one after another is slow once there are
   hundreds; migrating them all at once overwhelms the server.
 - **It cannot tell you where things stand** without migrating: which databases are behind, and by which migrations.
