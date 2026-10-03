@@ -6,6 +6,7 @@ import { Footer } from '@/components/home/footer/footer';
 import { Button } from '@/components/ui/button';
 import { CodeFigure } from '@/components/shared/code-figure';
 import { TrackedLink } from '@/components/shared/tracked-link';
+import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
 
 export const metadata: Metadata = {
   title: 'Tenantry Pro — a database or schema per tenant, without writing the tooling',
@@ -83,11 +84,23 @@ const ALSO = [
   },
 ];
 
+// What a buyer can check for themselves.
+const PROOF = [
+  {
+    text: 'Core’s isolation tests run on every build against SQL Server, PostgreSQL, MySQL and SQLite',
+    href: '/docs/core/compatibility#databases',
+  },
+  {
+    text: '18 runnable samples: 6 for Core, 12 for Pro',
+    href: 'https://github.com/tenantry-org/tenantry-pro-docs/tree/master/samples',
+  },
+  { text: 'Core is Apache-2.0, on GitHub', href: 'https://github.com/tenantry-org/tenantry-core' },
+];
+
 const QUESTIONS = [
   {
     question: 'What does the subscription include?',
-    answer:
-      'Every Tenantry Pro package from a private NuGet feed, each release while you subscribe, a licence key and email support. One price for your whole company, billed monthly or yearly.',
+    answer: `Every Tenantry Pro package from a private NuGet feed, each release while you subscribe, a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. One price for your whole company, billed monthly or yearly.`,
   },
   {
     question: 'How does my team install it?',
@@ -128,6 +141,12 @@ const QUESTIONS = [
       'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.5 on Core 0.5.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. [Security fixes after your subscription ends: policy to be decided.]',
     link: { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
   },
+  {
+    question: 'What if Tenantry stops?',
+    answer:
+      'Core stays Apache-2.0 on GitHub, and the Pro versions you have stay licensed and keep working, as when a subscription ends.',
+    link: { label: 'EULA', href: '/legal/eula' },
+  },
 ];
 
 export default function ProPage() {
@@ -164,6 +183,22 @@ export default function ProPage() {
               </span>
             </p>
           </div>
+        </section>
+
+        <section className={'border-b border-border/70 bg-surface'}>
+          <ul
+            className={
+              'mx-auto flex max-w-6xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground md:flex-row md:gap-8 md:px-8'
+            }
+          >
+            {PROOF.map((item) => (
+              <li key={item.text}>
+                <Link href={item.href} className={'hover:text-foreground hover:underline'}>
+                  {item.text}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
 
         {WORKFLOWS.map((workflow, index) => (

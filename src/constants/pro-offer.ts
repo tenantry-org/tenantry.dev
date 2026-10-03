@@ -7,6 +7,12 @@ export interface Offer {
 }
 
 /**
+ * How soon a support email is answered, as the site promises it.
+ * TODO(maintainer): replace the placeholder with the real target, such as "one UK business day".
+ */
+export const SUPPORT_REPLY_WITHIN = '[SUPPORT RESPONSE TIME]';
+
+/**
  * The single Tenantry Pro offer. Tenantry Core is free and open source; Pro is one subscription,
  * billed monthly or yearly, with no tiers or seats. Each environment has its own Paddle prices for it, in the
  * public configuration (src/lib/public-config.ts).
@@ -22,7 +28,7 @@ export const ProOffer: Offer = {
     'Hangfire, MassTransit, Quartz & Rebus integrations',
     'Audit logging, health checks & OpenTelemetry metrics',
     'Private NuGet package feed',
-    'Email support',
+    `Email support, with a reply within ${SUPPORT_REPLY_WITHIN}`,
   ],
 };
 
