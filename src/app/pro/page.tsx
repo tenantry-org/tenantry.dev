@@ -6,20 +6,19 @@ import { Footer } from '@/components/home/footer/footer';
 import { Button } from '@/components/ui/button';
 import { CodeFigure } from '@/components/shared/code-figure';
 import { TrackedLink } from '@/components/shared/tracked-link';
-import { ProOffer } from '@/constants/pro-offer';
+import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
 
 export const metadata: Metadata = {
-  title: 'Tenantry Pro — provisioning, tenant migrations and tenant-aware operations',
-  description:
-    'Tenantry Pro adds tenant provisioning, EF Core migrations across every tenant database or schema, schema per tenant, the tenant in Hangfire, MassTransit, Quartz.NET and Rebus, audit logging, health checks and metrics.',
+  title: 'Tenantry Pro — a database or schema per tenant, without writing the tooling',
+  description: `Tenantry Pro onboards a tenant in one call, migrates every tenant database or schema as a deployment step, and keeps the tenant in Hangfire, Quartz.NET, MassTransit and Rebus work. One price for your whole company.`,
   alternates: { canonical: '/pro' },
 };
 
 // From Tenantry Pro's guides (tenant lifecycle, migrations, Hangfire), shortened; each compiles against Pro 0.5.
 const WORKFLOWS = [
   {
-    title: 'Onboard a tenant',
-    text: 'One call creates the tenant’s database or schema, applies your migrations and runs your seeders, in order. The result reports each step: succeeded, failed, skipped or not run. Every built-in step is safe to repeat, so a failed onboarding is retried by running it again.',
+    title: 'Onboard and offboard tenants',
+    text: 'One call creates the tenant’s database or schema, migrates it and runs your seeders. The result reports each step, and every built-in step is safe to repeat, so you retry a failed onboarding by running it again. Offboarding runs your export steps, then can drop the tenant’s database or schema, or delete its rows from a shared database.',
     caption: 'TenantOnboarding.cs',
     code: `tenant.UsePro(pro => pro
     .AddSeeder<DefaultDataSeeder>()               // your seeder, last
@@ -33,7 +32,7 @@ if (result.Succeeded)
   },
   {
     title: 'Keep every tenant database migrated',
-    text: 'Run your application with migrate-tenants as a deployment step: it applies the pending EF Core migrations to every tenant’s database or schema, one at a time or several at once, each once however many tenants share it. One database’s failure does not stop the others; each is logged, and the step fails so the release waits. The status is readable without migrating.',
+    text: 'Run migrate-tenants as a deployment step. It applies pending migrations to every tenant database or schema. One failure doesn’t stop the rest, and the step exits non-zero so the release waits. You can also read where each database stands without migrating.',
     caption: 'Program.cs',
     code: `await using var app = builder.Build();
 
@@ -47,7 +46,7 @@ return 0;`,
   },
   {
     title: 'Run background work as the tenant',
-    text: 'A Hangfire job, a Quartz.NET job, or a MassTransit or Rebus message carries the tenant it was created for, and runs as that tenant, with its DbContext isolated as in a request. Recurring work can run once for each tenant. A job whose tenant no longer exists is rejected rather than run as nobody.',
+    text: 'Hangfire and Quartz.NET jobs and MassTransit and Rebus messages run as the tenant they were created for, with the DbContext isolated as in a request. Recurring work can run once per tenant. By default, a job whose tenant no longer exists is rejected.',
     caption: 'Program.cs',
     code: `tenant.UsePro(pro => pro.AddHangfirePropagation());
 
@@ -84,29 +83,58 @@ const ALSO = [
   },
 ];
 
+// What a buyer can check for themselves.
+const PROOF = [
+  {
+    text: 'Core’s isolation tests run on every build against SQL Server, PostgreSQL, MySQL and SQLite',
+    href: '/docs/core/compatibility#databases',
+  },
+  {
+    text: '18 runnable samples: 6 for Core, 12 for Pro',
+    href: 'https://github.com/tenantry-org/tenantry-pro-docs/tree/master/samples',
+  },
+  { text: 'Core is Apache-2.0, on GitHub', href: 'https://github.com/tenantry-org/tenantry-core' },
+];
+
 const QUESTIONS = [
   {
     question: 'What does the subscription include?',
+    answer: `Every Tenantry Pro package from a private NuGet feed, each release while you subscribe, a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. One price for your whole company, billed monthly or yearly.`,
+  },
+  {
+    question: 'How does my team install it?',
     answer:
-      'Every Tenantry Pro package, from a private NuGet feed, with each release while the subscription lasts, a licence key, and email support. One subscription, billed monthly or yearly: no tiers or seats.',
+      'A subscription gives one GitHub account access to the feed. Connect an account your team controls, such as a machine account, create a read-only token from it, and share the token with your developers and CI as a secret. A classic token reads every package its account can see, which is another reason to use a machine account. Everyone in your company may use Pro.',
+    link: { label: 'Installation', href: '/docs/pro/installation' },
   },
   {
     question: 'How do I install it, locally and in CI?',
     answer:
-      'Connect your GitHub account on your Pro access page, then add the feed to a nuget.config with a read-only GitHub token. In CI the token is a secret, and so is the licence key; the installation guide has the steps for GitHub Actions and Docker builds.',
+      'Connect GitHub on your Pro access page, then add the feed to your nuget.config with a read-only token. The guide covers CI and Docker builds.',
     link: { label: 'Installation', href: '/docs/pro/installation' },
+  },
+  {
+    question: 'Will the package feed change?',
+    answer:
+      'Yes, before Tenantry Pro goes on sale. The packages are on GitHub Packages today, the feed the subscription system has been built and tested with, so the docs describe it. A private Tenantry feed will replace it, and after a subscription ends it will still let you restore the versions released while you subscribed.',
   },
   {
     question: 'Which versions and databases?',
     answer:
-      '.NET 8, 9 and 10, with the EF Core of each. Provisioning and migrations on SQL Server, PostgreSQL and MySQL; schema per tenant on SQL Server and PostgreSQL.',
+      '.NET 10 with EF Core 10. .NET 8 and 9, with their EF Core, until 10 November 2027, a year after Microsoft’s support ends. Provisioning and migrations on SQL Server, PostgreSQL and MySQL; schema per tenant on SQL Server and PostgreSQL.',
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
-    question: 'What does the beta mean?',
+    question: 'Is it production-ready?',
     answer:
-      "Tenantry Core and Pro are in beta until 1.0, which comes no earlier than 10 November 2027. Releases are numbered 0.x, and a minor release (0.5 to 0.6) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.",
+      "Tenantry Core and Pro are in beta until 1.0, which comes no earlier than 10 November 2027. The isolation is tested on every build against SQL Server, PostgreSQL, MySQL and SQLite. Releases are numbered 0.x, and a minor release (0.6 to 0.7) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.",
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
+  },
+  {
+    question: 'Can I ship Pro inside software my customers install?',
+    answer:
+      'Yes, as part of your application, including one your customers install or host themselves. They may not use Pro on its own.',
+    link: { label: 'EULA', href: '/legal/eula' },
   },
   {
     question: 'Does it phone home?',
@@ -116,7 +144,14 @@ const QUESTIONS = [
   {
     question: 'What happens when the subscription ends?',
     answer:
-      'The versions you have keep working, under the licence: the key keeps validating. Your access to the package feed ends, so keep copies of the packages you build with, in an internal feed or a local package folder, until you subscribe again.',
+      'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.6 on Core 0.6.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Security fixes are released as a patch to every affected minor version. Restoring them from today’s GitHub feed needs an active subscription, so after it ends, email support@tenantry.dev for the latest patch of any minor version released while you subscribed. The private feed that replaces it will let you restore those yourself.',
+    link: { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
+  },
+  {
+    question: 'What if Tenantry stops?',
+    answer:
+      'Core stays Apache-2.0 on GitHub, and the Pro versions you have stay licensed and keep working, as when a subscription ends.',
+    link: { label: 'EULA', href: '/legal/eula' },
   },
 ];
 
@@ -127,22 +162,49 @@ export default function ProPage() {
       <main>
         <section className={'border-b border-border/70'}>
           <div className={'mx-auto max-w-6xl px-4 pb-16 pt-16 md:px-8 md:pt-24'}>
-            <h1 className={'text-4xl font-bold tracking-tight text-balance sm:text-5xl'}>Tenantry Pro</h1>
+            <p className={'text-sm font-medium text-link'}>Tenantry Pro</p>
+            <h1 className={'mt-3 max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl'}>
+              A database or schema per tenant, without writing the tooling
+            </h1>
             <p className={'mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground'}>
-              {ProOffer.description} Pro builds on the open-source Tenantry Core, which stays free and covers resolving
-              tenants and isolating their data on its own.
+              Onboard a tenant in one call, migrate every tenant database as a deployment step, and keep the tenant in
+              your Hangfire, Quartz.NET, MassTransit and Rebus work. One price covers your whole company. Pro builds on
+              the free, open-source Tenantry Core.
             </p>
             <div className={'mt-8 flex flex-wrap items-center gap-3'}>
               <Button asChild size={'lg'}>
                 <TrackedLink href={'/#pricing'} event={'See pricing'} data={{ from: 'pro' }}>
-                  See pricing <ArrowRight className={'h-4 w-4'} />
+                  Subscribe to Pro <ArrowRight className={'h-4 w-4'} />
                 </TrackedLink>
               </Button>
               <Button asChild size={'lg'} variant={'outline'}>
                 <Link href={'/docs/pro'}>Pro docs</Link>
               </Button>
             </div>
+            <p className={'mt-10 max-w-2xl rounded-xl border border-border bg-card p-5 text-sm leading-relaxed'}>
+              <span className={'font-semibold'}>Do I need Pro?</span>{' '}
+              <span className={'text-muted-foreground'}>
+                With one shared database, Core may be all you need: it isolates tenant data and runs background work as
+                a tenant with worker scopes. Pro adds audit logging and the tenant carried into your jobs and messages.
+              </span>
+            </p>
           </div>
+        </section>
+
+        <section className={'border-b border-border/70 bg-surface'}>
+          <ul
+            className={
+              'mx-auto flex max-w-6xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground md:flex-row md:gap-8 md:px-8'
+            }
+          >
+            {PROOF.map((item) => (
+              <li key={item.text}>
+                <Link href={item.href} className={'hover:text-foreground hover:underline'}>
+                  {item.text}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
 
         {WORKFLOWS.map((workflow, index) => (
@@ -211,7 +273,7 @@ export default function ProPage() {
             <div className={'mt-12'}>
               <Button asChild size={'lg'}>
                 <TrackedLink href={'/#pricing'} event={'See pricing'} data={{ from: 'pro, questions' }}>
-                  See pricing <ArrowRight className={'h-4 w-4'} />
+                  Subscribe to Pro <ArrowRight className={'h-4 w-4'} />
                 </TrackedLink>
               </Button>
             </div>

@@ -4,6 +4,7 @@ import { TrackedLink } from '@/components/shared/tracked-link';
 import { highlight } from 'fumadocs-core/highlight';
 import { Button } from '@/components/ui/button';
 import { GithubIcon } from '@/components/icons/github-icon';
+import { latestDocsVersion } from '@/lib/docs-versions';
 
 // From Tenantry Core's README and getting-started guide.
 const SNIPPET = `builder.Services.AddTenantry<Guid>(tenant => tenant
@@ -52,32 +53,27 @@ export async function HeroSection() {
               'inline-flex items-center gap-2 rounded-full border border-accent-foreground/15 bg-accent px-3 py-1 text-xs font-medium text-accent-foreground'
             }
           >
-            Modern multi-tenancy for .NET
+            Beta · {latestDocsVersion.version} · 1.0 not before November 2027
           </span>
           <h1
             className={
               'mt-6 text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-[3.25rem] lg:leading-[1.08]'
             }
           >
-            Multi-tenancy for .NET, <span className={'text-link'}>built around your application.</span>
+            Stop one missed WHERE clause <span className={'text-link'}>from leaking a customer’s data.</span>
           </h1>
           <p className={'mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground'}>
-            Resolve tenants and isolate their data with open-source Tenantry Core, keeping your DbContext, your tenant
-            registry and your key type. Add Tenantry Pro to provision tenant databases, migrate them all, and carry the
-            tenant through your jobs and messages.
+            Tenantry adds tenant isolation to your ASP.NET Core and EF Core app with one call on the DbContext you
+            already have. No base class, no new tenants table. With no tenant, queries return nothing, and a forged
+            tenant key changes no rows.
           </p>
           <div className={'mt-8 flex flex-wrap items-center gap-3'}>
             <Button asChild size={'lg'}>
               <TrackedLink href={'/docs/core/getting-started'} event={'Get started with Core'} data={{ from: 'home' }}>
-                Get started with Core <ArrowRight className={'h-4 w-4'} />
+                Get started with Core, free <ArrowRight className={'h-4 w-4'} />
               </TrackedLink>
             </Button>
             <Button asChild size={'lg'} variant={'outline'}>
-              <TrackedLink href={'/pro'} event={'Explore Pro'} data={{ from: 'home' }}>
-                Explore Tenantry Pro
-              </TrackedLink>
-            </Button>
-            <Button asChild size={'lg'} variant={'ghost'}>
               <Link
                 href={'https://github.com/tenantry-org/tenantry-core'}
                 target={'_blank'}

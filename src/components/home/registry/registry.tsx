@@ -31,10 +31,8 @@ export function Registry() {
         <div>
           <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>Bring your own tenant registry</h2>
           <p className={'mt-4 text-lg leading-relaxed text-muted-foreground'}>
-            Tenantry reads your tenants from where your application already keeps them: a table, configuration or
-            another service. A store has two methods to implement, finding a tenant by id and listing them all, and a
-            third to override when tenants are found by a slug or a custom domain. Creating and changing tenants stays
-            in your application.
+            Tenantry reads tenants from where you already keep them: a table, configuration or another service. A store
+            finds a tenant by id and lists them all. Creating and changing tenants stays in your application.
           </p>
           <Link
             href={'/docs/core/tenant-stores'}

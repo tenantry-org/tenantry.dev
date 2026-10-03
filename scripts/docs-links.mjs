@@ -1,3 +1,4 @@
+import GithubSlugger from 'github-slugger';
 import { posix } from 'path';
 
 /**
@@ -79,4 +80,59 @@ export function linkApiTypes(markdown, types) {
       });
     })
     .join('\n');
+}
+
+/**
+ * The ids of a page's headings, as the site gives them: fumadocs' remark-heading takes a `[#id]` at the end of the
+ * heading, or else slugs the heading's text with github-slugger, numbering repeats. Headings in code blocks are skipped.
+ *
+ * @param {string} markdown
+ */
+export function headingIds(markdown) {
+  const slugger = new GithubSlugger();
+  const ids = new Set();
+  let inFence = false;
+
+  for (const line of markdown.split('\n')) {
+    if (line.trimStart().startsWith('```')) inFence = !inFence;
+    const heading = !inFence && /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
+    if (!heading) continue;
+
+    const custom = /\s*\[#([^\]]+)\]\s*$/.exec(heading[1]);
+    if (custom) {
+      ids.add(custom[1]);
+      continue;
+    }
+    const text = heading[1]
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // a link or image: its text
+      .replace(/<[^>]+>/g, '') // HTML tags
+      .replace(/`([^`]*)`/g, '$1') // code: its text
+      .replace(/(\*\*|\*)(.+?)\1/g, '$2'); // emphasis
+    ids.add(slugger.slug(text));
+  }
+  return ids;
+}
+
+/**
+ * Links into the synced docs whose page or heading does not exist, as `<page>: <link>`. The pages are the ones the
+ * sync wrote, by site path (`/docs/core/tenant-stores`, a folder's index at the folder's path); links into `base` and
+ * in-page anchors are checked, other site paths and URLs are not.
+ *
+ * @param {Map<string, string>} pages site path → the page's markdown
+ * @param {string} base the path the docs version is served under
+ */
+export function brokenDocsLinks(pages, base) {
+  const ids = new Map([...pages].map(([path, markdown]) => [path, headingIds(markdown)]));
+  const broken = [];
+
+  for (const [from, markdown] of pages) {
+    for (const [, target] of markdown.matchAll(/\]\(([^)\s]+)\)/g)) {
+      const [path, anchor] = target.split('#');
+      const page = path === '' ? from : path.replace(/\/$/, '');
+      if (page !== base && !page.startsWith(`${base}/`)) continue;
+      if (!ids.has(page) || (anchor && !ids.get(page).has(decodeURIComponent(anchor))))
+        broken.push(`${from}: ${target}`);
+    }
+  }
+  return broken;
 }

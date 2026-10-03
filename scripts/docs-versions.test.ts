@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lineOf, resolveVersions, versionProblems } from './docs-versions.mjs';
+import { lineOf, publishedTags, resolveVersions, versionProblems } from './docs-versions.mjs';
 
 const v04 = { version: '0.4', core: 'v0.4.0', pro: 'v0.4.0' };
 
@@ -28,6 +28,15 @@ describe('docs versions', () => {
     expect(versionProblems([v04, v04])).toEqual(['0.4 is listed twice.', '0.4 is out of order (newest first).']);
     expect(versionProblems([{ version: '1.0', core: 'v1.0.0', pro: 'v1.0.0' }])).toEqual([
       '"1.0" is not a release line (0.MINOR, or MAJOR from 1).',
+    ]);
+  });
+
+  it('counts a tag only once its version is published, so a pushed tag whose release is pending or failed is not', () => {
+    const tags = ['v0.4.0', 'v0.5.0', 'v0.5.1', 'v0.6.0-RC.1', 'not-a-release'];
+
+    expect(publishedTags(tags, ['0.4.0', '0.5.0', '0.6.0-rc.1'])).toEqual(['v0.4.0', 'v0.5.0', 'v0.6.0-RC.1']);
+    expect(resolveVersions({ core: publishedTags(tags, ['0.4.0', '0.5.0']), pro: ['v0.5.0', 'v0.5.1'] })).toEqual([
+      { version: '0.5', core: 'v0.5.0', pro: 'v0.5.1' },
     ]);
   });
 

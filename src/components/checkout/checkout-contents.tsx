@@ -8,7 +8,8 @@ import { usePaddle } from '@/hooks/use-paddle';
 
 interface Props {
   priceId: string;
-  userEmail?: string;
+  /** The signed-in buyer's email: the checkout is opened with it, and it cannot be changed there. */
+  userEmail: string;
 }
 
 export function CheckoutContents({ priceId, userEmail }: Props) {
@@ -28,7 +29,7 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
         variant: 'one-page',
         displayMode: 'inline',
         theme: 'dark',
-        allowLogout: !userEmail,
+        allowLogout: false,
         frameTarget: 'paddle-checkout-frame',
         frameInitialHeight: 450,
         frameStyle: 'width: 100%; background-color: transparent; border: none',
@@ -46,7 +47,7 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
     opened.current = true;
     // One subscription per purchase: the offer has no seats, so there is no quantity to choose.
     paddle.paddle.Checkout.open({
-      ...(userEmail && { customer: { email: userEmail } }),
+      customer: { email: userEmail },
       items: [{ priceId: priceId, quantity: 1 }],
     });
   }, [paddle, priceId, userEmail]);
@@ -56,6 +57,9 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
       <div className={'flex flex-col gap-10 md:flex-row md:gap-16'}>
         <div className={'w-full md:w-[360px] md:shrink-0'}>
           <PriceSection checkoutData={checkoutData} />
+          <p className={'mt-6 text-sm text-muted-foreground'}>
+            Tenantry is in beta until 1.0, so a minor release can change the API. Each release says how to update.
+          </p>
         </div>
         <div className={'min-w-0 flex-1'}>
           <h2 className={'mb-6 text-base font-semibold'}>Payment details</h2>

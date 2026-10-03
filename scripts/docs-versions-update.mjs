@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
  * Keeps docs-versions.json in step with the releases: reads the release tags of Core's repository and of the public
- * tenantry-pro-docs repository (tagged by each Pro release's publish-docs job) and writes the versions they give
- * (resolveVersions in docs-versions.mjs). The docs-versions workflow runs it on a schedule and commits any change,
- * which redeploys the site; nobody pins docs by hand.
+ * tenantry-pro-docs repository (tagged by each Pro release's publish-docs job, after its packages are published) and
+ * writes the versions they give (resolveVersions in docs-versions.mjs). A Core tag counts only once NuGet lists its
+ * version: Core is tagged before its release runs, which can wait for approval, fail or be refused. The docs-versions
+ * workflow runs it on a schedule and commits any change, which redeploys the site; nobody pins docs by hand.
  *
- *   pnpm docs:update   write the versions the tags give
- *   pnpm docs:check    fail unless docs-versions.json matches the tags
+ *   pnpm docs:update   write the versions the releases give
+ *   pnpm docs:check    fail unless docs-versions.json matches the releases
  */
 import { execFileSync } from 'child_process';
 import { isDeepStrictEqual } from 'util';
 import { REPOSITORIES } from './docs-sources.mjs';
-import { GROUPS, readVersions, resolveVersions, writeVersions } from './docs-versions.mjs';
+import { GROUPS, publishedTags, readVersions, resolveVersions, writeVersions } from './docs-versions.mjs';
 
 function tags(group) {
   const options = { encoding: 'utf8' };
@@ -22,7 +23,21 @@ function tags(group) {
     .filter(Boolean);
 }
 
-const expected = resolveVersions(Object.fromEntries(GROUPS.map((group) => [group, tags(group)])));
+// Where a group's published versions are listed, for a group whose tags come before its release.
+const PUBLISHED = { core: 'https://api.nuget.org/v3-flatcontainer/tenantry.core/index.json' };
+
+// The group's tags whose release is published. Throws when the list cannot be read, so nothing unconfirmed is published.
+async function releasedTags(group) {
+  if (!PUBLISHED[group]) return tags(group);
+  const response = await fetch(PUBLISHED[group]);
+  if (!response.ok) throw new Error(`docs-versions: ${PUBLISHED[group]} answered ${response.status}.`);
+  const { versions } = await response.json();
+  return publishedTags(tags(group), versions);
+}
+
+const expected = resolveVersions(
+  Object.fromEntries(await Promise.all(GROUPS.map(async (group) => [group, await releasedTags(group)]))),
+);
 if (expected.length === 0) {
   console.error('docs-versions: no release line has both a Core and a Pro release.');
   process.exit(1);

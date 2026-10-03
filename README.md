@@ -23,6 +23,11 @@ customer ─▶ /dashboard/pro ─▶ Connect GitHub ─▶ github_links + team 
 cron ─▶ /api/reconcile ─▶ reconcile access vs entitlements
 ```
 
+The package feed is GitHub Packages, reached through membership of a team in the customers' GitHub org. The
+subscription system has been built and tested with it, and the site and Pro's docs describe it. A private Tenantry
+feed replaces it before subscriptions go on sale, so that a lapsed subscriber can still restore the versions released
+while they subscribed.
+
 Key code is in `src/server`, in layers whose imports point only down this list (ESLint enforces it):
 
 - `billing/` — the rules and services: who is entitled, and until when (`access-policy.ts`); keeping a customer's
@@ -94,13 +99,16 @@ build, local ones included, shows what the released packages do. A release line 
 1.0 (`0.4`, `0.5`), each major from 1.0 (`1`). Each group ends with a Changelog page: the line's releases from the
 tag's `CHANGELOG.md`, with a link to the rest (`scripts/docs-changelog.mjs`); tenantry-pro-docs has Pro's from 0.5.0.
 Each sync fetches the listed tags again, so moving a tenantry-pro-docs tag to corrected docs publishes them at the next
-deployment.
+deployment. A release build fails when a link in the docs reaches no page or heading the sync wrote, or is
+still relative after rewriting (`scripts/docs-links.mjs`).
 
 - **Releases publish their docs by themselves.** The versions are worked out from the release tags: a line is
   listed once both Core and Pro have a stable release in it, with the newest release of each. The `docs-versions`
   workflow checks hourly (or on demand), commits any change to master and staging, which redeploys the site, and runs
   the test and audit workflows on the commit, since its own pushes start none.
-  `pnpm docs:update` does the same locally; `pnpm docs:check` fails unless the file matches the tags.
+  A Core tag counts once NuGet lists its version, since Core is tagged before its release runs; tenantry-pro-docs is
+  tagged after Pro's packages are published. `pnpm docs:update` does the same locally; `pnpm docs:check` fails unless
+  the file matches the releases.
 - **The Pro access page's install snippets follow a Pro release line**, `PRO_RELEASE_LINE` in
   `src/lib/install-snippets.ts`. Once that line's docs are published, the tests compare the snippets with its
   installation guide, and they fail when a newer line is published. So the docs of a Pro release that starts a line

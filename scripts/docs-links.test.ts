@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
+import { brokenDocsLinks, headingIds, linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
 
 const core = { repository: 'https://github.com/tenantry-org/tenantry-core', ref: 'abc123' };
 const pro = { repository: 'https://github.com/tenantry-org/tenantry-pro-docs', ref: 'v0.1.0' };
@@ -135,5 +135,49 @@ describe('linkApiTypes', () => {
       '[`ITenantScope`](elsewhere.md) and `IServiceProvider`',
     ].join('\n');
     expect(linkApiTypes(markdown, types)).toBe(markdown);
+  });
+});
+
+describe('headingIds', () => {
+  it('gives each heading the id the site gives it', () => {
+    const ids = headingIds(
+      [
+        '# Licensing',
+        '## When the key is checked',
+        '## `OnMissingTenant` — what happens when a write runs with no tenant',
+        '## [Installation](/docs/pro/installation) and **CI**',
+        '## Custom heading [#custom-id]',
+        '## When the key is checked',
+        '```md',
+        '## Not a heading',
+        '```',
+      ].join('\n'),
+    );
+
+    expect([...ids]).toEqual([
+      'licensing',
+      'when-the-key-is-checked',
+      'onmissingtenant--what-happens-when-a-write-runs-with-no-tenant',
+      'installation-and-ci',
+      'custom-id',
+      'when-the-key-is-checked-1',
+    ]);
+  });
+});
+
+describe('brokenDocsLinks', () => {
+  const pages = new Map([
+    ['/docs/core', '# Tenantry Core\n\n[Stores](/docs/core/tenant-stores#caching) [Pro](/docs/pro)'],
+    ['/docs/core/tenant-stores', '# Tenant stores\n\n## Caching\n\n[Up](#tenant-stores) [Missing](#nothing)'],
+    ['/docs/pro', '# Tenantry Pro\n\n[Gone](/docs/core/renamed) [Heading](/docs/core/tenant-stores#renamed)'],
+    ['/docs/v0.4/core', '# Tenantry Core\n\n[Pricing](/#pricing) [GitHub](https://github.com/tenantry-org)'],
+  ]);
+
+  it('reports links to pages and headings the sync did not write, and nothing else', () => {
+    expect(brokenDocsLinks(pages, '/docs')).toEqual([
+      '/docs/core/tenant-stores: #nothing',
+      '/docs/pro: /docs/core/renamed',
+      '/docs/pro: /docs/core/tenant-stores#renamed',
+    ]);
   });
 });

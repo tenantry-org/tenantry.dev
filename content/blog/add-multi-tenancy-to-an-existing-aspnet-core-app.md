@@ -55,9 +55,8 @@ dotnet add package Tenantry.EfCore
 
 ## 1. The organisations table is the tenant registry
 
-Tenantry has no tenants table of its own. It reads tenants from a store, which you write over what you already have:
-it finds a tenant by id and lists them all. A third method maps what a request names to a tenant; its default reads
-the name as an id, so override it when requests use a slug or a domain instead.
+Tenantry has no tenants table of its own. It reads tenants from a store you write over what you already have, which
+finds a tenant by id and lists them all. Override the third method when requests name a tenant by a slug or a domain.
 
 ```csharp
 public sealed record OrganisationTenant(Guid TenantId, string Name, bool IsActive) : ITenantDescriptor<Guid>;
@@ -84,10 +83,9 @@ public sealed class OrganisationTenantStore(AppDbContext db) : ITenantStore<Guid
 }
 ```
 
-The store only reads: creating, renaming and deactivating organisations stays in your code. It lists inactive
-organisations too, because tools that work through every tenant, such as migrations, find them here; whether one may
-be used is decided in the next step. The store is scoped, so it can use your `DbContext`, and `Organisation` is not
-tenant-owned, so these queries are not filtered.
+The store only reads: creating and changing organisations stays in your code. It lists inactive organisations too,
+because tools that work through every tenant, such as migrations, need them. The next step decides whether one may be
+used. `Organisation` is not tenant-owned, so the store's queries are not filtered.
 
 ## 2. Resolve the tenant, and check that the caller may use it
 
@@ -107,15 +105,16 @@ app.UseTenantry();
 app.UseAuthorization();
 ```
 
-The subdomain says which organisation a request is for, but anyone can type a subdomain. The access validators run
-after the organisation is found and before it becomes current: the signed-in user's `org_id` claims must include its
-id, and it must be active. A request for an organisation the user is not in gets `403`, the same answer as for one that
-does not exist, so a user cannot find out which others do. `RequireTenantByDefault` answers `400` to a request with no
-organisation, unless the endpoint opts out with `AllowMissingTenant()`. `UseTenantry()` goes after
-`UseAuthentication()` because the validators read the user.
+Anyone can type a subdomain, so the access validators check the caller before the organisation becomes current:
+
+- the user's `org_id` claims must include the organisation's id, and it must be active;
+- otherwise the answer is `403`, the same as for an organisation that does not exist, so users cannot find out which
+  others do;
+- a request with no organisation gets `400`, unless its endpoint calls `AllowMissingTenant()`;
+- `UseTenantry()` goes after `UseAuthentication()`, because the validators read the user.
 
 With `CacheTenants`, a deactivated organisation is served from the cache until its entry expires; call
-`ITenantStoreCache<Guid>.Invalidate` when you deactivate one.
+`ITenantInvalidator<Guid>.InvalidateAsync` when you deactivate one.
 
 ## 3. Mark the tenant-owned entities
 

@@ -32,7 +32,7 @@ export default function RefundsPage() {
       <p>
         When a full refund is approved, or a payment is charged back, your subscription is cancelled immediately and
         your access ends: you are removed from the Tenantry GitHub organisation, which gives access to the private
-        package feed, and your licence to use Tenantry Pro ends (see the <a href="/legal/eula">EULA</a>, section 5). A
+        package feed, and your licence to use Tenantry Pro ends (see the <a href="/legal/eula">EULA</a>, section 6). A
         partial refund does not change your subscription or access.
       </p>
 

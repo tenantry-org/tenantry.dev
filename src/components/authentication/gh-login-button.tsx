@@ -8,8 +8,10 @@ import { useTransition } from 'react';
 
 interface Props {
   label: string;
+  /** The page to continue to after signing in, such as the checkout. */
+  next?: string;
 }
-export function GhLoginButton({ label }: Props) {
+export function GhLoginButton({ label, next }: Props) {
   // Pending until GitHub's page loads: the action redirects there.
   const [pending, startTransition] = useTransition();
 
@@ -21,7 +23,7 @@ export function GhLoginButton({ label }: Props) {
         <Separator className={'flex-1'} />
       </div>
       <Button
-        onClick={() => startTransition(() => signInWithGithub())}
+        onClick={() => startTransition(() => signInWithGithub(next))}
         variant={'outline'}
         className={'w-full'}
         disabled={pending}

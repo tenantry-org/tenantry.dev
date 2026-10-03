@@ -29,7 +29,7 @@ import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { changelogPage } from './docs-changelog.mjs';
-import { linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
+import { brokenDocsLinks, linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
 import { basePath, compareLines, readVersions, versionProblems } from './docs-versions.mjs';
 import { fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
 
@@ -69,7 +69,13 @@ const PAGE_ORDER = [
   'mixed-mode',
   'database-providers',
   'efcore-integration',
+  'efcore-advanced',
   'aspnetcore-integration',
+  'per-tenant-options',
+  'authentication-per-tenant',
+  'aspnetcore-identity',
+  'caching',
+  'http-propagation',
   'migration-orchestration',
   'tenant-lifecycle',
   'connection-string-encryption',
@@ -89,6 +95,7 @@ const PAGE_ORDER = [
   'aot-and-trimming',
   'compatibility',
   'troubleshooting',
+  'migrating-from-finbuckle',
   'changelog',
 ];
 
@@ -335,12 +342,12 @@ title: "Tenantry documentation"
 description: "Guides for Tenantry Core (open source) and Tenantry Pro${latest ? '' : `, version ${entry.version}`}."
 ---
 
-Tenantry is a production-grade multi-tenancy toolkit for .NET.
+Tenantry adds tenant isolation to ASP.NET Core and EF Core applications. It is in beta until 1.0.
 
-- **[Tenantry Core](${base}/core)** — open source: tenant resolution, and isolation in a shared database or a
+- **[Tenantry Core](${base}/core)**, open source: tenant resolution, and isolation in a shared database or a
   database per tenant.
-- **[Tenantry Pro](${base}/pro)** — schema-per-tenant and mixed mode, provisioning, migration orchestration
-  across tenant databases, tenant lifecycle, and background-job / message-bus integrations.
+- **[Tenantry Pro](${base}/pro)**: provisioning, migrations across tenant databases, schema per tenant and mixed
+  mode, and the tenant in background jobs and messages.
 
 Use the sidebar to browse, or press <kbd>⌘</kbd> <kbd>K</kbd> to search.
 `,
@@ -362,6 +369,18 @@ Use the sidebar to browse, or press <kbd>⌘</kbd> <kbd>K</kbd> to search.
 }
 
 writeFileSync(join(docsRoot, 'meta.json'), JSON.stringify({ pages: folders }, null, 2) + '\n');
+
+// Every link into the docs must reach a page this sync wrote, and a heading on it: a page renamed or removed in a
+// release would otherwise ship as a 404, and docs are read at release tags, so only a new release could fix it.
+const written = new Map();
+for (const folder of folders) {
+  const base = folder === '(latest)' ? '/docs' : `/docs/${folder}`;
+  for (const file of readdirSync(join(docsRoot, folder), { recursive: true }).filter((f) => f.endsWith('.mdx'))) {
+    const path = `${base}/${file.replace(/\\/g, '/').replace(/\.mdx$/, '')}`.replace(/\/index$/, '');
+    written.set(path, readFileSync(join(docsRoot, folder, file), 'utf8'));
+  }
+}
+for (const link of brokenDocsLinks(written, '/docs')) brokenLinks.push(`${link} (no such page or heading)`);
 for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
 
 if (folders.length === 0) {
@@ -370,7 +389,7 @@ if (folders.length === 0) {
 }
 
 if (brokenLinks.length > 0) {
-  const message = `sync-docs: links that would resolve under the site and 404:\n  ${brokenLinks.join('\n  ')}`;
+  const message = `sync-docs: links that would 404, or miss their heading, on the site:\n  ${brokenLinks.join('\n  ')}`;
   if (releaseBuild) {
     console.error(message);
     process.exit(1);

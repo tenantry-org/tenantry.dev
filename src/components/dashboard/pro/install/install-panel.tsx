@@ -31,8 +31,9 @@ export function InstallPanel({
         </CardHeader>
         <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
           <p className={'text-sm text-muted-foreground'}>
-            Tenantry Pro&apos;s packages are on a private GitHub Packages feed; Tenantry core and everything else stay
-            on nuget.org. The full guide, including Docker builds and troubleshooting, is{' '}
+            Tenantry Pro&apos;s packages are on a private GitHub Packages feed; Tenantry Core and everything else stay
+            on nuget.org. A private Tenantry feed replaces it before Tenantry Pro goes on sale. The full guide,
+            including Docker builds and troubleshooting, is{' '}
             <Link className={'text-link underline underline-offset-4'} href={INSTALL_GUIDE}>
               Installation
             </Link>

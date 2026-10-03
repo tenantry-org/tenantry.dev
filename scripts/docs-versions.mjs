@@ -81,6 +81,16 @@ export function writeVersions(versions) {
   writeFileSync(CONFIG_PATH, JSON.stringify({ versions }, null, 2) + '\n');
 }
 
+/**
+ * The tags whose release is published: those whose version (the tag without its `v`) is among `publishedVersions`,
+ * such as the versions NuGet lists for the package. A tag exists as soon as it is pushed, before its release passes
+ * CI and approval, or when that release fails, so a tag alone does not mean its packages shipped.
+ */
+export function publishedTags(tags, publishedVersions) {
+  const published = new Set(publishedVersions.map((version) => version.toLowerCase()));
+  return tags.filter((tag) => tag.startsWith('v') && published.has(tag.slice(1).toLowerCase()));
+}
+
 /** The versions to publish, given each group's tags: every line both groups released, the newest patch of each. */
 export function resolveVersions(tagsByGroup) {
   const newest = {};

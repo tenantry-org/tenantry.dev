@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { SimpleHeader } from '@/components/shared/simple-header';
 import { CheckoutContents } from '@/components/checkout/checkout-contents';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -33,7 +33,11 @@ async function Checkout({ params }: Props) {
   // Only the Pro offer's prices are for sale; any other price would take a payment that entitles nothing.
   if (!isOfferPrice(priceId)) notFound();
 
+  // Buyers sign in first, so the subscription is theirs from the start: the checkout uses their account's email,
+  // which is what purchases are matched by, and the success page can send them straight to connect GitHub.
   const user = await getCurrentUser();
+  if (!user?.email) redirect(`/signup?next=${encodeURIComponent(`/checkout/${priceId}`)}`);
+
   // Keyed by price, so another price gets a checkout of its own.
-  return <CheckoutContents key={priceId} priceId={priceId} userEmail={user?.email} />;
+  return <CheckoutContents key={priceId} priceId={priceId} userEmail={user.email} />;
 }

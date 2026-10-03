@@ -10,9 +10,11 @@ import { useToast } from '@/components/ui/use-toast';
 interface Props {
   /** Shown above the form, such as after a sign-in link that could not be completed. */
   notice?: string;
+  /** The page to continue to after logging in, such as the checkout. */
+  next?: string;
 }
 
-export function LoginForm({ notice }: Props) {
+export function LoginForm({ notice, next }: Props) {
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +24,7 @@ export function LoginForm({ notice }: Props) {
     event.preventDefault();
     startTransition(async () => {
       // On success the action redirects, and the button stays pending until the next page shows.
-      const data = await login({ email, password });
+      const data = await login({ email, password }, next);
       if (data?.error) {
         toast({ description: 'Invalid email or password', variant: 'destructive' });
       }

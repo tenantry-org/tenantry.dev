@@ -15,8 +15,8 @@ export function LicenceCard({ licenceKey }: Readonly<{ licenceKey: string | null
         {licenceKey ? (
           <>
             <p className={'text-sm text-muted-foreground'}>
-              It does not expire: renewals keep the same key. Keep it out of source control: Tenantry.Pro reads it from
-              the configuration key <code>{LICENCE_CONFIG_KEY}</code>.
+              The key does not expire, and renewals keep it. Tenantry Pro reads it from the configuration key{' '}
+              <code>{LICENCE_CONFIG_KEY}</code>, so keep it out of source control.
             </p>
             <code
               className={
