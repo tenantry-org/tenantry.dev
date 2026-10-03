@@ -100,7 +100,9 @@ deployment.
   listed once both Core and Pro have a stable release in it, with the newest release of each. The `docs-versions`
   workflow checks hourly (or on demand), commits any change to master and staging, which redeploys the site, and runs
   the test and audit workflows on the commit, since its own pushes start none.
-  `pnpm docs:update` does the same locally; `pnpm docs:check` fails unless the file matches the tags.
+  A Core tag counts once NuGet lists its version, since Core is tagged before its release runs; tenantry-pro-docs is
+  tagged after Pro's packages are published. `pnpm docs:update` does the same locally; `pnpm docs:check` fails unless
+  the file matches the releases.
 - **The Pro access page's install snippets follow a Pro release line**, `PRO_RELEASE_LINE` in
   `src/lib/install-snippets.ts`. Once that line's docs are published, the tests compare the snippets with its
   installation guide, and they fail when a newer line is published. So the docs of a Pro release that starts a line
