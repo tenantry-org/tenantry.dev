@@ -114,7 +114,7 @@ Anyone can type a subdomain, so the access validators check the caller before th
 - `UseTenantry()` goes after `UseAuthentication()`, because the validators read the user.
 
 With `CacheTenants`, a deactivated organisation is served from the cache until its entry expires; call
-`ITenantStoreCache<Guid>.Invalidate` when you deactivate one.
+`ITenantInvalidator<Guid>.InvalidateAsync` when you deactivate one.
 
 ## 3. Mark the tenant-owned entities
 
