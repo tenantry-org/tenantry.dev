@@ -69,6 +69,7 @@ const PAGE_ORDER = [
   'mixed-mode',
   'database-providers',
   'efcore-integration',
+  'efcore-advanced',
   'aspnetcore-integration',
   'migration-orchestration',
   'tenant-lifecycle',
