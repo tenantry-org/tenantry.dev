@@ -30,8 +30,9 @@ export function hasTag(dir, tag) {
 }
 
 /**
- * The partial clone of a group's repository (`core` or `pro`) with the given tags, fetching what it lacks, or null
- * when it cannot be reached and none exists yet. A clone that cannot be updated is still returned, with a warning.
+ * The partial clone of a group's repository (`core` or `pro`) with the given tags, fetched again each time so that a
+ * tag moved to corrected docs (tenantry-pro-docs' tags can be) is followed, or null when it cannot be reached and none
+ * exists yet. A clone that cannot be updated is still returned, with a warning.
  */
 export function partialClone(group, tags) {
   const dir = join(sourcesRoot, group);
@@ -40,8 +41,7 @@ export function partialClone(group, tags) {
       rmSync(dir, { recursive: true, force: true });
       git('clone', '--quiet', '--bare', '--filter=blob:none', '--no-tags', REPOSITORIES[group], dir);
     }
-    const missing = tags.filter((tag) => !hasTag(dir, tag));
-    if (missing.length > 0) {
+    if (tags.length > 0) {
       git(
         '-C',
         dir,
@@ -49,7 +49,7 @@ export function partialClone(group, tags) {
         '--quiet',
         '--filter=blob:none',
         'origin',
-        ...missing.map((t) => `+refs/tags/${t}:refs/tags/${t}`),
+        ...tags.map((t) => `+refs/tags/${t}:refs/tags/${t}`),
       );
     }
   } catch (error) {

@@ -103,6 +103,12 @@ const QUESTIONS = [
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
+    question: 'What does the beta mean?',
+    answer:
+      "Tenantry Core and Pro are in beta until 1.0, which comes no earlier than 10 November 2027. Releases are numbered 0.x, and a minor release (0.5 to 0.6) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.",
+    link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
+  },
+  {
     question: 'Does it phone home?',
     answer: 'No. The licence key is checked offline when the application starts, and it does not expire.',
     link: { label: 'Licensing', href: '/docs/pro/licensing' },

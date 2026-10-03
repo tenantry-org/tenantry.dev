@@ -93,6 +93,8 @@ the version being read. The tags are read from partial clones kept in `content/_
 build, local ones included, shows what the released packages do. A release line keeps one API: each minor before
 1.0 (`0.4`, `0.5`), each major from 1.0 (`1`). Each group ends with a Changelog page: the line's releases from the
 tag's `CHANGELOG.md`, with a link to the rest (`scripts/docs-changelog.mjs`); tenantry-pro-docs has Pro's from 0.5.0.
+Each sync fetches the listed tags again, so moving a tenantry-pro-docs tag to corrected docs publishes them at the next
+deployment.
 
 - **Releases publish their docs by themselves.** The versions are worked out from the release tags: a line is
   listed once both Core and Pro have a stable release in it, with the newest release of each. The `docs-versions`
