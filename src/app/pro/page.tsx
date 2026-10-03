@@ -72,8 +72,8 @@ const ALSO = [
     href: '/docs/pro/audit-logging',
   },
   {
-    title: 'Health checks and metrics',
-    text: 'Health checks that probe every tenant database for its connection and pending migrations, and ASP.NET Core’s request metrics tagged with the tenant.',
+    title: 'Health checks',
+    text: 'Health checks that probe every tenant database for its connection and pending migrations.',
     href: '/docs/pro/health-checks',
   },
   {

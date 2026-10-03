@@ -23,7 +23,7 @@ export const ProOffer: Offer = {
     'Migrations across every tenant database or schema, as a deployment step',
     'A schema per tenant (SQL Server, PostgreSQL), and mixed mode',
     'The tenant carried through Hangfire, MassTransit, Quartz.NET and Rebus',
-    'Audit logging, tenant health checks, and the tenant on ASP.NET Core’s request metrics',
+    'Audit logging and tenant health checks',
     'Connection-string caching',
     'Private NuGet package feed',
     `Email support, with a reply within ${SUPPORT_REPLY_WITHIN}`,
