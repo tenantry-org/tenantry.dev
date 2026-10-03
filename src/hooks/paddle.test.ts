@@ -73,14 +73,14 @@ describe('previewPrices', () => {
     data: {
       details: {
         lineItems: [
-          { price: { id: 'pri_01month' }, formattedTotals: { subtotal: '€30.00', total: '€36.00' } },
-          { price: { id: 'pri_01year' }, formattedTotals: { subtotal: '€300.00', total: '€360.00' } },
+          { price: { id: 'pri_01month' }, formattedTotals: { total: '€30.00' } },
+          { price: { id: 'pri_01year' }, formattedTotals: { total: '€300.00' } },
         ],
       },
     },
   } as unknown as PricePreviewResponse;
 
-  it("previews the Pro offer's two prices before tax, by price id", async () => {
+  it("previews the Pro offer's two prices, by price id", async () => {
     const pricePreview = vi.fn(async () => preview);
 
     await expect(previewPrices(paddle(pricePreview))).resolves.toEqual({

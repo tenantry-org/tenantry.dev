@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { PaddleState } from '@/hooks/use-paddle';
 import { publicConfig } from '@/lib/public-config';
 
-/** Each Pro price before tax, formatted for the visitor, by Paddle price id. */
+/** Each Pro price's total, formatted for the visitor, by Paddle price id. */
 export type PaddlePrices = Record<string, string>;
 
 export type PricesState = { status: 'loading' } | { status: 'ready'; prices: PaddlePrices } | { status: 'failed' };
@@ -29,8 +29,8 @@ export function usePaddlePrices(paddle: PaddleState): PricesState {
 }
 
 /**
- * Previews the Pro offer's prices. No address is passed, so Paddle localises their currency from the visitor's IP
- * address, as the checkout does. The amount is before tax, which depends on the buyer and the checkout adds. 'failed', logged, when the preview fails. Never throws.
+ * Previews the Pro offer's prices. No address is passed, so Paddle localises them (currency and tax) from the
+ * visitor's IP address, as the checkout does. 'failed', logged, when the preview fails. Never throws.
  */
 export async function previewPrices(paddle: Paddle): Promise<PricesState> {
   try {
@@ -44,7 +44,5 @@ export async function previewPrices(paddle: Paddle): Promise<PricesState> {
 }
 
 function priceAmounts(preview: PricePreviewResponse): PaddlePrices {
-  return Object.fromEntries(
-    preview.data.details.lineItems.map((item) => [item.price.id, item.formattedTotals.subtotal]),
-  );
+  return Object.fromEntries(preview.data.details.lineItems.map((item) => [item.price.id, item.formattedTotals.total]));
 }

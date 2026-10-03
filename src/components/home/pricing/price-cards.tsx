@@ -1,4 +1,4 @@
-import { LIST_PRICES, ProOffer } from '@/constants/pro-offer';
+import { ProOffer } from '@/constants/pro-offer';
 import type { BillingIntervalOption } from '@/constants/billing-intervals';
 import type { PricesState } from '@/hooks/use-paddle-prices';
 import { publicConfig } from '@/lib/public-config';
@@ -46,12 +46,7 @@ export function PriceCards({ option, prices }: Props) {
       <div className={CARD}>
         <div className={'flex flex-col gap-6 p-8'}>
           <PriceTitle offer={offer} />
-          <PriceAmount
-            prices={prices}
-            priceId={priceId}
-            listPrice={LIST_PRICES[option.interval]}
-            priceSuffix={option.priceSuffix}
-          />
+          <PriceAmount prices={prices} priceId={priceId} priceSuffix={option.priceSuffix} />
           <p className={'text-muted-foreground'}>{offer.description}</p>
           {checkoutEnabled ? (
             <Button className={'w-full'} size={'lg'} asChild={true}>

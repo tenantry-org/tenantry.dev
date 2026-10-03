@@ -1,4 +1,4 @@
-import { type BillingInterval, type OfferPrices, publicConfig } from '@/lib/public-config';
+import { type OfferPrices, publicConfig } from '@/lib/public-config';
 
 export interface Offer {
   name: string;
@@ -6,18 +6,8 @@ export interface Offer {
   features: string[];
 }
 
-/**
- * Pro's list prices, excluding tax: rendered on the server, so they show before Paddle's localised prices load, and to
- * visitors and crawlers that never run Paddle.js. Keep them equal to the Paddle prices' base amounts.
- * TODO(maintainer): replace the placeholders with the real prices, and say what the yearly price saves.
- */
-export const LIST_PRICES: Record<BillingInterval, string> = { month: '[€X]', year: '[€Y]' };
-
-/**
- * How soon a support email is answered, as the site promises it.
- * TODO(maintainer): replace the placeholder with the real target, such as "one UK business day".
- */
-export const SUPPORT_REPLY_WITHIN = '[SUPPORT RESPONSE TIME]';
+/** How soon a support email is answered, as the site promises it. */
+export const SUPPORT_REPLY_WITHIN = '48 hours';
 
 /**
  * The single Tenantry Pro offer. Tenantry Core is free and open source; Pro is one subscription,
