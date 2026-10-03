@@ -127,7 +127,7 @@ const QUESTIONS = [
   {
     question: 'Is it production-ready?',
     answer:
-      "Tenantry Core and Pro are in beta until 1.0, which comes no earlier than 10 November 2027. The isolation is tested on every build against SQL Server, PostgreSQL, MySQL and SQLite. Releases are numbered 0.x, and a minor release (0.5 to 0.6) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.",
+      "Tenantry Core and Pro are in beta until 1.0, which comes no earlier than 10 November 2027. The isolation is tested on every build against SQL Server, PostgreSQL, MySQL and SQLite. Releases are numbered 0.x, and a minor release (0.6 to 0.7) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.",
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
@@ -144,7 +144,7 @@ const QUESTIONS = [
   {
     question: 'What happens when the subscription ends?',
     answer:
-      'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.5 on Core 0.5.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Security fixes are released as a patch to every affected minor version. Restoring them from today’s GitHub feed needs an active subscription, so after it ends, email support@tenantry.dev for the latest patch of any minor version released while you subscribed. The private feed that replaces it will let you restore those yourself.',
+      'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.6 on Core 0.6.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Security fixes are released as a patch to every affected minor version. Restoring them from today’s GitHub feed needs an active subscription, so after it ends, email support@tenantry.dev for the latest patch of any minor version released while you subscribed. The private feed that replaces it will let you restore those yourself.',
     link: { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
   },
   {

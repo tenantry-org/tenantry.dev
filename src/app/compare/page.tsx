@@ -27,7 +27,7 @@ const NOTES = [
   },
   {
     title: 'What Tenantry does not do',
-    text: 'Core 0.5 has no per-tenant options. The next Core release adds them: IOptions, IOptionsSnapshot and IOptionsMonitor give the current tenant’s value for the options types you name. It does not cover named options, so authentication schemes, which Finbuckle configures per tenant, stay the same for every tenant. Tenantry is a library, not an application framework: there is no admin UI or tenant management screen, as ABP has.',
+    text: 'Core gives IOptions, IOptionsSnapshot and IOptionsMonitor the current tenant’s value for the options types you name, but not named options, so authentication schemes, which Finbuckle configures per tenant, stay the same for every tenant. Tenantry is a library, not an application framework: there is no admin UI or tenant management screen, as ABP has.',
   },
   {
     title: '.NET versions',

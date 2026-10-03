@@ -1,7 +1,6 @@
 // Checked in October 2026 against each project's own docs and source: Finbuckle.MultiTenant 10 (docs/EFCore.md,
 // docs/Options.md, docs/Authentication.md), ABP (docs/en/modules/saas.md, the multi-tenancy and EF Core guides) and
-// Tenantry Core 0.5 and Pro 0.5, with Tenantry.Options from Core's next release (its docs/per-tenant-options.md).
-// Check them again when any of them releases a major version, and when that Core release ships.
+// Tenantry Core 0.6 and Pro 0.6. Check them again when any of them releases a major version.
 const PROJECTS = ['Your own query filters', 'Finbuckle.MultiTenant', 'ABP', 'Tenantry'] as const;
 
 const ROWS: { label: string; cells: [string, string, string, string] }[] = [
@@ -20,12 +19,7 @@ const ROWS: { label: string; cells: [string, string, string, string] }[] = [
   },
   {
     label: 'Per-tenant options and authentication',
-    cells: [
-      'You write it',
-      'Yes, both',
-      'Per-tenant settings and features',
-      'Options from the next Core release; authentication no',
-    ],
+    cells: ['You write it', 'Yes, both', 'Per-tenant settings and features', 'Options yes; authentication no'],
   },
   {
     label: 'Licence',
