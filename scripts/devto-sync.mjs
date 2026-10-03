@@ -60,13 +60,22 @@ export function articleFor(post, organizationId) {
   };
 }
 
-/** Whether an existing article differs from what the post's should hold. */
-export function differs(existing, wanted) {
+/**
+ * What an update of a post's article sends: its article without the tags or the organisation. dev.to replaces the
+ * tags an article is created with by its own, so they are set once, when the article is created, and left to dev.to;
+ * the organisation too is chosen only then.
+ */
+export function updateFor(post) {
+  const { tags: _tags, ...update } = articleFor(post);
+  return update;
+}
+
+/** Whether an existing article differs from what an update would send. */
+export function differs(existing, update) {
   return (
-    existing.title !== wanted.title ||
-    (existing.description ?? '') !== wanted.description ||
-    [...(existing.tag_list ?? [])].sort().join(',') !== wanted.tags.split(', ').sort().join(',') ||
-    (existing.body_markdown ?? '').trim() !== wanted.body_markdown.trim()
+    existing.title !== update.title ||
+    (existing.description ?? '') !== update.description ||
+    (existing.body_markdown ?? '').trim() !== update.body_markdown.trim()
   );
 }
 
@@ -77,9 +86,8 @@ export function plan(posts, articles, organizationId) {
   const updates = [];
   for (const post of posts) {
     const existing = byUrl.get(post.url);
-    // The organisation is chosen when an article is created; an update leaves it as it is.
     if (!existing) creates.push({ post, article: articleFor(post, organizationId) });
-    else if (differs(existing, articleFor(post))) updates.push({ post, id: existing.id, article: articleFor(post) });
+    else if (differs(existing, updateFor(post))) updates.push({ post, id: existing.id, article: updateFor(post) });
   }
   return { creates, updates };
 }

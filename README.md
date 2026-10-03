@@ -133,13 +133,14 @@ Write plain Markdown, without MDX components: dev.to gets the same text. A gener
 has a page locally and in the sandbox, marked as one, but is never in production, the RSS feed (`/blog/rss.xml`), the
 sitemap or on dev.to.
 
-**dev.to.** After each push to master, the `devto` workflow (`scripts/devto-sync.mjs`) waits until tenantry.dev
-serves the pushed commit's posts (`/blog/posts.json`; production deploys a commit once its checks pass), then creates
-each published post's dev.to article, or updates it when the post changed. It finds the article by its canonical URL,
-the post's address here, so dev.to links back and search engines credit the site. It never unpublishes: a post put
-back to draft or removed keeps its dev.to article until you unpublish it there. It needs the `DEVTO_API_KEY` secret (dev.to → Settings →
-Extensions) and does nothing without it; the `DEVTO_ORGANIZATION_ID` variable publishes new articles under that
-dev.to organisation. Run it from the Actions tab to retry.
+**dev.to.** After each push to master, the `devto` workflow (`scripts/devto-sync.mjs`) waits until tenantry.dev serves
+the pushed commit's posts (`/blog/posts.json`; production deploys a commit once its checks pass), then creates each
+published post's dev.to article, or updates it when the post changed. It finds the article by its canonical URL, the
+post's address here, so dev.to links back and search engines credit the site. It never unpublishes: a post put back to
+draft or removed keeps its dev.to article until you unpublish it there. dev.to replaces a new article's tags with its
+own, so the post's tags are sent only when its article is created. It needs the `DEVTO_API_KEY` secret (dev.to →
+Settings → Extensions) and does nothing without it; the `DEVTO_ORGANIZATION_ID` variable publishes new articles under
+that dev.to organisation. Run it from the Actions tab to retry.
 
 ## Configuration
 

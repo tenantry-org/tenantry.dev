@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { accountArticles, articleFor, devto, plan, publishedSources, servedPosts, sourceHash } from './devto-sync.mjs';
+import { accountArticles, devto, plan, publishedSources, servedPosts, sourceHash, updateFor } from './devto-sync.mjs';
 
 const post = {
   slug: 'migrations',
@@ -67,15 +67,21 @@ describe('plan', () => {
     });
   });
 
-  it('leaves an article that matches its post, whatever the order of its tags', () => {
-    expect(plan([post], [existing], undefined)).toEqual({ creates: [], updates: [] });
+  it('leaves an article that matches its post, whatever tags dev.to gave it', () => {
+    expect(plan([post], [{ ...existing, tag_list: ['csharp', 'database'] }], undefined)).toEqual({
+      creates: [],
+      updates: [],
+    });
   });
 
-  it('updates an article whose post changed, without moving it to an organisation', () => {
+  it('updates an article whose post changed, without its tags or moving it to an organisation', () => {
     const changed = { ...post, markdown: 'New body.' };
+    const update = updateFor(changed);
+    expect(update).not.toHaveProperty('tags');
+    expect(update).not.toHaveProperty('organization_id');
     expect(plan([changed], [existing], '42')).toEqual({
       creates: [],
-      updates: [{ post: changed, id: 7, article: { ...articleFor(changed, undefined) } }],
+      updates: [{ post: changed, id: 7, article: update }],
     });
   });
 });
