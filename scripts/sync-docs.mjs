@@ -29,7 +29,7 @@ import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { changelogPage } from './docs-changelog.mjs';
-import { linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
+import { brokenDocsLinks, linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
 import { basePath, compareLines, readVersions, versionProblems } from './docs-versions.mjs';
 import { fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
 
@@ -362,6 +362,18 @@ Use the sidebar to browse, or press <kbd>⌘</kbd> <kbd>K</kbd> to search.
 }
 
 writeFileSync(join(docsRoot, 'meta.json'), JSON.stringify({ pages: folders }, null, 2) + '\n');
+
+// Every link into the docs must reach a page this sync wrote, and a heading on it: a page renamed or removed in a
+// release would otherwise ship as a 404, and docs are read at release tags, so only a new release could fix it.
+const written = new Map();
+for (const folder of folders) {
+  const base = folder === '(latest)' ? '/docs' : `/docs/${folder}`;
+  for (const file of readdirSync(join(docsRoot, folder), { recursive: true }).filter((f) => f.endsWith('.mdx'))) {
+    const path = `${base}/${file.replace(/\\/g, '/').replace(/\.mdx$/, '')}`.replace(/\/index$/, '');
+    written.set(path, readFileSync(join(docsRoot, folder, file), 'utf8'));
+  }
+}
+for (const link of brokenDocsLinks(written, '/docs')) brokenLinks.push(`${link} (no such page or heading)`);
 for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
 
 if (folders.length === 0) {
@@ -370,7 +382,7 @@ if (folders.length === 0) {
 }
 
 if (brokenLinks.length > 0) {
-  const message = `sync-docs: links that would resolve under the site and 404:\n  ${brokenLinks.join('\n  ')}`;
+  const message = `sync-docs: links that would 404, or miss their heading, on the site:\n  ${brokenLinks.join('\n  ')}`;
   if (releaseBuild) {
     console.error(message);
     process.exit(1);
