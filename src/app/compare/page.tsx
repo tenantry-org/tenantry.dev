@@ -59,6 +59,13 @@ export default function ComparePage() {
             </div>
           ))}
         </dl>
+        <p className={'mt-12 max-w-3xl leading-relaxed text-muted-foreground'}>
+          Moving from Finbuckle.MultiTenant? The{' '}
+          <Link href={'/docs/core/migrating-from-finbuckle'} className={'text-link hover:underline'}>
+            migration guide
+          </Link>{' '}
+          takes a Finbuckle application to Tenantry step by step.
+        </p>
         <p className={'mt-12 text-sm text-muted-foreground'}>
           Checked in October 2026 against each project’s documentation. Something out of date? Email{' '}
           <Link href={'mailto:support@tenantry.dev'} className={'text-link hover:underline'}>
