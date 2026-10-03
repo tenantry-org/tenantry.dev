@@ -26,8 +26,12 @@ const NOTES = [
     text: 'Tenantry supports a database per tenant with pooled contexts (AddDbContextPerTenantDatabase with pooled: true). Finbuckle’s docs do not cover pooling. ABP’s SaaS module, and Tenantry Pro, create and migrate tenant databases; Finbuckle leaves that to you.',
   },
   {
+    title: 'Options and authentication',
+    text: 'Core gives options, named options included, the current tenant’s values, so each authentication scheme can have a tenant’s own settings. app.UseTenantResolution() makes the tenant current before authentication, and tenants on different identity providers each get a scheme of their own. ASP.NET Core Identity works with a user type that implements ITenantEntity, with no base context class.',
+  },
+  {
     title: 'What Tenantry does not do',
-    text: 'Core gives IOptions, IOptionsSnapshot and IOptionsMonitor the current tenant’s value for the options types you name, but not named options, so authentication schemes, which Finbuckle configures per tenant, stay the same for every tenant. Tenantry is a library, not an application framework: there is no admin UI or tenant management screen, as ABP has.',
+    text: 'Tenantry is a library, not an application framework: there is no admin UI or tenant management screen, as ABP has. It builds in one tenant store, which holds tenants in memory. Finbuckle also has stores that read tenants from configuration, a distributed cache or an HTTP service.',
   },
   {
     title: '.NET versions',

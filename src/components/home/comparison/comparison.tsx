@@ -19,7 +19,7 @@ const ROWS: { label: string; cells: [string, string, string, string] }[] = [
   },
   {
     label: 'Per-tenant options and authentication',
-    cells: ['You write it', 'Yes, both', 'Per-tenant settings and features', 'Options yes; authentication no'],
+    cells: ['You write it', 'Yes, both', 'Per-tenant settings and features', 'Yes, both'],
   },
   {
     label: 'Licence',

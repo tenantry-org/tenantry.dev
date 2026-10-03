@@ -72,6 +72,8 @@ const PAGE_ORDER = [
   'efcore-advanced',
   'aspnetcore-integration',
   'per-tenant-options',
+  'authentication-per-tenant',
+  'aspnetcore-identity',
   'caching',
   'http-propagation',
   'migration-orchestration',
