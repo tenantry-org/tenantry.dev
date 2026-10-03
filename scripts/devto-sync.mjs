@@ -3,10 +3,12 @@
  * Copies the blog's published posts to dev.to, after each push to master (.github/workflows/devto.yml).
  *
  * The posts come from the production site's /blog/posts.json, so dev.to gets only what the site has published. It
- * waits until the site serves the posts of the commit it runs on: each published post in content/blog, by the hash of
- * its file (production deploys a commit only once its checks pass). Each post's dev.to article is found by its
- * canonical URL, the post's address on the site: one is created, published, when there is none, and updated when its
- * title, description, tags or Markdown differ. Run again, it changes nothing.
+ * waits until the site serves the posts of the commit it runs on, and no others: each published post in content/blog,
+ * by the hash of its file (production deploys a commit only once its checks pass). Each post's dev.to article is found
+ * by its canonical URL, the post's address on the site: one is created, published, when there is none, and updated
+ * when its title, description or Markdown differ, or it is unpublished. An article whose canonical URL is a blog
+ * address the site no longer publishes (the post was removed, or put back to draft) is unpublished; the account's
+ * other articles are left alone. Run again, it changes nothing.
  *
  *   node scripts/devto-sync.mjs              wait for the site, then create and update the articles
  *   node scripts/devto-sync.mjs --dry-run    say what it would do, change nothing
@@ -40,8 +42,12 @@ export function sourceHash(text) {
   return createHash('sha256').update(text).digest('hex');
 }
 
-/** The posts the site serves, once they are the expected ones; null while it serves others. */
+/**
+ * The posts the site serves, once they are exactly the expected ones; null while it serves others, a post the commit
+ * removed or made a draft among them.
+ */
 export function servedPosts(feed, expected) {
+  if (feed.posts.length !== expected.size) return null;
   const served = new Map(feed.posts.map((post) => [post.slug, post]));
   for (const [slug, hash] of expected) if (served.get(slug)?.source !== hash) return null;
   return feed.posts;
@@ -70,17 +76,21 @@ export function updateFor(post) {
   return update;
 }
 
-/** Whether an existing article differs from what an update would send. */
+/** Whether an existing article differs from what an update would send, or is unpublished. */
 export function differs(existing, update) {
   return (
+    existing.published === false ||
     existing.title !== update.title ||
     (existing.description ?? '') !== update.description ||
     (existing.body_markdown ?? '').trim() !== update.body_markdown.trim()
   );
 }
 
-/** The articles to create and update, given the posts and the account's articles (with their Markdown). */
-export function plan(posts, articles, organizationId) {
+/**
+ * The articles to create, update and unpublish, given the posts, the account's articles (with their Markdown) and the
+ * site. Only articles whose canonical URL is under the site's /blog/ are unpublished.
+ */
+export function plan(posts, articles, organizationId, site) {
   const byUrl = new Map(articles.map((article) => [article.canonical_url, article]));
   const creates = [];
   const updates = [];
@@ -89,7 +99,15 @@ export function plan(posts, articles, organizationId) {
     if (!existing) creates.push({ post, article: articleFor(post, organizationId) });
     else if (differs(existing, updateFor(post))) updates.push({ post, id: existing.id, article: updateFor(post) });
   }
-  return { creates, updates };
+  const blog = new URL('/blog/', site).href;
+  const published = new Set(posts.map((post) => post.url));
+  const unpublishes = articles
+    .filter(
+      (article) =>
+        article.published && article.canonical_url?.startsWith(blog) && !published.has(article.canonical_url),
+    )
+    .map((article) => ({ id: article.id, url: article.canonical_url, article: { published: false } }));
+  return { creates, updates, unpublishes };
 }
 
 /** A dev.to API client over fetch, retrying when rate limited. */
@@ -153,11 +171,13 @@ async function main() {
     if (!posts && attempt < 40) await sleep(30_000);
   }
   if (!posts)
-    throw new Error(`${site} does not serve this commit's posts after twenty minutes; the next push retries.`);
+    throw new Error(
+      `${site} does not serve this commit's posts, and only them, after twenty minutes; the next push retries.`,
+    );
 
   const request = devto(apiKey);
   const articles = await accountArticles(request);
-  const { creates, updates } = plan(posts, articles, process.env.DEVTO_ORGANIZATION_ID);
+  const { creates, updates, unpublishes } = plan(posts, articles, process.env.DEVTO_ORGANIZATION_ID, site);
   const changed = new Set([...creates, ...updates].map(({ post }) => post.url));
   for (const article of articles.filter((a) => posts.some((post) => post.url === a.canonical_url))) {
     if (!changed.has(article.canonical_url)) console.log(`devto-sync: up to date ${article.url}`);
@@ -169,6 +189,12 @@ async function main() {
   for (const { post, id, article } of updates) {
     console.log(`devto-sync: ${dryRun ? 'would update' : 'updating'} ${post.url} (article ${id})`);
     if (!dryRun) console.log(`devto-sync: updated ${(await request('PUT', `/articles/${id}`, { article })).url}`);
+  }
+  for (const { id, url, article } of unpublishes) {
+    console.log(
+      `devto-sync: ${dryRun ? 'would unpublish' : 'unpublishing'} article ${id}, whose post ${url} is not published`,
+    );
+    if (!dryRun) await request('PUT', `/articles/${id}`, { article });
   }
 }
 

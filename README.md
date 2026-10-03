@@ -136,11 +136,13 @@ has a page locally and in the sandbox, marked as one, but is never in production
 sitemap or on dev.to.
 
 **dev.to.** After each push to master, the `devto` workflow (`scripts/devto-sync.mjs`) waits until tenantry.dev serves
-the pushed commit's posts (`/blog/posts.json`; production deploys a commit once its checks pass), then creates each
-published post's dev.to article, or updates it when the post changed. It finds the article by its canonical URL, the
-post's address here, so dev.to links back and search engines credit the site. It never unpublishes: a post put back to
-draft or removed keeps its dev.to article until you unpublish it there. dev.to replaces a new article's tags with its
-own, so the post's tags are sent only when its article is created. It needs the `DEVTO_API_KEY` secret (dev.to →
+the pushed commit's posts, and only them (`/blog/posts.json`; production deploys a commit once its checks pass), then
+creates each published post's dev.to article, or updates it when the post changed. It finds the article by its
+canonical URL, the post's address here, so dev.to links back and search engines credit the site. A post put back to
+draft or removed has its article unpublished, and published again with the post; the account's articles whose
+canonical URL is not a blog address here are left alone. The site is the source: an edit or an unpublish made on
+dev.to is undone the next time the sync finds the article differs. dev.to replaces a new article's tags with its own,
+so the post's tags are sent only when its article is created. It needs the `DEVTO_API_KEY` secret (dev.to →
 Settings → Extensions) and does nothing without it; the `DEVTO_ORGANIZATION_ID` variable publishes new articles under
 that dev.to organisation. Run it from the Actions tab to retry.
 

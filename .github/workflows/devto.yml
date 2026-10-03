@@ -2,11 +2,12 @@ name: devto
 
 # Copies the blog's published posts to dev.to (scripts/devto-sync.mjs) after each push to master, or on demand. The
 # script waits until tenantry.dev serves the pushed commit's posts (production deploys a commit once its checks pass),
-# then creates or updates each post's article, found by its canonical URL, so a run that fails is made good by the
-# next. It runs only for master, which only maintainers push to, so the workflow that holds the key is always master's
-# own (a deployment event would run the deployed commit's copy, a fork's included). It needs the DEVTO_API_KEY secret
-# (dev.to → Settings → Extensions), and does nothing without it; DEVTO_ORGANIZATION_ID, a repository variable,
-# publishes new articles under that dev.to organisation.
+# and no others, then creates or updates each post's article, found by its canonical URL, and unpublishes the article
+# of a post removed or put back to draft, so a run that fails is made good by the next. It runs only for master, which
+# only maintainers push to, so the workflow that holds the key is always master's own (a deployment event would run
+# the deployed commit's copy, a fork's included). It needs the DEVTO_API_KEY secret (dev.to → Settings → Extensions),
+# and does nothing without it; DEVTO_ORGANIZATION_ID, a repository variable, publishes new articles under that dev.to
+# organisation.
 on:
   push:
     branches: [master]

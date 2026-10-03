@@ -20,7 +20,9 @@ const existing = {
   description: post.description,
   tag_list: ['efcore', 'dotnet'],
   body_markdown: `${post.markdown}\n`,
+  published: true,
 };
+const site = 'https://tenantry.dev';
 
 describe('publishedSources', () => {
   let dir: string;
@@ -44,11 +46,16 @@ describe('servedPosts', () => {
     expect(servedPosts(feed, new Map([['migrations', 'changed']]))).toBeNull();
     expect(servedPosts(feed, new Map([['another', 'def']]))).toBeNull();
   });
+
+  it('waits while the site still serves a post the commit removed or made a draft', () => {
+    const other = { ...post, slug: 'gone', url: 'https://tenantry.dev/blog/gone', source: 'def' };
+    expect(servedPosts({ posts: [post, other] }, new Map([['migrations', 'abc']]))).toBeNull();
+  });
 });
 
 describe('plan', () => {
   it('creates a published article for a post without one, under the organisation if given', () => {
-    expect(plan([post], [], '42')).toEqual({
+    expect(plan([post], [], '42', site)).toEqual({
       creates: [
         {
           post,
@@ -64,13 +71,15 @@ describe('plan', () => {
         },
       ],
       updates: [],
+      unpublishes: [],
     });
   });
 
   it('leaves an article that matches its post, whatever tags dev.to gave it', () => {
-    expect(plan([post], [{ ...existing, tag_list: ['csharp', 'database'] }], undefined)).toEqual({
+    expect(plan([post], [{ ...existing, tag_list: ['csharp', 'database'] }], undefined, site)).toEqual({
       creates: [],
       updates: [],
+      unpublishes: [],
     });
   });
 
@@ -79,10 +88,35 @@ describe('plan', () => {
     const update = updateFor(changed);
     expect(update).not.toHaveProperty('tags');
     expect(update).not.toHaveProperty('organization_id');
-    expect(plan([changed], [existing], '42')).toEqual({
+    expect(plan([changed], [existing], '42', site)).toEqual({
       creates: [],
       updates: [{ post: changed, id: 7, article: update }],
+      unpublishes: [],
     });
+  });
+
+  it('unpublishes the article of a post the site no longer publishes, and only the blog articles', () => {
+    const articles = [
+      { ...existing, id: 8, canonical_url: 'https://tenantry.dev/blog/removed' },
+      { ...existing, id: 9, canonical_url: 'https://tenantry.dev/blog/drafted', published: false },
+      { ...existing, id: 10, canonical_url: 'https://example.com/elsewhere' },
+      { ...existing, id: 11, canonical_url: 'https://tenantry.dev/docs/getting-started' },
+      { ...existing, id: 12, canonical_url: null },
+    ];
+    expect(plan([], articles, undefined, site)).toEqual({
+      creates: [],
+      updates: [],
+      unpublishes: [{ id: 8, url: 'https://tenantry.dev/blog/removed', article: { published: false } }],
+    });
+  });
+
+  it('publishes again the unpublished article of a post published again, even unchanged', () => {
+    expect(plan([post], [{ ...existing, published: false }], undefined, site)).toEqual({
+      creates: [],
+      updates: [{ post, id: 7, article: updateFor(post) }],
+      unpublishes: [],
+    });
+    expect(updateFor(post).published).toBe(true);
   });
 });
 
