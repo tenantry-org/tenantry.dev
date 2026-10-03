@@ -6,12 +6,11 @@ import { Footer } from '@/components/home/footer/footer';
 import { Button } from '@/components/ui/button';
 import { CodeFigure } from '@/components/shared/code-figure';
 import { TrackedLink } from '@/components/shared/tracked-link';
-import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
+import { LIST_PRICES, SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
 
 export const metadata: Metadata = {
   title: 'Tenantry Pro — a database or schema per tenant, without writing the tooling',
-  description:
-    'Tenantry Pro onboards a tenant in one call, migrates every tenant database or schema as a deployment step, and keeps the tenant in Hangfire, Quartz.NET, MassTransit and Rebus work. One price for your whole company.',
+  description: `Tenantry Pro onboards a tenant in one call, migrates every tenant database or schema as a deployment step, and keeps the tenant in Hangfire, Quartz.NET, MassTransit and Rebus work. From ${LIST_PRICES.month} a month for your whole company.`,
   alternates: { canonical: '/pro' },
 };
 
@@ -162,8 +161,8 @@ export default function ProPage() {
             </h1>
             <p className={'mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground'}>
               Onboard a tenant in one call, migrate every tenant database as a deployment step, and keep the tenant in
-              your Hangfire, Quartz.NET, MassTransit and Rebus work. One price covers your whole company. Pro builds on
-              the free, open-source Tenantry Core.
+              your Hangfire, Quartz.NET, MassTransit and Rebus work. From {LIST_PRICES.month} a month, excluding tax,
+              for your whole company. Pro builds on the free, open-source Tenantry Core.
             </p>
             <div className={'mt-8 flex flex-wrap items-center gap-3'}>
               <Button asChild size={'lg'}>

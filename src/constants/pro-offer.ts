@@ -1,10 +1,17 @@
-import { type OfferPrices, publicConfig } from '@/lib/public-config';
+import { type BillingInterval, type OfferPrices, publicConfig } from '@/lib/public-config';
 
 export interface Offer {
   name: string;
   description: string;
   features: string[];
 }
+
+/**
+ * Pro's list prices, excluding tax: rendered on the server, so they show before Paddle's localised prices load, and to
+ * visitors and crawlers that never run Paddle.js. Keep them equal to the Paddle prices' base amounts.
+ * TODO(maintainer): replace the placeholders with the real prices, and say what the yearly price saves.
+ */
+export const LIST_PRICES: Record<BillingInterval, string> = { month: '[€X]', year: '[€Y]' };
 
 /**
  * How soon a support email is answered, as the site promises it.
@@ -19,7 +26,7 @@ export const SUPPORT_REPLY_WITHIN = '[SUPPORT RESPONSE TIME]';
  */
 export const ProOffer: Offer = {
   name: 'Tenantry Pro',
-  description: 'Provisioning, migrations across tenant databases, and tenant-aware operations.',
+  description: 'For a database or schema per tenant: provisioning, migrations, and the tenant in jobs and messages.',
   features: [
     'Tenant databases created, migrated and seeded, on SQL Server, PostgreSQL and MySQL',
     'Migrations across every tenant database or schema, as a deployment step',
