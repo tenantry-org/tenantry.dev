@@ -97,7 +97,7 @@ tag's `CHANGELOG.md`, with a link to the rest (`scripts/docs-changelog.mjs`); te
 - **Releases publish their docs by themselves.** The versions are worked out from the release tags: a line is
   listed once both Core and Pro have a stable release in it, with the newest release of each. The `docs-versions`
   workflow checks hourly (or on demand), commits any change to master and staging, which redeploys the site, and runs
-  the test workflow on the commit, since its own pushes start none.
+  the test and audit workflows on the commit, since its own pushes start none.
   `pnpm docs:update` does the same locally; `pnpm docs:check` fails unless the file matches the tags.
 - **The Pro access page's install snippets follow a Pro release line**, `PRO_RELEASE_LINE` in
   `src/lib/install-snippets.ts`. Once that line's docs are published, the tests compare the snippets with its

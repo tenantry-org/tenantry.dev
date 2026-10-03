@@ -3,16 +3,11 @@
 import DefaultSearchDialog from 'fumadocs-ui/components/dialog/search-default';
 import type { SharedProps } from 'fumadocs-ui/components/dialog/search';
 import { usePathname } from 'next/navigation';
-import { docsVersionOfPath, docsVersions } from '@/lib/docs-versions';
+import { docsVersionOfPath } from '@/lib/docs-versions';
 
-const tags = docsVersions.map((entry) => ({
-  name: entry.latest ? `v${entry.version} (latest)` : `v${entry.version}`,
-  value: entry.version,
-}));
-
-// Search within the docs version being read (the latest outside the docs); with more than one version, the footer
-// switches between them.
+// Search within the docs version being read (the latest outside the docs). The sidebar's version dropdown switches
+// versions; passing the versions as tags too would render Fumadocs' tag list as a bar at the top of every page.
 export function VersionedSearchDialog(props: SharedProps) {
   const version = docsVersionOfPath(usePathname());
-  return <DefaultSearchDialog {...props} defaultTag={version.version} tags={tags.length > 1 ? tags : []} />;
+  return <DefaultSearchDialog {...props} defaultTag={version.version} />;
 }

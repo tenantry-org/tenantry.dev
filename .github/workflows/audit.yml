@@ -3,7 +3,10 @@ name: audit
 # Fails when an installed package (dependencies and dev dependencies, from pnpm-lock.yaml) has a known high or
 # critical vulnerability; moderate and low ones are listed but do not fail it. Dependabot's alerts cover the same
 # lockfile; this check also fails the change that brings a vulnerable version in. Weekly as well as on changes,
-# because advisories are published for versions already installed.
+# because advisories are published for versions already installed. An advisory with no fixed version, in a package
+# that only a development tool uses, is listed in package.json's pnpm.auditConfig.ignoreGhsas with the reason here:
+# GHSA-vfj7-8cjw-p6xm, braces (stack exhaustion on deeply nested patterns), reached only through eslint-config-next's
+# fast-glob and micromatch; nothing in the site's build output uses it, and braces has no release that fixes it.
 on:
   push:
     branches: [master]
