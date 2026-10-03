@@ -6,12 +6,11 @@ import { Footer } from '@/components/home/footer/footer';
 import { Button } from '@/components/ui/button';
 import { CodeFigure } from '@/components/shared/code-figure';
 import { TrackedLink } from '@/components/shared/tracked-link';
-import { ProOffer } from '@/constants/pro-offer';
 
 export const metadata: Metadata = {
-  title: 'Tenantry Pro — provisioning, tenant migrations and tenant-aware operations',
+  title: 'Tenantry Pro — a database or schema per tenant, without writing the tooling',
   description:
-    'Tenantry Pro adds tenant provisioning, EF Core migrations across every tenant database or schema, schema per tenant, the tenant in Hangfire, MassTransit, Quartz.NET and Rebus, audit logging, health checks and metrics.',
+    'Tenantry Pro onboards a tenant in one call, migrates every tenant database or schema as a deployment step, and keeps the tenant in Hangfire, Quartz.NET, MassTransit and Rebus work. One price for your whole company.',
   alternates: { canonical: '/pro' },
 };
 
@@ -138,21 +137,32 @@ export default function ProPage() {
       <main>
         <section className={'border-b border-border/70'}>
           <div className={'mx-auto max-w-6xl px-4 pb-16 pt-16 md:px-8 md:pt-24'}>
-            <h1 className={'text-4xl font-bold tracking-tight text-balance sm:text-5xl'}>Tenantry Pro</h1>
+            <p className={'text-sm font-medium text-link'}>Tenantry Pro</p>
+            <h1 className={'mt-3 max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl'}>
+              A database or schema per tenant, without writing the tooling
+            </h1>
             <p className={'mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground'}>
-              {ProOffer.description} Pro builds on the open-source Tenantry Core, which stays free and covers resolving
-              tenants and isolating their data on its own.
+              Onboard a tenant in one call, migrate every tenant database as a deployment step, and keep the tenant in
+              your Hangfire, Quartz.NET, MassTransit and Rebus work. One price covers your whole company. Pro builds on
+              the free, open-source Tenantry Core.
             </p>
             <div className={'mt-8 flex flex-wrap items-center gap-3'}>
               <Button asChild size={'lg'}>
                 <TrackedLink href={'/#pricing'} event={'See pricing'} data={{ from: 'pro' }}>
-                  See pricing <ArrowRight className={'h-4 w-4'} />
+                  Subscribe to Pro <ArrowRight className={'h-4 w-4'} />
                 </TrackedLink>
               </Button>
               <Button asChild size={'lg'} variant={'outline'}>
                 <Link href={'/docs/pro'}>Pro docs</Link>
               </Button>
             </div>
+            <p className={'mt-10 max-w-2xl rounded-xl border border-border bg-card p-5 text-sm leading-relaxed'}>
+              <span className={'font-semibold'}>Do I need Pro?</span>{' '}
+              <span className={'text-muted-foreground'}>
+                With one shared database, Core may be all you need: it isolates tenant data and runs background work as
+                a tenant with worker scopes. Pro adds audit logging and the tenant carried into your jobs and messages.
+              </span>
+            </p>
           </div>
         </section>
 
@@ -222,7 +232,7 @@ export default function ProPage() {
             <div className={'mt-12'}>
               <Button asChild size={'lg'}>
                 <TrackedLink href={'/#pricing'} event={'See pricing'} data={{ from: 'pro, questions' }}>
-                  See pricing <ArrowRight className={'h-4 w-4'} />
+                  Subscribe to Pro <ArrowRight className={'h-4 w-4'} />
                 </TrackedLink>
               </Button>
             </div>
