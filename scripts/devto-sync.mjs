@@ -148,15 +148,19 @@ async function main() {
     throw new Error(`${site} does not serve this commit's posts after twenty minutes; the next push retries.`);
 
   const request = devto(apiKey);
-  const { creates, updates } = plan(posts, await accountArticles(request), process.env.DEVTO_ORGANIZATION_ID);
-  if (creates.length === 0 && updates.length === 0) console.log('devto-sync: dev.to is up to date.');
+  const articles = await accountArticles(request);
+  const { creates, updates } = plan(posts, articles, process.env.DEVTO_ORGANIZATION_ID);
+  const changed = new Set([...creates, ...updates].map(({ post }) => post.url));
+  for (const article of articles.filter((a) => posts.some((post) => post.url === a.canonical_url))) {
+    if (!changed.has(article.canonical_url)) console.log(`devto-sync: up to date ${article.url}`);
+  }
   for (const { post, article } of creates) {
     console.log(`devto-sync: ${dryRun ? 'would create' : 'creating'} ${post.url}`);
-    if (!dryRun) await request('POST', '/articles', { article });
+    if (!dryRun) console.log(`devto-sync: created ${(await request('POST', '/articles', { article })).url}`);
   }
   for (const { post, id, article } of updates) {
     console.log(`devto-sync: ${dryRun ? 'would update' : 'updating'} ${post.url} (article ${id})`);
-    if (!dryRun) await request('PUT', `/articles/${id}`, { article });
+    if (!dryRun) console.log(`devto-sync: updated ${(await request('PUT', `/articles/${id}`, { article })).url}`);
   }
 }
 
