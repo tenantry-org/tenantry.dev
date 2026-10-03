@@ -9,7 +9,7 @@
  * docs are published (docs-versions.json), the snippets are compared with a sibling tenantry-pro checkout, if there
  * is one; from then on, with the published guide, and the tests fail once a newer line is published.
  */
-export const PRO_RELEASE_LINE = '0.5';
+export const PRO_RELEASE_LINE = '0.6';
 
 /** Environment variables the `nuget.config` reads the feed credentials from. */
 export const FEED_USERNAME_VARIABLE = 'TENANTRY_GITHUB_USERNAME';
