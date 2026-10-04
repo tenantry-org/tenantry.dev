@@ -6,14 +6,16 @@ import { Button } from '@/components/ui/button';
 import { GithubIcon } from '@/components/icons/github-icon';
 import { latestDocsVersion } from '@/lib/docs-versions';
 
-// From Tenantry Core's README and getting-started guide.
+// From Tenantry Core's README and getting-started guide, with the access check that guide asks for in production
+// (docs/access-control.md): a header alone lets any caller name any tenant.
 const SNIPPET = `builder.Services.AddTenantry<Guid>(tenant => tenant
-    .ResolveFromHeader("X-Tenant-Id")   // where the tenant comes from
-    .UseInMemoryStore(tenants));        // where tenants are defined
+    .ResolveFromHeader("X-Tenant-Id")           // names the tenant
+    .ValidateTenantAccessByClaim("tenant_id")   // the user may use it
+    .UseInMemoryStore(tenants));                // lists the tenants
 
 builder.Services.AddDbContext<AppDbContext>(options => options
     .UseSqlServer(connectionString)
-    .UseTenantry());                    // how data is isolated
+    .UseTenantry());                            // isolates the data
 
 // Tenant-owned: stamped on insert, filtered in every query.
 public class Order : ITenantEntity<Guid>
