@@ -6,15 +6,15 @@ purchase → entitlement → access pipeline for **Tenantry Pro**.
 
 ## What it does
 
-- **Marketing + pricing** — landing page and Paddle-powered pricing for Tenantry Pro.
-- **Docs** (`/docs`) — full searchable documentation via [Fumadocs](https://fumadocs.dev), sourced
-  from the `tenantry-core` and `tenantry-pro` repos (see [Docs pipeline](#docs-pipeline)).
-- **Commercial backend** — Paddle webhooks drive Supabase entitlements and an ES256 licence issuer, and the site
-  serves Tenantry Pro's packages from its own NuGet feed, the package feed, to each customer as their entitlement
-  allows.
-- **Customer portal** (`/dashboard/pro`) — Access (the entitlement, feed tokens and the licence key), Install
-  (restoring from the package feed) and Billing (the subscriptions, with invoices and the payment method in Paddle's
-  portal).
+- The landing page, and pricing for Tenantry Pro through Paddle.
+- The docs at `/docs`, searchable, through [Fumadocs](https://fumadocs.dev), taken from the `tenantry-core` and
+  `tenantry-pro` repositories (see [Docs pipeline](#docs-pipeline)).
+- The commercial backend: Paddle's notifications record each customer's subscriptions and payments, from which the
+  site works out what they may use, issues their licence key, and serves Tenantry Pro's packages from its own NuGet
+  feed, the package feed.
+- The customer portal at `/dashboard/pro`: Access (the releases they may use, feed tokens and the licence key),
+  Install (restoring from the package feed) and Billing (the subscriptions, with invoices and the payment method in
+  Paddle's portal).
 
 ## Architecture
 
