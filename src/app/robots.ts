@@ -1,9 +1,10 @@
 import type { MetadataRoute } from 'next';
 import { absoluteUrl, draftsShown } from '@/lib/blog';
 
-// Pages for a signed-in customer or a step of signing in or paying, and the API: not for any crawler.
+// Pages for a signed-in customer or a step of signing in or paying, the API and the package feed: not for any crawler.
 const PRIVATE = [
   '/api/',
+  '/feed/',
   '/auth/',
   '/checkout',
   '/dashboard',
