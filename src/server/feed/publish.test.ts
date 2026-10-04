@@ -32,6 +32,12 @@ beforeEach(() => {
       },
     ),
     recordPackage: vi.fn(async () => true),
+    listReleases: vi.fn(async () =>
+      [...releases].map(([version, release]) => {
+        const [major, minor, patch] = version.split('.').map(Number);
+        return { version, major, minor, patch, publishedAt: new Date(release.publishedAt) };
+      }),
+    ),
   };
   deps = {
     store: store as unknown as FeedStore,
@@ -130,6 +136,7 @@ describe('handlePublish', () => {
 
   it('dates the release from its manifest, and records a security patch once its X.Y.0 is published', async () => {
     const manifest = (security: boolean, releasedAt: string) => JSON.stringify({ security, releasedAt });
+    deps.now = () => new Date('2027-11-21T00:00:00Z');
 
     expect(
       (
@@ -146,6 +153,7 @@ describe('handlePublish', () => {
     });
     expect(releases.get('1.4.0')?.publishedAt).toBe('2027-11-20T12:00:00.000Z');
 
+    deps.now = () => new Date('2028-03-15T13:00:00Z');
     const patch = await push({
       'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', '1.4.3'),
       'tenantry-release.json': manifest(true, '2028-03-15T12:00:00Z'),
@@ -197,5 +205,48 @@ describe('concurrent publishes of one version', () => {
     const [record] = records.values();
     const bytes = stored.get(record.storagePath)!;
     expect(createHash('sha512').update(bytes).digest('base64')).toBe(record.sha512);
+  });
+});
+
+describe('release dates', () => {
+  const dated = (version: string, releasedAt: string, security = false) =>
+    push({
+      'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', version),
+      'tenantry-release.json': JSON.stringify({ releasedAt, security }),
+    });
+
+  it('refuses a release dated long before now, which would put it under every vested date', async () => {
+    const response = await dated('9.9.0', '2000-01-01T00:00:00Z');
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('releasedAt');
+    expect(store.ensureRelease).not.toHaveBeenCalled();
+    expect((await dated('9.9.0', '2028-05-20T00:00:00Z')).status).toBe(400);
+  });
+
+  it('refuses a release dated in the future', async () => {
+    expect((await dated('9.9.0', '2028-06-03T00:00:00Z')).status).toBe(400);
+  });
+
+  it('accepts a date within a few days before now, such as the tag date of a release published later', async () => {
+    expect((await dated('9.9.0', '2028-05-30T00:00:00Z')).status).toBe(201);
+  });
+
+  it('refuses a date before the newest release of an earlier version', async () => {
+    releases.set('9.8.0', { security: false, publishedAt: '2028-05-31T12:00:00Z' });
+    // A patch of an older minor may come after a newer minor: only earlier versions bound it.
+    releases.set('9.10.0', { security: false, publishedAt: '2028-05-31T18:00:00Z' });
+
+    expect((await dated('9.9.0', '2028-05-31T00:00:00Z')).status).toBe(400);
+    expect((await dated('9.9.0', '2028-05-31T13:00:00Z')).status).toBe(201);
+  });
+
+  it('dates a security patch as its minor by the release record, whatever its own date', async () => {
+    releases.set('9.9.0', { security: false, publishedAt: '2028-05-30T00:00:00Z' });
+
+    expect((await dated('9.9.1', '2028-05-31T00:00:00Z', true)).status).toBe(201);
+    expect(store.ensureRelease).toHaveBeenLastCalledWith(
+      expect.objectContaining({ version: '9.9.1', security: true, publishedAt: '2028-05-31T00:00:00.000Z' }),
+    );
   });
 });

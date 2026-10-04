@@ -12,14 +12,22 @@ import { parseNuspec, readRootFiles } from '@/server/feed/nupkg';
  * version are not published yet (409 otherwise, which `--skip-duplicate` treats as done). Its release is recorded with
  * the first of its packages (pro_releases). The release date is when that first package is published, unless the
  * package carries a `tenantry-release.json` at its root, which may give:
- *   releasedAt  the release's date (ISO 8601), such as the signed tag's date, for a release published later
- *   security    true for a security patch, which the feed dates as its minor's X.Y.0 (recorded first)
+ *   releasedAt  the release's date (ISO 8601), such as the signed tag's date, for a release published later. It may
+ *               be at most MAX_BACKDATE_DAYS before now, not in the future, and not before any earlier version's
+ *               date: otherwise a release could be dated under customers' vested dates and be served to them.
+ *   security    true for a security patch, which the feed dates as its minor's X.Y.0 (recorded first) by the
+ *               release record's own rule, whatever releasedAt says
  *
  * Packages are limited to 4 MB: a Vercel function takes a request body of at most 4.5 MB. Pro's packages are well
  * under 1 MB.
  */
 
 const MAX_PACKAGE_BYTES = 4 * 1024 * 1024;
+/** How far before now a release may be dated: room for a release published some days after it was tagged. */
+export const MAX_BACKDATE_DAYS = 3;
+/** How far after now: clock skew between the workflow and the site. */
+const MAX_FORWARD_DATE_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const PACKAGE_ID = /^Tenantry\.Pro(\.[A-Za-z0-9]+)*$/;
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
@@ -61,18 +69,40 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
   const releasedAt = manifest.releasedAt === undefined ? deps.now() : new Date(String(manifest.releasedAt));
   if (Number.isNaN(releasedAt.getTime())) return reply(400, 'tenantry-release.json has an invalid releasedAt.');
   const security = manifest.security === true;
+  const now = deps.now();
+  if (releasedAt.getTime() < now.getTime() - MAX_BACKDATE_DAYS * DAY_MS) {
+    return reply(400, `tenantry-release.json's releasedAt is more than ${MAX_BACKDATE_DAYS} days before now.`);
+  }
+  if (releasedAt.getTime() > now.getTime() + MAX_FORWARD_DATE_MS) {
+    return reply(400, "tenantry-release.json's releasedAt is in the future.");
+  }
 
   const lowerId = nuspec.id.toLowerCase();
   if (await deps.store.packageExists(lowerId, nuspec.version)) {
     return reply(409, `${nuspec.id} ${nuspec.version} is already published.`);
   }
 
+  const [major, minor, patch] = [Number(version[1]), Number(version[2]), Number(version[3])];
+  const earlier = (await deps.store.listReleases()).filter(
+    (release) =>
+      release.major < major ||
+      (release.major === major && (release.minor < minor || (release.minor === minor && release.patch < patch))),
+  );
+  const newestEarlier = Math.max(...earlier.map((release) => release.publishedAt.getTime()));
+  if (releasedAt.getTime() < newestEarlier) {
+    return reply(
+      400,
+      `tenantry-release.json's releasedAt is before ${new Date(newestEarlier).toISOString()}, when an earlier version ` +
+        'was released.',
+    );
+  }
+
   try {
     const release = await deps.store.ensureRelease({
       version: nuspec.version,
-      major: Number(version[1]),
-      minor: Number(version[2]),
-      patch: Number(version[3]),
+      major,
+      minor,
+      patch,
       publishedAt: releasedAt.toISOString(),
       security,
     });

@@ -179,6 +179,24 @@ export async function ensureRelease(release: ReleaseRecord): Promise<{ security:
   return { security: data.security };
 }
 
+/** Every recorded release, with when it was published. */
+export async function listReleases(): Promise<
+  { version: string; major: number; minor: number; patch: number; publishedAt: Date }[]
+> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.from('pro_releases').select('version,major,minor,patch,published_at');
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    version: row.version,
+    major: row.major,
+    minor: row.minor,
+    patch: row.patch,
+    publishedAt: new Date(row.published_at),
+  }));
+}
+
 /** A package file of a release, as the publish step records it. */
 export interface PackageRecord {
   packageId: string;

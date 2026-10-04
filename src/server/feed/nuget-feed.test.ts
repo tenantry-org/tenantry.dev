@@ -80,6 +80,7 @@ beforeEach(() => {
     ensureRelease: vi.fn(),
     recordPackage: vi.fn(),
     packageExists: vi.fn(),
+    listReleases: vi.fn(),
   };
   deps = {
     store: store as unknown as FeedStore,

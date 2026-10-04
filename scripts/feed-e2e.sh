@@ -3,15 +3,18 @@
 # releases, publishes them with `dotnet nuget push`, then restores as several customers and checks what NuGet
 # resolves, downloads and refuses.
 #
-#   Tenantry.Pro.FeedProbe<run> 1.0.0  released 2027-11-20
-#   Tenantry.Pro.FeedProbe<run> 1.0.1  a security patch, released 2028-03-15, dated as 1.0.0
-#   Tenantry.Pro.FeedProbe<run> 1.1.0  released 2028-05-20
+#   Tenantry.Pro.FeedProbe<run> 1.<n>.0      released 20 seconds before the run started
+#   Tenantry.Pro.FeedProbe<run> 1.<n>.1      a security patch, released 10 seconds before, dated as 1.<n>.0
+#   Tenantry.Pro.FeedProbe<run> 1.<n+1>.0    released when the run started
 #
-# <run> is the run's start time, so each run publishes packages of its own to the same database.
+# <run> is the run's start time and <n> grows with it, so each run publishes packages and releases of its own to the
+# same database, later than every earlier run's (the feed refuses a release dated before an earlier version's, or more
+# than a few days before now).
 #
-#   active    a subscriber: restores 1.1.0 for 1.*, with a lock file whose hash matches the package, and a locked-mode
-#             restore from an empty package folder downloads it again through the redirect
-#   vested    lapsed, vested through the end of 2027: restores 1.0.1 for 1.*; 1.1.0 is not found, even from a lock file
+#   active    a subscriber: restores 1.<n+1>.0 for 1.*, with a lock file whose hash matches the package, and a
+#             locked-mode restore from an empty package folder downloads it again through the redirect
+#   vested    lapsed, vested through 15 seconds before the run: restores 1.<n>.1 for 1.*; 1.<n+1>.0 is not found, even
+#             from a lock file
 #   unvested  lapsed, never vested: refused with 403
 #   unknown   a token the feed does not know: refused with 401
 #
@@ -42,6 +45,13 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
 run_id="$(date +%s)"
 probe_id="Tenantry.Pro.FeedProbe$run_id"
+n=$((run_id - 1790000000))
+v_first="1.$n.0" v_patch="1.$n.1" v_next="1.$((n + 1)).0"
+# An ISO 8601 UTC time, `seconds` before the run started (BSD date, then GNU).
+iso_before() {
+  local at=$((run_id - $1))
+  date -u -r "$at" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$at" +%Y-%m-%dT%H:%M:%SZ
+}
 probe_lower="$(tr '[:upper:]' '[:lower:]' <<<"$probe_id")"
 failures=0
 passes=0
@@ -149,6 +159,9 @@ cat >"$work/probe/$probe_id.csproj" <<'PROJECT'
     <TargetFramework>netstandard2.0</TargetFramework>
     <Authors>Tenantry</Authors>
     <Description>A package for testing the Tenantry Pro feed.</Description>
+    <!-- The package versions' minor is too large for an assembly version. -->
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
   </PropertyGroup>
   <ItemGroup>
     <None Include="tenantry-release.json" Pack="true" PackagePath="" />
@@ -167,9 +180,9 @@ pack() {
     exit 1
   fi
 }
-pack 1.0.0 2027-11-20T12:00:00Z false
-pack 1.0.1 2028-03-15T12:00:00Z true
-pack 1.1.0 2028-05-20T12:00:00Z false
+pack "$v_first" "$(iso_before 20)" false
+pack "$v_patch" "$(iso_before 10)" true
+pack "$v_next" "$(iso_before 0)" false
 
 # push VERSION KEY: dotnet nuget push to the feed. A rerun against the same database finds the packages published
 # already, which --skip-duplicate accepts.
@@ -177,14 +190,14 @@ push() {
   dotnet nuget push "$work/nupkgs/$probe_id.$1.nupkg" --source tenantry --api-key "$2" \
     --configfile "$work/nuget.config" --skip-duplicate 2>&1
 }
-for version in 1.0.0 1.0.1 1.1.0; do
+for version in "$v_first" "$v_patch" "$v_next"; do
   if output="$(push "$version" "$publish_key")"; then
     pass "dotnet nuget push publishes $version"
   else
     fail "dotnet nuget push publishes $version" "$output"
   fi
 done
-if output="$(push 1.1.0 wrong-key)"; then
+if output="$(push "$v_next" wrong-key)"; then
   fail 'a push with a wrong key is refused' "$output"
 else
   check 'a push with a wrong key is refused' '[[ "$output" == *403* ]]' "$output"
@@ -204,7 +217,7 @@ for name in active vested unvested; do
   rest active_subscriptions "{\"customer_id\":\"$customer\",\"access_status\":\"$access\"}"
   rest feed_tokens "{\"customer_id\":\"$customer\",\"name\":\"e2e\",\"token_hash\":\"$(sha256_hex "$(token "$name")")\",\"prefix\":\"tpf_e2e_\"}"
 done
-rest vested_entitlements "{\"customer_id\":\"ctm_e2e_vested_$run_id\",\"kind\":\"qualifying_run\",\"started_at\":\"2027-01-01T00:00:00Z\",\"vested_through\":\"2028-01-01T00:00:00Z\",\"status\":\"confirmed\",\"confirmed_at\":\"2028-01-01T00:00:00Z\"}"
+rest vested_entitlements "{\"customer_id\":\"ctm_e2e_vested_$run_id\",\"kind\":\"qualifying_run\",\"started_at\":\"2027-01-01T00:00:00Z\",\"vested_through\":\"$(iso_before 15)\",\"status\":\"confirmed\",\"confirmed_at\":\"$(iso_before 15)\"}"
 
 # consumer CUSTOMER VERSION: a project referencing the probe at VERSION with the customer's token, restoring into its own
 # package folder.
@@ -247,11 +260,11 @@ probe() { jq -r ".dependencies[][\"$probe_id\"] | select(. != null) | .$2" "$1/p
 # Active: the newest release, with the lock file's hash the package's own, then a locked-mode restore from nothing.
 dir="$(consumer active '1.*')"
 if output="$(restore "$dir")"; then
-  check 'an active customer restores 1.* as 1.1.0' '[[ "$(probe "$dir" resolved)" == 1.1.0 ]]' "$output"
+  check "an active customer restores 1.* as $v_next" '[[ "$(probe "$dir" resolved)" == $v_next ]]' "$output"
   check "the lock file records the published package's SHA-512" \
-    '[[ "$(probe "$dir" contentHash)" == "$(file_hash "$work/nupkgs/$probe_id.1.1.0.nupkg")" ]]'
+    '[[ "$(probe "$dir" contentHash)" == "$(file_hash "$work/nupkgs/$probe_id.$v_next.nupkg")" ]]'
 else
-  fail 'an active customer restores 1.* as 1.1.0' "$output"
+  fail "an active customer restores 1.* as $v_next" "$output"
 fi
 rm -rf "$dir/packages" "$dir/http-cache"
 if output="$(restore "$dir" --locked-mode)"; then
@@ -263,32 +276,32 @@ fi
 # The redirect itself, and a 404.
 auth="Authorization: Basic $(printf 'e2e:%s' "$(token active)" | openssl base64 -A)"
 headers="$(curl -s -o /dev/null -D - -H "$auth" \
-  "$site/feed/v3/flat/$probe_lower/1.1.0/$probe_lower.1.1.0.nupkg")"
+  "$site/feed/v3/flat/$probe_lower/$v_next/$probe_lower.$v_next.nupkg")"
 check 'a download answers 302 to a signed storage URL, kept out of shared caches' \
   '[[ "$headers" == *" 302"* && "$headers" == *"/storage/v1/object/sign/pro-packages/"* && "$headers" == *"private, no-store"* ]]' \
   "$headers"
 location="$(sed -n 's/^[Ll]ocation: //p' <<<"$headers" | tr -d '\r')"
 curl -sf -o "$work/downloaded.nupkg" "$location" || true
 check 'the signed URL serves the published bytes' \
-  '[[ -f "$work/downloaded.nupkg" && "$(file_hash "$work/downloaded.nupkg")" == "$(file_hash "$work/nupkgs/$probe_id.1.1.0.nupkg")" ]]'
+  '[[ -f "$work/downloaded.nupkg" && "$(file_hash "$work/downloaded.nupkg")" == "$(file_hash "$work/nupkgs/$probe_id.$v_next.nupkg")" ]]'
 status="$(curl -s -o /dev/null -w '%{http_code}' -H "$auth" "$site/feed/v3/flat/tenantry.pro.missing/index.json")"
 check 'an unknown package answers 404' '[[ "$status" == 404 ]]' "$status"
 
 # Vested: the security patch of the vested minor, and nothing newer.
 dir="$(consumer vested '1.*')"
 if output="$(restore "$dir")"; then
-  check 'a vested customer restores 1.* as the security patch 1.0.1' '[[ "$(probe "$dir" resolved)" == 1.0.1 ]]' \
+  check "a vested customer restores 1.* as the security patch $v_patch" '[[ "$(probe "$dir" resolved)" == $v_patch ]]' \
     "$output"
 else
-  fail 'a vested customer restores 1.* as the security patch 1.0.1' "$output"
+  fail "a vested customer restores 1.* as the security patch $v_patch" "$output"
 fi
-dir="$(consumer vested '[1.1.0]')"
+dir="$(consumer vested "[$v_next]")"
 if output="$(restore "$dir")"; then
-  fail 'a vested customer cannot restore 1.1.0' "$output"
+  fail "a vested customer cannot restore $v_next" "$output"
 else
-  check 'a vested customer cannot restore 1.1.0' '[[ "$output" == *NU1102* || "$output" == *NU1101* ]]' "$output"
+  check "a vested customer cannot restore $v_next" '[[ "$output" == *NU1102* || "$output" == *NU1101* ]]' "$output"
 fi
-dir="$(consumer active '[1.1.0]')"
+dir="$(consumer active "[$v_next]")"
 restore "$dir" >/dev/null || true
 sed -i.bak "s/$(token active)/$(token vested)/" "$dir/nuget.config"
 rm -rf "$dir/packages" "$dir/http-cache"
