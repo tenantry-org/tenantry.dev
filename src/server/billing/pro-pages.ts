@@ -10,7 +10,7 @@ import {
   readLicenceKey,
   readSubscriptions,
 } from '@/server/db/customer-dashboard';
-import { graceEndsAt, isEntitled } from '@/server/billing/entitlement-policy';
+import { graceEndFor, isEntitled } from '@/server/billing/entitlement-policy';
 import type { AccessStatus, GithubState } from '@/server/db/billing-store';
 import { type ServerConfig, serverConfig } from '@/server/config/server-config';
 
@@ -132,13 +132,16 @@ export async function getBillingView(paddle?: ServerConfig['paddle']): Promise<B
   const [access, subscriptions] = await Promise.all([readCustomerAccess(customerId), readSubscriptions(customerId)]);
   const { proProductId, prices } = paddle ?? serverConfig().paddle;
 
-  const graceEnds = subscriptions
-    .filter(
-      ({ product_id, status, grace_started_at }) =>
-        product_id === proProductId && status === 'past_due' && grace_started_at,
-    )
-    .map(({ grace_started_at }) => graceEndsAt(new Date(grace_started_at!)).getTime());
-  const graceEnd = graceEnds.length > 0 ? Math.max(...graceEnds) : null;
+  // The same rule as access itself (entitlement-policy.ts), so the page and the access it describes agree.
+  const graceEnd =
+    graceEndFor(
+      subscriptions.map((row) => ({
+        productId: row.product_id,
+        status: row.status,
+        graceStartedAt: row.grace_started_at ? new Date(row.grace_started_at) : null,
+      })),
+      proProductId,
+    )?.getTime() ?? null;
 
   return {
     noSubscription: false,

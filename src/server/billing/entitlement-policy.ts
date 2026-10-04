@@ -94,9 +94,26 @@ export function isEntitled(status: AccessStatus): boolean {
 }
 
 /**
+ * When the customer's grace ends: the latest end of the grace periods of their past-due Pro subscriptions, whether or
+ * not it has passed, or null if none is past due. A past-due subscription with no recorded grace start (none is
+ * recorded after the first past-due event, but rows migrated from the old schema may lack one) is treated as having
+ * no grace left, never as starting now, so a missing date cannot extend access.
+ */
+export function graceEndFor(subscriptions: GraceSubscription[], proProductId: string): Date | null {
+  return latest(
+    subscriptions
+      .filter((subscription) => subscription.productId === proProductId && subscription.status === 'past_due')
+      .flatMap((subscription) => (subscription.graceStartedAt ? [graceEndsAt(subscription.graceStartedAt)] : [])),
+  );
+}
+
+/** What deciding grace reads from a subscription. */
+export type GraceSubscription = Pick<SubscriptionState, 'productId' | 'status' | 'graceStartedAt'>;
+
+/**
  * The customer's access now, from their subscriptions: active if any Pro subscription is active or trialing, grace if
- * any is past due and its grace period has not ended by `now`, otherwise lapsed. Paused and cancelled subscriptions,
- * and subscriptions to other products, entitle to nothing.
+ * any is past due and its grace period has not ended by `now` (graceEndFor), otherwise lapsed. Paused and cancelled
+ * subscriptions, and subscriptions to other products, entitle to nothing.
  */
 export function accessFor(subscriptions: SubscriptionState[], proProductId: string, now: Date): Access {
   const pro = subscriptions.filter((subscription) => subscription.productId === proProductId);
@@ -105,14 +122,9 @@ export function accessFor(subscriptions: SubscriptionState[], proProductId: stri
     return { status: 'active', graceEndsAt: null };
   }
 
-  const graceEnds = pro
-    .filter((subscription) => subscription.status === 'past_due')
-    // A past-due subscription with no recorded start is in grace from now: it cannot have run out.
-    .map((subscription) => (subscription.graceStartedAt ? graceEndsAt(subscription.graceStartedAt) : graceEndsAt(now)))
-    .filter((end) => end > now);
-
-  return graceEnds.length > 0
-    ? { status: 'grace', graceEndsAt: latest(graceEnds) }
+  const graceEnd = graceEndFor(pro, proProductId);
+  return graceEnd && graceEnd > now
+    ? { status: 'grace', graceEndsAt: graceEnd }
     : { status: 'lapsed', graceEndsAt: null };
 }
 

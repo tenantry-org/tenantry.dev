@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
     "test:feed-e2e": "bash scripts/feed-e2e.sh",
+    "test:migrations": "bash scripts/test-migrations.sh",
     "test": "pnpm lint && pnpm prettier:check && pnpm typecheck && pnpm test:unit",
     "postinstall": "fumadocs-mdx"
   },

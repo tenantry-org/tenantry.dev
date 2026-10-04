@@ -675,8 +675,12 @@ describe('access', () => {
     expect(access([pastDue], date('2026-10-30T23:59:59Z')).status).toBe('grace');
     expect(access([pastDue], date('2026-10-31T00:00:00Z')).status).toBe('lapsed');
     expect(access([pastDue, running('sub_2')], date('2026-10-31T00:00:00Z')).status).toBe('active');
-    // With no recorded start, grace has not begun to run out.
-    expect(access([running('sub_1', 'past_due')]).status).toBe('grace');
+    // With no recorded start, grace cannot be shown to be running: it has ended, so a missing date never extends it.
+    expect(access([running('sub_1', 'past_due')])).toEqual({ status: 'lapsed', graceEndsAt: null });
+    expect(access([running('sub_1', 'past_due'), running('sub_2', 'past_due', '2026-10-20T00:00:00Z')])).toEqual({
+      status: 'grace',
+      graceEndsAt: date('2026-11-19T00:00:00Z'),
+    });
   });
 
   it('lets a customer with access use every release, and a lapsed one those their vested date covers', () => {

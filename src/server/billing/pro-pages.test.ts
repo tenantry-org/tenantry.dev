@@ -165,6 +165,14 @@ describe('getBillingView', () => {
     await expect(getBillingView(paddle)).resolves.toMatchObject({ access: { grace: { ended: true } } });
   });
 
+  it('agrees with access about a past-due subscription with no recorded grace start: its grace has ended', async () => {
+    state.tables.subscriptions = {
+      list: [{ subscription_id: 'sub_a', product_id: 'pro_01', status: 'past_due', grace_started_at: null }],
+    };
+
+    await expect(getBillingView(paddle)).resolves.toMatchObject({ access: { status: 'grace', grace: null } });
+  });
+
   it('has no grace for an active customer', async () => {
     state.tables.active_subscriptions = access('active');
 

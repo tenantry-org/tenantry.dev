@@ -29,11 +29,18 @@ alter table public.subscriptions
   add column grace_started_at timestamp with time zone,
   add column ended_at timestamp with time zone;
 
+-- A past-due subscription keeps its entitlement's grace start. The old schema kept none for an entitlement it had
+-- revoked, so such a one is given a start whose 30 days ended when it was revoked, and one with no entitlement row the
+-- time of its last event: never none, which access would read as grace without end (entitlement-policy.ts: graceEndFor
+-- treats a missing start as grace already over in any case).
 update public.subscriptions s
 set current_period_ends_at = e.current_period_ends_at,
-    grace_started_at = case when s.status = 'past_due' then e.grace_started_at end
-from public.entitlements e
-where e.subscription_id = s.subscription_id;
+    grace_started_at = case
+      when s.status = 'past_due' then coalesce(e.grace_started_at, e.revoked_at - interval '30 days', s.last_event_at)
+    end
+from public.subscriptions s2
+left join public.entitlements e on e.subscription_id = s2.subscription_id
+where s2.subscription_id = s.subscription_id;
 
 alter table public.subscriptions
   add constraint subscriptions_grace_started_check check (grace_started_at is null or status = 'past_due');
