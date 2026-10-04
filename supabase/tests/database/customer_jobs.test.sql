@@ -38,9 +38,8 @@ select throws_ok(
     values ('reconcile_x', 'reconcile', 'ctm_x', now(), 'subscription.updated', '{}')$$,
   '23514', null, 'a reconcile job has no Paddle event');
 select throws_ok(
-  $$insert into public.customer_jobs (id, kind, customer_id, occurred_at, payload)
-    values ('lease_x', 'lease', 'ctm_x', now(), '{}')$$,
-  '23514', null, 'a lease has no body');
+  $$insert into public.customer_jobs (id, kind, customer_id, occurred_at) values ('lease_x', 'lease', 'ctm_x', now())$$,
+  '23514', null, 'there is no lease kind of job any more');
 select throws_ok(
   $$insert into public.customer_jobs (id, kind, occurred_at) values ('reconcile_x', 'reconcile', now())$$,
   '23514', null, 'a reconcile job has a customer');

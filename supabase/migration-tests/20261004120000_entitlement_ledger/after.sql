@@ -1,4 +1,6 @@
--- What 20261004120000_entitlement_ledger.sql made of before.sql's rows. Run by scripts/test-migrations.sh.
+-- What 20261004120000_entitlement_ledger.sql made of before.sql's rows. Run by scripts/test-migrations.sh, after every
+-- later migration too, so it checks only what they leave as this one made it (the GitHub state it carried over is
+-- dropped by 20261005090000_retire_github_delivery.sql, whose own test checks that).
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path to public, extensions;
@@ -37,13 +39,9 @@ select results_eq(
   'a cancelled or paused subscription ended at its scheduled change, if recorded, or at its last event; others run');
 
 select results_eq(
-  $$select customer_id, access_status, github_state, github_invited_at from public.active_subscriptions
-    order by customer_id$$,
-  $$values
-    ('ctm_active'::text, 'active'::text, 'invited'::text, '2026-10-01 00:00+00'::timestamptz),
-    ('ctm_grace', 'grace', 'active', null),
-    ('ctm_lapsed', 'lapsed', 'none', null)$$,
-  'customer access becomes active_subscriptions, revoked as lapsed, with the GitHub state');
+  $$select customer_id, access_status from public.active_subscriptions order by customer_id$$,
+  $$values ('ctm_active'::text, 'active'::text), ('ctm_grace', 'grace'), ('ctm_lapsed', 'lapsed')$$,
+  'customer access becomes active_subscriptions, revoked as lapsed');
 select is((select count(*)::int from public.active_subscriptions where run_started_at is not null), 0,
   'no run is recorded until the first recompute');
 

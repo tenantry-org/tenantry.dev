@@ -21,6 +21,7 @@ test_migration() {
 
 status=0
 test_migration 20261004120000_entitlement_ledger 20261002120000 || status=1
+test_migration 20261005090000_retire_github_delivery 20261004130000 || status=1
 
 supabase db reset --local >/dev/null
 exit $status
