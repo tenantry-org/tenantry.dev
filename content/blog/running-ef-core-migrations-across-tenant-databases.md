@@ -10,9 +10,9 @@ next:
   href: /docs/pro/migration-orchestration
 ---
 
-With one database for everyone, a release applies its EF Core migrations once, with `dotnet ef database update` or a
-migration bundle. With a database for each tenant, or a schema for each, the same release has to apply them to every
-tenant's database, and `dotnet ef database update` updates one database at a time.
+With one shared database, a release applies its EF Core migrations once, with `dotnet ef database update` or a
+migration bundle. With a database or schema per tenant, it has to apply them to every tenant's database or schema, and
+those tools update one database per run.
 
 This post looks at what that takes, first by hand and then with Tenantry Pro's migration runner.
 
@@ -30,17 +30,17 @@ foreach (var tenant in await tenants.GetAllTenantsAsync(ct))
 }
 ```
 
-It works for a handful of tenants, and then:
+It works for a handful of tenants. Beyond that:
 
-- **One failure stops the rest.** A tenant whose database is unreachable, or whose data breaks a migration, throws,
-  and the application fails to start, with the tenants before it on the new schema and those after it on the old one.
+- A tenant whose database is unreachable, or whose data breaks a migration, throws and stops the loop. The
+  application fails to start, with the tenants before it on the new schema and those after it on the old one.
   Catching the exception keeps the loop going, but then something has to record which databases failed and why.
-- **It runs on every instance.** At startup, each replica migrates every tenant, so each one's startup grows with the
-  number of tenants, and the load on your databases with tenants times replicas.
-- **It takes as long as all the databases together.** Migrating them one after another is slow once there are
-  hundreds; migrating them all at once overwhelms the server.
-- **It cannot tell you where things stand** without migrating: which databases are behind, and by which migrations.
-- **New tenants need it too**, between creating their database and serving their first request.
+- Every replica migrates every tenant at startup, so startup time grows with the number of tenants, and database load
+  grows with tenants multiplied by replicas.
+- Migrating the databases one after another is slow once there are hundreds, and migrating them all at once
+  overwhelms the server.
+- Nothing says which databases are behind, and by which migrations, without migrating them.
+- New tenants need the same migrations, between creating their database and serving their first request.
 
 ## The same with Tenantry Pro
 
@@ -62,9 +62,9 @@ schema and interceptors are the ones your application uses.
 
 ### As a deployment step
 
-The recommended way to run it is once per release, from one process, before the new version takes traffic: a CI/CD
-stage or a Kubernetes `Job`. (An init container runs in every replica, which is the case to avoid.) The application
-runs the migrations and exits when it is started with `migrate-tenants`:
+Run it once per release, from one process, before the new version takes traffic: a CI/CD stage or a Kubernetes `Job`,
+not an init container, which runs in every replica. Started with `migrate-tenants`, the application runs the
+migrations and exits:
 
 ```csharp
 await using var app = builder.Build();   // disposing it at exit writes out the last log messages
@@ -78,19 +78,14 @@ return 0;
 ```
 
 It is the same build you deploy, so the migrations, the tenant store and the connection strings are the release's
-own. Each failure is logged once, as an error, and the run ends with a summary. A non-zero exit code stops the
-pipeline before the new version starts.
+own. Each failure is logged once, as an error, and the run ends with a summary.
 
 ### What a run does with failures
 
-- **Each database is on its own.** A failure in one never stops the others. The run goes on, and the report says which
-  databases failed and why.
-- **A rerun picks up where it stopped.** EF Core applies only what is pending, so after fixing the cause the same
-  command finishes the job.
-- **Tenants that share a database or schema are migrated once**, together, and share one result: the shared database
-  in mixed mode, say.
-- **Cancelling stops it.** Databases in progress are abandoned, the rest are not started, and those already migrated
-  stay migrated.
+A failure in one database never stops the others, and the report says which failed and why. EF Core applies only what
+is pending, so after fixing the cause the same command finishes the job. Tenants that share a database or schema, such
+as the shared database in mixed mode, are migrated once and share one result. Cancelling abandons the databases in
+progress and starts no more; those already migrated stay migrated.
 
 From code, `ITenantMigrationRunner<TKey>` returns the report, and can report each database as it completes:
 
@@ -103,8 +98,8 @@ var report = await migrations.MigrateAllAsync(
 Console.WriteLine($"{report.Succeeded} of {report.Total} databases migrated");
 ```
 
-Each result names its tenants, its database and schema, the migrations this run applied, its duration and, if it
-failed, the exception. "Applied" means applied by this run: a migration another process applied first is not counted.
+Each result names its tenants, its database and schema, its duration, the exception if it failed, and the migrations
+this run applied. A migration another process applied first is not counted.
 
 ### How many at once
 
@@ -139,15 +134,15 @@ operations.
 
 ## Limits
 
-- **There is no lock across instances.** EF Core 9 and later lock a database while migrating it, on providers that
-  support it, but two runs at once still both work through every tenant, and with EF Core 8, or PostgreSQL with
-  EF Core 10, they can race on the same migration. Run it once, as a deployment step, rather than at startup on every replica.
-- **It applies migrations; it does not write them.** Generate them with `dotnet ef migrations add` as before.
-- **A run does not create a missing database.** EF Core's `MigrateAsync` creates a database that does not exist, so
-  in the loop above a wrong connection string gets a new, empty database. The runner reports that tenant's database
-  as failed and migrates the others; with a schema per tenant, the same goes for a missing schema. Create tenant
-  databases with provisioning, and set `CreateMissingDatabases` for development, where they do not exist yet.
-- **Migrations are not Native AOT compatible**, here as in EF Core.
+- Tenantry takes no lock of its own, so two runs at once both work through every tenant. EF Core 9 and later lock
+  each database while migrating it, where the provider supports it, but with EF Core 8, or PostgreSQL with EF Core 10,
+  two runs can race on the same migration. Run one at a time.
+- The runner applies migrations and does not write them: generate them with `dotnet ef migrations add` as before.
+- EF Core's `MigrateAsync` creates a database that does not exist, so in the loop above a wrong connection string gets
+  a new, empty database. The runner does not: it reports that tenant's database as failed and migrates the others,
+  and with a schema per tenant it does the same for a missing schema. Create tenant databases with provisioning, and
+  set `CreateMissingDatabases` for development, where they do not exist yet.
+- Migrations do not support Native AOT, here as in EF Core.
 
 The [tenant migrations guide](/docs/pro/migration-orchestration) has the rest, including running at startup for a
 single instance and the exact behaviour of each EF Core version and database.
