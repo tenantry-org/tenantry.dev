@@ -354,6 +354,12 @@ describe('applyPaddleEvent', () => {
     const adjusted = (options: Parameters<typeof adjustmentEvent>[0]) =>
       applyPaddleEvent(delivered(adjustmentEvent(options)), deps);
 
+    // txn_01 pays sub_01's current billing period, September 2026.
+    beforeEach(async () => {
+      await applyPaddleEvent(delivered(transactionEvent({ eventId: 'evt_paid' })), deps);
+      vi.clearAllMocks();
+    });
+
     it('cancels the subscription at once when a full refund is approved, and tells the operator', async () => {
       await adjusted({ eventId: 'evt_refund', action: 'refund', status: 'approved' });
 
@@ -405,6 +411,48 @@ describe('applyPaddleEvent', () => {
 
       expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
       expect(deps.alertOperator).not.toHaveBeenCalled();
+    });
+
+    it('does not cancel for a full refund or chargeback of an earlier billing period, and tells the operator', async () => {
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_october',
+            transactionId: 'txn_02',
+            period: { startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-11-01T00:00:00Z' },
+          }),
+        ),
+        deps,
+      );
+      vi.clearAllMocks();
+
+      await adjusted({ eventId: 'evt_goodwill', action: 'refund', status: 'approved', transactionId: 'txn_01' });
+      await adjusted({
+        eventId: 'evt_old_chargeback',
+        action: 'chargeback',
+        status: 'approved',
+        transactionId: 'txn_01',
+      });
+
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Paddle refund of an earlier billing period for customer ctm_01',
+        expect.stringContaining('was not cancelled'),
+      );
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Paddle chargeback of an earlier billing period for customer ctm_01',
+        expect.any(String),
+      );
+    });
+
+    it('does not cancel for a refund of a payment not recorded, and tells the operator', async () => {
+      await adjusted({ eventId: 'evt_unknown', action: 'refund', status: 'approved', transactionId: 'txn_unknown' });
+
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Paddle refund of an earlier billing period for customer ctm_01',
+        expect.stringContaining('txn_unknown'),
+      );
     });
 
     it('tells the operator about a refund with no subscription, changing nothing', async () => {
@@ -517,6 +565,34 @@ describe('applyPaddleEvent', () => {
 
       expect(memory.state.payments.size).toBe(0);
       expect(memory.state.entitlementStates.size).toBe(0);
+    });
+
+    it('keeps the qualifying period through a goodwill refund of an earlier month: 12 months kept vest', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      await applyPaddleEvent(delivered(created), deps);
+      for (let month = 0; month < 10; month++) await applyPaddleEvent(delivered(renewal(month)), deps);
+
+      vi.setSystemTime(new Date('2027-10-15T00:00:00Z'));
+      await applyPaddleEvent(
+        delivered(
+          adjustmentEvent({
+            eventId: 'evt_goodwill',
+            action: 'refund',
+            status: 'approved',
+            transactionId: 'txn_2',
+            occurredAt: '2027-10-15T00:00:00Z',
+          }),
+        ),
+        deps,
+      );
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+
+      for (let month = 10; month < 13; month++) await applyPaddleEvent(delivered(renewal(month)), deps);
+      vi.setSystemTime(new Date('2028-02-01T04:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+
+      // 13 months paid, March refunded: 12 months kept, from 1 January 2027 to 1 January 2028.
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toEqual(new Date('2028-01-01T00:00:00Z'));
     });
 
     it('records a Pro payment at a price that is not offered as not counting, and alerts the operator', async () => {

@@ -190,8 +190,10 @@ function amount(value: string): number {
  * Refunds, credits and chargebacks (Paddle adjustments). Each is recorded in the payment ledger, and the customer
  * brought in line (syncCustomer): what an adjustment does to a payment, and so to the qualifying run and any annual grant, is
  * decided there (entitlement-policy.ts). Paddle does not cancel a subscription whose payment is refunded, so an
- * approved full refund, or an approved chargeback, cancels it at once: the subscription.canceled event that follows
- * ends access as any cancellation does. A partial refund, and a chargeback warning (which can still be reversed),
+ * approved full refund, or an approved chargeback, of the subscription's latest billing period cancels it at once: the
+ * subscription.canceled event that follows ends access as any cancellation does. One of an earlier billing period
+ * cancels nothing (the qualifying period continues, the period counting only for the money kept) and tells the
+ * operator. A partial refund, and a chargeback warning (which can still be reversed),
  * change no access but tell the operator. Credits and reversals change no access. Throwing (Paddle unavailable)
  * makes the worker retry; recording the adjustment again changes nothing.
  */
@@ -222,6 +224,17 @@ async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, d
     return;
   }
 
+  if (!(await paysLatestPeriod(data.customerId, data.subscriptionId, data.transactionId, deps))) {
+    await deps.alertOperator(
+      `Paddle ${data.action} of an earlier billing period for customer ${data.customerId}`,
+      `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId}, which is not the ` +
+        `latest billing period recorded for subscription ${data.subscriptionId}, so the subscription was not ` +
+        'cancelled: its qualifying period continues, and the period counts only for the money kept. Cancel the ' +
+        'subscription in Paddle if it should end.',
+    );
+    return;
+  }
+
   if (await deps.cancelSubscriptionNow(data.subscriptionId)) {
     await deps.alertOperator(
       `Subscription ${data.subscriptionId} cancelled after a ${data.action}`,
@@ -229,6 +242,17 @@ async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, d
         `${data.customerId}. The subscription was cancelled immediately; its access ends when Paddle confirms.`,
     );
   }
+}
+
+// Whether the transaction pays the subscription's latest recorded billing period: the one a full refund or chargeback
+// takes away now. An earlier one's does not end the subscription; nor does one of a transaction not recorded.
+async function paysLatestPeriod(customerId: string, subscriptionId: string, transactionId: string, deps: BillingDeps) {
+  const periods = (await deps.store.listPayments(customerId)).filter((p) => p.subscriptionId === subscriptionId);
+  const latest = periods.reduce<(typeof periods)[number] | null>(
+    (found, payment) => (!found || payment.periodStartsAt > found.periodStartsAt ? payment : found),
+    null,
+  );
+  return latest?.transactionId === transactionId;
 }
 
 // Records the customer's email unless a newer customer event has already been applied: the email decides
