@@ -14,9 +14,11 @@ describe('EntitlementCard', () => {
     expect(html).toContain('If your subscription continues, 12 paid months are reached on 1 January 2027');
     expect(html).toContain('the start of your qualifying period plus the paid time served');
     expect(html).toContain(
-      'A refund, credit or chargeback of a payment takes away the time that money paid for, so 12 paid months are reached later.',
+      'A refund, credit or chargeback of a payment takes away the time that money paid for, so 12 paid months are reached later;',
     );
     expect(html).not.toContain('starts again after it');
+    expect(html).toContain('and no new one starts within an hour, the qualifying period starts again from zero');
+    expect(html).toContain('a full refund or chargeback of your current billing period also cancels your subscription');
     expect(html).not.toContain('vested-through date is');
   });
 
@@ -61,6 +63,9 @@ describe('EntitlementCard', () => {
     expect(html).toContain('serves you the vested releases');
     expect(html).toContain('31 December 2027');
     expect(html).not.toContain('Qualifying period:');
+    expect(html).toContain('Subscribing again never takes away the vested releases');
+    expect(html).toContain('more than an hour after this one ended starts a new qualifying period');
+    expect(html).not.toContain('A new subscription starts a new qualifying period');
   });
 
   it('tells a lapsed customer with nothing vested that the feed serves them nothing', () => {

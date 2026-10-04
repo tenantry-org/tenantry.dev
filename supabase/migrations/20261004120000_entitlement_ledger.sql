@@ -1,4 +1,4 @@
--- Perpetual entitlement, and one record of each customer's state. 12 consecutive paid months, or a served annual term,
+-- Perpetual entitlement, and one record of each customer's state. 12 paid months, or an annual term kept in full,
 -- earn a perpetual licence to the releases published up to a date (the vested-through date); the feed serves each
 -- customer the releases they may use by comparing that date with each release's entitlement date (pro_releases).
 --

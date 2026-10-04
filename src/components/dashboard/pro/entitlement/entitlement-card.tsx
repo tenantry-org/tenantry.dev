@@ -64,7 +64,8 @@ function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) 
           of their minor versions. They stay licensed to you. Your feed tokens restore them as before.
         </p>
         <p>
-          A new subscription starts a new qualifying period and never takes away the vested releases.{' '}
+          Subscribing again never takes away the vested releases. A subscription that starts more than an hour after
+          this one ended starts a new qualifying period.{' '}
           <Link className={link} href={'/#pricing'}>
             Subscribe again
           </Link>{' '}
@@ -120,9 +121,10 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
       Qualifying period: <span className={'font-medium text-foreground'}>{qualifying.monthsPaid} of 12</span> paid
       months. If your subscription continues, 12 paid months are reached on {formatDate(qualifying.vestsAt)}, and your
       releases then start to vest: those published up to your vested-through date, which is the start of your qualifying
-      period plus the paid time served. If your subscription ends before then, the qualifying period starts again from
-      your next subscription. A refund, credit or chargeback of a payment takes away the time that money paid for, so 12
-      paid months are reached later.
+      period plus the paid time served. If your subscription ends before then and no new one starts within an hour, the
+      qualifying period starts again from zero. A refund, credit or chargeback of a payment takes away the time that
+      money paid for, so 12 paid months are reached later; a full refund or chargeback of your current billing period
+      also cancels your subscription.
     </p>
   );
 }
