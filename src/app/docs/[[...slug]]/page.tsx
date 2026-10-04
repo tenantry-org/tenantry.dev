@@ -4,12 +4,9 @@ import { Callout } from 'fumadocs-ui/components/callout';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getMDXComponents } from '@/mdx-components';
-import { docsVersionOf, latestDocsVersion, slugsInVersion, slugsOutsidePublishedVersions } from '@/lib/docs-versions';
-
-// The same page in the latest docs, or the latest docs' home when the page is gone.
-function latestUrl(slugs: string[]): string {
-  return source.getPage(slugsInVersion(slugs, latestDocsVersion))?.url ?? latestDocsVersion.base;
-}
+import { docsVersionOf, latestDocsVersion, slugsOutsidePublishedVersions } from '@/lib/docs-versions';
+import { markdownUrl } from '@/lib/docs-markdown';
+import { latestUrl } from '@/lib/docs-pages';
 
 // The page at these slugs. A path under a docs version the site does not publish redirects to the same page in the
 // latest docs, or to the latest docs' home when the page is not there; any other missing page is not found.
@@ -38,6 +35,14 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
         </Callout>
       )}
       <DocsTitle>{page.data.title}</DocsTitle>
+      {/* The page's Markdown, for pasting into an AI assistant or reading as text (src/app/llms.mdx). */}
+      <a
+        href={markdownUrl(page.url)}
+        type={'text/markdown'}
+        className={'-mt-2 w-fit text-sm text-fd-muted-foreground hover:text-fd-foreground'}
+      >
+        View as Markdown
+      </a>
       <DocsBody>
         <MDX components={getMDXComponents()} />
       </DocsBody>
@@ -58,7 +63,11 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
   return {
     title: `${page.data.title}${version.latest ? '' : ` (v${version.version})`} | Tenantry docs`,
     description: page.data.description,
-    // Search engines should send readers to the latest docs, not an older version's copy of the page.
-    alternates: version.latest ? undefined : { canonical: latestUrl(page.slugs) },
+    // Search engines should send readers to the latest docs, not an older version's copy of the page. The page's
+    // Markdown is its alternate for AI agents.
+    alternates: {
+      canonical: version.latest ? page.url : latestUrl(page.slugs),
+      types: { 'text/markdown': markdownUrl(page.url) },
+    },
   };
 }

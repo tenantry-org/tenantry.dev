@@ -23,6 +23,13 @@ const nextConfig = {
     // The Rust port of the React Compiler, which runs inside Turbopack instead of through Babel.
     turbopackRustReactCompiler: true,
   },
+  // Each docs page's Markdown at its URL with `.md` on the end (src/app/llms.mdx), as Fumadocs serves it.
+  async rewrites() {
+    return [
+      { source: '/docs.md', destination: '/llms.mdx' },
+      { source: '/docs/:path*.md', destination: '/llms.mdx/:path*' },
+    ];
+  },
   async headers() {
     return [
       {
