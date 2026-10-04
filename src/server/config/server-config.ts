@@ -9,6 +9,7 @@ import {
   type PublicConfig,
   readPublicConfig,
 } from '@/lib/public-config';
+import { PRODUCTION_SUPABASE_URL } from '../../../scripts/production-environment.mjs';
 
 /**
  * Tenantry.Pro's embedded licence public key (SubjectPublicKeyInfo, base64). Production licences must be
@@ -19,11 +20,11 @@ export const PRODUCTION_LICENCE_PUBLIC_KEY =
   'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdSVQSNqR05D60p4aCn6RzJnyGHMz0S2iwuT9Ekf6Z0/q92jpkcoCZRUKQjZ6Od7zCSazkaD5FXJz8YxAKKc/jA==';
 
 /**
- * Production's Supabase project. A sandbox server must not use it, so a sandbox purchase (free, with test cards) can
- * never write to real customers' records or reach the real package feed's customers. Each environment has its own
- * services; this makes a misconfiguration fail at startup.
+ * Production's Supabase project (scripts/production-environment.mjs). A sandbox server must not use it, so a sandbox
+ * purchase (free, with test cards) can never write to real customers' records. Each environment has its own services;
+ * this makes a misconfiguration fail at startup.
  */
-export const PRODUCTION_SUPABASE_URL = 'https://xoqqgenzhqefyeyzahim.supabase.co';
+export { PRODUCTION_SUPABASE_URL };
 
 export interface EmailConfig {
   resendApiKey: string;
