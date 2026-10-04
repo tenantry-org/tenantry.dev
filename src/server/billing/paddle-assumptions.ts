@@ -101,3 +101,12 @@ export function adjustmentAmount(totals: { subtotal: string } | null | undefined
  * recorded. The SDK's types say so; it has not been compared in the sandbox. The list has no date filter, so reconcile
  * keeps the adjustments created within PAYMENT_RECOVERY_DAYS.
  */
+
+/**
+ * Assumption 8: a reversal. Paddle's adjustments do not say which adjustment a `chargeback_reverse` or `credit_reverse`
+ * reverses, and a reversal may be recorded twice: as the original's status `reversed` and as a `*_reverse` adjustment.
+ * Assumed, not confirmed: when both record one reversal, the original's updated_at on the reversing event and the
+ * reversal's approval are within this window of each other. A `*_reverse` adjustment approved within it of an
+ * original's reversal is taken as a second record of that reversal; any other one reverses an original still in force.
+ */
+export const REVERSAL_RECORD_WINDOW_MS = HOUR_MS;

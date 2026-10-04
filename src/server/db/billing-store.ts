@@ -34,6 +34,8 @@ export interface Payment {
    * in full. The same basis as an adjustment's `amount`.
    */
   charged: number;
+  /** The currency of `charged`. */
+  currencyCode: string;
 }
 
 /** A Paddle adjustment to one of the customer's transactions (`payment_adjustments`). */
@@ -56,6 +58,8 @@ export interface PaymentAdjustment {
    * were): the entitlement rules then take it to return everything, unless it is tax only.
    */
   amount: number | null;
+  /** The currency of `amount`; null if not recorded. One that is not its payment's makes the amount unusable. */
+  currencyCode: string | null;
 }
 
 /** One of the customer's subscriptions, as its newest Paddle event left it (`subscriptions`). */
@@ -355,7 +359,7 @@ export async function listPayments(customerId: string): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
     .select(
-      'transaction_id,subscription_id,price_id,billing_interval,billing_frequency,period_starts_at,period_ends_at,subtotal,discount,total,tax',
+      'transaction_id,subscription_id,price_id,billing_interval,billing_frequency,period_starts_at,period_ends_at,subtotal,discount,total,tax,currency_code',
     )
     .eq('customer_id', customerId);
 
@@ -370,6 +374,7 @@ export async function listPayments(customerId: string): Promise<Payment[]> {
     periodStartsAt: new Date(row.period_starts_at),
     periodEndsAt: new Date(row.period_ends_at),
     charged: chargedBeforeTax(row),
+    currencyCode: row.currency_code,
   }));
 }
 
@@ -378,7 +383,7 @@ export async function listPaymentAdjustments(customerId: string): Promise<Paymen
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('payment_adjustments')
-    .select('adjustment_id,transaction_id,action,type,item_types,status,approved_at,reversed_at,subtotal')
+    .select('adjustment_id,transaction_id,action,type,item_types,status,approved_at,reversed_at,subtotal,currency_code')
     .eq('customer_id', customerId);
 
   if (error) throw error;
@@ -393,6 +398,7 @@ export async function listPaymentAdjustments(customerId: string): Promise<Paymen
     approvedAt: row.approved_at ? new Date(row.approved_at) : null,
     reversedAt: row.reversed_at ? new Date(row.reversed_at) : null,
     amount: row.subtotal === null ? null : Number(row.subtotal),
+    currencyCode: row.currency_code,
   }));
 }
 

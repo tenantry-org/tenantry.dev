@@ -191,6 +191,7 @@ export const memory = {
           periodStartsAt: new Date(payment.periodStartsAt),
           periodEndsAt: new Date(payment.periodEndsAt),
           charged: chargedBeforeTax(payment),
+          currencyCode: payment.currencyCode,
         }));
     },
 
@@ -207,6 +208,7 @@ export const memory = {
           approvedAt: adjustment.approvedAt ? new Date(adjustment.approvedAt) : null,
           reversedAt: adjustment.reversedAt ? new Date(adjustment.reversedAt) : null,
           amount: adjustment.amount,
+          currencyCode: adjustment.currencyCode ?? null,
         }));
     },
 

@@ -35,6 +35,7 @@ function payment(start: string, options: Partial<Payment> & { months?: number } 
     periodEndsAt: addMonths(date(start), months),
     charged: months >= 12 ? 39000 : 3900,
     priceId: months >= 12 ? 'pri_01year' : 'pri_01month',
+    currencyCode: 'GBP',
     ...rest,
   };
 }
@@ -72,6 +73,7 @@ function adjustment(
     approvedAt: date(approvedAt),
     reversedAt: null,
     amount,
+    currencyCode: of.currencyCode,
     ...options,
   };
 }
@@ -563,6 +565,47 @@ describe('attempts to vest more than the money kept pays for', () => {
     ]) {
       expect(compute({ payments, adjustments: made, now }).vestedThrough).toBeNull();
     }
+  });
+
+  it('returns everything with an adjustment in another currency than its payment', () => {
+    const inPounds = adjustment(payments[11], 'refund', '2027-12-02T00:00:00Z', { amount: 100 });
+    const inDollars = { ...inPounds, currencyCode: 'USD' };
+    const status = (made: PaymentAdjustment) =>
+      compute({ payments, adjustments: [made], now }).paymentStatuses[payments[11].transactionId];
+
+    expect(status(inPounds)).toBe('partially_refunded');
+    expect(status(inDollars)).toBe('refunded');
+    // A reversal in another currency restores nothing.
+    const chargeback = adjustment(payments[11], 'chargeback', '2027-12-02T00:00:00Z');
+    const reversal = adjustment(payments[11], 'chargeback_reverse', '2027-12-09T00:00:00Z', {
+      type: 'partial',
+      currencyCode: 'USD',
+    });
+    expect(
+      compute({ payments, adjustments: [chargeback, reversal], now }).paymentStatuses[payments[11].transactionId],
+    ).toBe('charged_back');
+  });
+
+  it('counts each reversal against its own adjustment: two chargebacks reversed in two ways are both reversed', () => {
+    const first = adjustment(payments[4], 'chargeback', '2027-06-01T00:00:00Z', { amount: 1000 });
+    const second = adjustment(payments[4], 'chargeback', '2027-06-03T00:00:00Z', { amount: 1000 });
+    const firstReversed = { ...first, status: 'reversed', reversedAt: date('2027-06-10T00:00:00Z') };
+    const secondReversal = adjustment(payments[4], 'chargeback_reverse', '2027-06-20T00:00:00Z', { amount: 1000 });
+
+    const entitlement = compute({ payments, adjustments: [firstReversed, second, secondReversal], now });
+    expect(entitlement.paymentStatuses[payments[4].transactionId]).toBe('paid');
+    expect(vested(entitlement)).toBe('2028-01-01T00:00:00.000Z');
+  });
+
+  it('keeps a chargeback in force when the only reversal is a second record of another one', () => {
+    const first = adjustment(payments[4], 'chargeback', '2027-06-01T00:00:00Z', { amount: 1000 });
+    const second = adjustment(payments[4], 'chargeback', '2027-06-03T00:00:00Z', { amount: 1000 });
+    const firstReversed = { ...first, status: 'reversed', reversedAt: date('2027-06-10T00:00:00Z') };
+    const sameReversal = adjustment(payments[4], 'chargeback_reverse', '2027-06-10T00:00:00Z', { amount: 1000 });
+
+    const entitlement = compute({ payments, adjustments: [firstReversed, second, sameReversal], now });
+    expect(entitlement.paymentStatuses[payments[4].transactionId]).toBe('charged_back');
+    expect(entitlement.vestedThrough).toBeNull();
   });
 
   it('gains nothing from a second subscription refunded in full, or from overlapping kept periods', () => {

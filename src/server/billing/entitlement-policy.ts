@@ -10,7 +10,12 @@ import type {
   PaymentStatus,
   SubscriptionState,
 } from '@/server/db/billing-store';
-import { continuesRun, isAnnualTerm, MONTH_END_TOLERANCE_MS } from '@/server/billing/paddle-assumptions';
+import {
+  continuesRun,
+  isAnnualTerm,
+  MONTH_END_TOLERANCE_MS,
+  REVERSAL_RECORD_WINDOW_MS,
+} from '@/server/billing/paddle-assumptions';
 
 /**
  * What a customer may access, as pure functions: the one place that answers it, for the webhook and reconcile path
@@ -243,29 +248,22 @@ class Ledger {
   }
 
   /**
-   * How much of the payment has been returned now, by action, before tax. An approved refund, credit or chargeback
-   * returns its amount; one Paddle has marked reversed, or the amount of an approved `<action>_reverse` adjustment,
-   * no longer does (the larger of the two, since both can describe one reversal). A reversal never restores more than
-   * its own action returned, so it cannot offset another kind of adjustment.
+   * How much of the payment has been returned now, by action, before tax. Each approved refund, credit or chargeback
+   * returns its amount until it is reversed: by Paddle marking it reversed, or by an approved `<action>_reverse`
+   * adjustment, which is counted against one adjustment of its own action (`reversalsOf`). A reversal never restores
+   * more than the adjustment it reverses returned, so it cannot offset another kind of adjustment or another payment.
    */
   returned(payment: Payment): Record<(typeof RETURNING_ACTIONS)[number], number> {
     const adjustments = this.adjustments.get(payment.transactionId) ?? [];
-    const amount = (adjustment: PaymentAdjustment) => amountOf(adjustment, payment.charged);
 
     return Object.fromEntries(
       RETURNING_ACTIONS.map((action) => {
         const made = adjustments.filter(
           (a) => a.action === action && (a.status === 'approved' || a.status === 'reversed'),
         );
-        const gross = sum(made.map(amount));
-        const reversedByStatus = sum(made.filter((a) => a.status === 'reversed').map(amount));
-        const reversals = sum(
-          adjustments
-            .filter((a) => a.action === `${action}_reverse` && a.status === 'approved')
-            // A full reversal restores everything; one of unknown amount nothing, until its amount is known.
-            .map((a) => (a.type === 'full' ? payment.charged : (a.amount ?? 0))),
-        );
-        return [action, Math.max(0, gross - Math.max(reversedByStatus, reversals))];
+        const reversals = adjustments.filter((a) => a.action === `${action}_reverse` && a.status === 'approved');
+        const restored = reversalsOf(made, reversals, payment);
+        return [action, sum(made.map((a) => Math.max(0, amountOf(a, payment) - (restored.get(a) ?? 0))))];
       }),
     ) as Record<(typeof RETURNING_ACTIONS)[number], number>;
   }
@@ -375,13 +373,67 @@ function currentRun(runs: Run[], hasAccess: boolean, now: Date): CurrentRun | nu
 }
 
 // How much an adjustment returns: everything charged if Paddle calls it full (its amount, computed on another total,
-// can differ by a penny); otherwise its recorded amount; if that is unknown, nothing for a tax-only correction and
-// everything charged otherwise, so a missing amount never counts as money kept.
-function amountOf(adjustment: PaymentAdjustment, charged: number): number {
-  if (adjustment.type === 'full') return charged;
-  if (adjustment.amount !== null) return Math.max(0, adjustment.amount);
+// can differ by a penny) or if it is in another currency than the payment; otherwise its recorded amount; if that is
+// unknown, nothing for a tax-only correction and everything charged otherwise, so a missing amount never counts as
+// money kept.
+function amountOf(adjustment: PaymentAdjustment, payment: Payment): number {
+  if (adjustment.type === 'full') return payment.charged;
+  if (adjustment.amount !== null) {
+    return adjustment.currencyCode === payment.currencyCode ? Math.max(0, adjustment.amount) : payment.charged;
+  }
   const taxOnly = adjustment.itemTypes.length > 0 && adjustment.itemTypes.every((type) => type === 'tax');
-  return taxOnly ? 0 : charged;
+  return taxOnly ? 0 : payment.charged;
+}
+
+// How much of each adjustment in `made` has been reversed. One marked reversed is reversed in full. Each `*_reverse`
+// adjustment, oldest first, is either a second record of such a reversal (approved within REVERSAL_RECORD_WINDOW_MS of
+// it: it adds nothing) or reverses one adjustment still in force approved before it, the one of the same amount if
+// any, else the oldest, restoring its own amount (everything if Paddle calls it full; nothing if its amount is
+// unknown or in another currency) up to what that adjustment returned. A reversal with nothing left to reverse
+// restores nothing.
+function reversalsOf(
+  made: PaymentAdjustment[],
+  reversals: PaymentAdjustment[],
+  payment: Payment,
+): Map<PaymentAdjustment, number> {
+  const restored = new Map<PaymentAdjustment, number>();
+  const paired = new Set<PaymentAdjustment>();
+  const time = (at: Date | null) => at?.getTime() ?? Number.POSITIVE_INFINITY;
+
+  for (const adjustment of made) {
+    if (adjustment.status === 'reversed') restored.set(adjustment, amountOf(adjustment, payment));
+  }
+
+  for (const reversal of [...reversals].sort((a, b) => time(a.approvedAt) - time(b.approvedAt))) {
+    const at = time(reversal.approvedAt);
+    const record = made.find(
+      (a) =>
+        !paired.has(a) &&
+        a.status === 'reversed' &&
+        a.reversedAt !== null &&
+        Math.abs(a.reversedAt.getTime() - at) <= REVERSAL_RECORD_WINDOW_MS,
+    );
+    if (record) {
+      paired.add(record);
+      continue;
+    }
+
+    let amount = 0;
+    if (reversal.type === 'full') amount = payment.charged;
+    else if (reversal.amount !== null && reversal.currencyCode === payment.currencyCode) amount = reversal.amount;
+
+    // One with no recorded approval time may be the one reversed.
+    const approved = (a: PaymentAdjustment) => a.approvedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const inForce = made
+      .filter((a) => !paired.has(a) && a.status === 'approved' && approved(a) <= at)
+      .sort((a, b) => approved(a) - approved(b));
+    const reversed = inForce.find((a) => amountOf(a, payment) === amount) ?? inForce[0];
+    if (!reversed) continue;
+
+    paired.add(reversed);
+    restored.set(reversed, Math.min(amountOf(reversed, payment), Math.max(0, amount)));
+  }
+  return restored;
 }
 
 function sum(values: number[]): number {
