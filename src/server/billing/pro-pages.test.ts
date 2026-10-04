@@ -55,6 +55,7 @@ describe.each([
       noSubscription: true,
       customer: false,
       accountEmail: 'buyer@example.com',
+      licenceKey: null,
     });
     expect(tablesRead()).toEqual(new Set());
   });
@@ -84,14 +85,18 @@ describe('getAccessView', () => {
     await expect(getAccessView()).resolves.toMatchObject({ noSubscription: false });
   });
 
-  it('shows a former customer no access, and points them to billing', async () => {
+  it('shows a former customer no access, points them to billing, and still shows their licence key', async () => {
     state.tables.active_subscriptions = access('lapsed');
 
     await expect(getAccessView()).resolves.toEqual({
       noSubscription: true,
       customer: true,
       accountEmail: 'buyer@example.com',
+      licenceKey: 'licence.key',
     });
+    expect(state.calls).not.toContainEqual(
+      expect.objectContaining({ table: 'licences', method: 'eq', args: ['revoked', false] }),
+    );
   });
 
   it('shows no access to a customer whose access was never recorded', async () => {

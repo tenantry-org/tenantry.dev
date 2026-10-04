@@ -29,6 +29,11 @@ export interface NoSubscriptionView {
   customer: boolean;
   /** The login's email, which a purchase must have been made with to show here. */
   accountEmail: string | null;
+  /**
+   * On Access, a former customer's licence key: it does not expire, and they keep it after their subscription ends.
+   * Null otherwise.
+   */
+  licenceKey: string | null;
 }
 
 /** Access (/dashboard/pro), for a customer with Pro: their GitHub connection and licence key. */
@@ -82,13 +87,13 @@ export async function getAccessView(): Promise<AccessView | NoSubscriptionView> 
   const customerId = await getCustomerId();
   if (!customerId) return noSubscription(false);
 
-  // Read with the access, not after it, saving a round trip.
+  // Read with the access, not after it, saving a round trip: a former customer is shown their key too.
   const [access, licenceKey, githubLogin] = await Promise.all([
     readCustomerAccess(customerId),
     readLicenceKey(customerId),
     readGithubLogin(customerId),
   ]);
-  if (!access || !isEntitled(access.status)) return noSubscription(true);
+  if (!access || !isEntitled(access.status)) return noSubscription(true, licenceKey);
 
   const invitedAt = access.githubState === 'invited' ? access.githubInvitedAt : null;
 
@@ -153,9 +158,9 @@ export async function getBillingView(paddle?: ServerConfig['paddle']): Promise<B
 }
 
 // The login's email is the request's cached user (current-user.ts), which getCustomerId has already read.
-async function noSubscription(customer: boolean): Promise<NoSubscriptionView> {
+async function noSubscription(customer: boolean, licenceKey: string | null = null): Promise<NoSubscriptionView> {
   const user = await getCurrentUser();
-  return { noSubscription: true, customer, accountEmail: user?.email ?? null };
+  return { noSubscription: true, customer, accountEmail: user?.email ?? null, licenceKey };
 }
 
 type SubscriptionRow = Pick<

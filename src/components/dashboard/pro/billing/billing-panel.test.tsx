@@ -38,7 +38,7 @@ describe('BillingPanel', () => {
   });
 
   it('shows no billing to a login with no billing account', () => {
-    const html = render({ noSubscription: true, customer: false, accountEmail: 'buyer@example.com' });
+    const html = render({ noSubscription: true, customer: false, accountEmail: 'buyer@example.com', licenceKey: null });
 
     expect(html).toContain('No active Tenantry Pro subscription');
     expect(html).toContain('none was made with');

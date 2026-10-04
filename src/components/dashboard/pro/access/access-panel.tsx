@@ -11,9 +11,21 @@ interface Props {
   linkError?: LinkErrorCode;
 }
 
-/** Access (/dashboard/pro): the GitHub connection and the licence key. */
+/**
+ * Access (/dashboard/pro): the GitHub connection and the licence key. A former customer keeps their key, so it is
+ * shown below the way back to Pro.
+ */
 export function AccessPanel({ view, githubOrg, linkError }: Readonly<Props>) {
-  if (view.noSubscription) return <NoSubscription view={view} />;
+  if (view.noSubscription) {
+    if (!view.licenceKey) return <NoSubscription view={view} />;
+
+    return (
+      <div className={'grid gap-6 lg:grid-cols-2'}>
+        <NoSubscription view={view} />
+        <LicenceCard licenceKey={view.licenceKey} />
+      </div>
+    );
+  }
 
   return (
     <div className={'grid gap-6 lg:grid-cols-2'}>

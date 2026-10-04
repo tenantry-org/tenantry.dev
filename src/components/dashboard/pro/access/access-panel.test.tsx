@@ -32,13 +32,26 @@ describe('AccessPanel', () => {
   it('points a former customer to billing', () => {
     const html = renderToStaticMarkup(
       <AccessPanel
-        view={{ noSubscription: true, customer: true, accountEmail: null }}
+        view={{ noSubscription: true, customer: true, accountEmail: null, licenceKey: null }}
         githubOrg={'tenantry-customers'}
       />,
     );
 
     expect(html).toContain('No active Tenantry Pro subscription');
     expect(html).toContain('/dashboard/pro/billing');
-    expect(html).not.toContain('licence.key');
+    expect(html).not.toContain('Licence key');
+  });
+
+  it('still shows a former customer their licence key, which they keep', () => {
+    const html = renderToStaticMarkup(
+      <AccessPanel
+        view={{ noSubscription: true, customer: true, accountEmail: null, licenceKey: 'kept.licence.key' }}
+        githubOrg={'tenantry-customers'}
+      />,
+    );
+
+    expect(html).toContain('No active Tenantry Pro subscription');
+    expect(html).toContain('kept.licence.key');
+    expect(html).not.toContain('@octocat');
   });
 });
