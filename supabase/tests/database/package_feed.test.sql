@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(20);
+select plan(21);
 
 insert into public.customers (customer_id, email) values
   ('ctm_active', 'active@example.com'), ('ctm_vested', 'vested@example.com'), ('ctm_new', 'new@example.com');
@@ -86,6 +86,14 @@ select throws_ok(
   $$insert into public.pro_packages (lower_id, version, package_id, storage_path, size, sha512, nuspec)
     values ('other.package', '1.4.0', 'Other.Package', 'other/1.4.0/other.nupkg', 1, 'x', '<package/>')$$,
   '23514', null, 'only Tenantry Pro packages are recorded');
+
+insert into public.pro_packages (lower_id, version, package_id, storage_path, size, sha512, nuspec)
+values ('tenantry.pro.attack', '1.4.0', 'Tenantry.Pro.Attack', 'attack/1.4.0/a.nupkg', 1, 'x', '<package/>');
+insert into public.pro_releases (version, major, minor, patch, published_at) values ('1.4.1', 1, 4, 1, now());
+select throws_ok(
+  $$insert into public.pro_packages (lower_id, version, package_id, storage_path, size, sha512, nuspec)
+    values ('tenantry.pro.attack', '1.4.1', 'Tenantry.Pro.attack', 'attack/1.4.1/a.nupkg', 1, 'x', '<package/>')$$,
+  '23505', null, 'a package keeps the casing it was first recorded with');
 
 select results_eq(
   $$select public from storage.buckets where id = 'pro-packages'$$, $$values (false)$$,

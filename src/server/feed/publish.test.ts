@@ -32,6 +32,7 @@ beforeEach(() => {
       },
     ),
     recordPackage: vi.fn(async () => true),
+    recordedPackageId: vi.fn(async () => null),
     listReleases: vi.fn(async () =>
       [...releases].map(([version, release]) => {
         const [major, minor, patch] = version.split('.').map(Number);
@@ -258,5 +259,20 @@ describe('release dates', () => {
     expect(store.ensureRelease).toHaveBeenLastCalledWith(
       expect.objectContaining({ version: '9.9.1', security: true, publishedAt: '2028-05-31T00:00:00.000Z' }),
     );
+  });
+});
+
+describe('package id casing', () => {
+  it('refuses an id that differs only in case from one already published', async () => {
+    store.recordedPackageId.mockImplementation(async (lowerId: string) =>
+      lowerId === 'tenantry.pro.attack' ? 'Tenantry.Pro.Attack' : null,
+    );
+
+    const response = await push({ 'Tenantry.Pro.attack.nuspec': nuspec('Tenantry.Pro.attack', '1.4.0') });
+
+    expect(response.status).toBe(409);
+    expect(await response.text()).toContain('Tenantry.Pro.Attack');
+    expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
+    expect((await push({ 'Tenantry.Pro.Attack.nuspec': nuspec('Tenantry.Pro.Attack', '1.4.1') })).status).toBe(201);
   });
 });

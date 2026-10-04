@@ -232,6 +232,21 @@ export async function recordPackage(record: PackageRecord): Promise<boolean> {
   return true;
 }
 
+/** The id, as first recorded, of the package with this lowercased id, or null if none is recorded. */
+export async function recordedPackageId(lowerId: string): Promise<string | null> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('pro_packages')
+    .select('package_id')
+    .eq('lower_id', lowerId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data?.package_id ?? null;
+}
+
 /** Whether this package and version is recorded. */
 export async function packageExists(lowerId: string, version: string): Promise<boolean> {
   const supabase = createServiceRoleClient();

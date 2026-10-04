@@ -138,6 +138,30 @@ create table public.pro_packages (
 
 alter table public.pro_packages enable row level security;
 
+-- One casing per package: NuGet ids are case-insensitive, so Tenantry.Pro.attack beside Tenantry.Pro.Attack would be
+-- two names for one package. The publish step refuses it with a clearer message; this keeps the table right whatever
+-- writes to it.
+create function private.keep_package_id_casing()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if exists (
+    select 1 from public.pro_packages p where p.lower_id = new.lower_id and p.package_id <> new.package_id
+  ) then
+    raise exception 'Package % is recorded with another casing', new.package_id using errcode = '23505';
+  end if;
+  return new;
+end
+$$;
+
+create trigger pro_packages_id_casing
+  before insert or update of package_id on public.pro_packages
+  for each row execute function private.keep_package_id_casing();
+
+revoke all on function private.keep_package_id_casing() from public, anon, authenticated;
+
 -- The private bucket the packages are stored in. No storage policy: only the service role reads or writes it.
 insert into storage.buckets (id, name, public) values ('pro-packages', 'pro-packages', false)
 on conflict (id) do nothing;

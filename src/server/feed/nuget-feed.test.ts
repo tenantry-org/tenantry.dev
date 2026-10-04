@@ -81,6 +81,7 @@ beforeEach(() => {
     recordPackage: vi.fn(),
     packageExists: vi.fn(),
     listReleases: vi.fn(),
+    recordedPackageId: vi.fn(),
   };
   deps = {
     store: store as unknown as FeedStore,

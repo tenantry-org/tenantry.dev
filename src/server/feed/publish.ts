@@ -8,8 +8,9 @@ import { parseNuspec, readRootFiles } from '@/server/feed/nupkg';
  * --api-key <key>` sends, a PUT of the .nupkg as multipart form data with the key in X-NuGet-ApiKey. Only the release
  * workflow holds the key; the server knows only its hash (FEED_PUBLISH_KEY_SHA256).
  *
- * A package is accepted if its id is Tenantry.Pro or Tenantry.Pro.*, its version is major.minor.patch, and that id and
- * version are not published yet (409 otherwise, which `--skip-duplicate` treats as done). Its release is recorded with
+ * A package is accepted if its id is Tenantry.Pro or Tenantry.Pro.*, in the casing it was first published with, its
+ * version is major.minor.patch, and that id and version are not published yet (409 otherwise, which
+ * `--skip-duplicate` treats as done). Its release is recorded with
  * the first of its packages (pro_releases). The release date is when that first package is published, unless the
  * package carries a `tenantry-release.json` at its root, which may give:
  *   releasedAt  the release's date (ISO 8601), such as the signed tag's date, for a release published later. It may
@@ -78,6 +79,11 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
   }
 
   const lowerId = nuspec.id.toLowerCase();
+  // NuGet ids are case-insensitive: one package, one casing, as it was first published.
+  const recordedId = await deps.store.recordedPackageId(lowerId);
+  if (recordedId !== null && recordedId !== nuspec.id) {
+    return reply(409, `${nuspec.id} is published as ${recordedId}; use that casing.`);
+  }
   if (await deps.store.packageExists(lowerId, nuspec.version)) {
     return reply(409, `${nuspec.id} ${nuspec.version} is already published.`);
   }
