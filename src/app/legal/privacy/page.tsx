@@ -42,7 +42,10 @@ export default function PrivacyPage() {
       <ul>
         <li>To provide the Services: package-feed access and licence keys.</li>
         <li>To manage subscriptions and respond to support requests.</li>
-        <li>To send service emails: when your access starts and when it ends. Paddle sends receipts and invoices.</li>
+        <li>
+          To send service emails: when your access starts and when it ends, when a feed token is created on your
+          account, and when releases become vested or your vested releases change. Paddle sends receipts and invoices.
+        </li>
         <li>To understand, in aggregate, how the website is used and how fast it is, so we can improve it.</li>
       </ul>
 
