@@ -5,6 +5,7 @@ import { type EmailMessage, sendEmail } from '@/server/integrations/email/send';
 import { alertOperator } from '@/server/integrations/email/alerts';
 import { cancelSubscriptionNow } from '@/server/integrations/paddle/cancel-subscription';
 import { listCompletedTransactions, type PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
+import { listAdjustments, type PaddleAdjustment } from '@/server/integrations/paddle/list-adjustments';
 import { type ServerConfig, serverConfig } from '@/server/config/server-config';
 
 /** The billing tables (db/billing-store.ts). */
@@ -28,6 +29,8 @@ export interface BillingDeps {
   cancelSubscriptionNow: (subscriptionId: string) => Promise<boolean>;
   /** The completed transactions of these subscriptions billed since the date, from Paddle's API. */
   listCompletedTransactions: (subscriptionIds: string[], billedSince: Date) => Promise<PaddleTransaction[]>;
+  /** Every adjustment of these subscriptions, from Paddle's API. */
+  listAdjustments: (subscriptionIds: string[]) => Promise<PaddleAdjustment[]>;
 }
 
 export const defaultBillingDeps: BillingDeps = {
@@ -41,4 +44,5 @@ export const defaultBillingDeps: BillingDeps = {
   alertOperator,
   cancelSubscriptionNow,
   listCompletedTransactions: (subscriptionIds, billedSince) => listCompletedTransactions(subscriptionIds, billedSince),
+  listAdjustments: (subscriptionIds) => listAdjustments(subscriptionIds),
 };

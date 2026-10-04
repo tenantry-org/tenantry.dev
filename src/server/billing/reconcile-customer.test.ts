@@ -3,7 +3,8 @@ import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps'
 import { memory } from '@/test/memory-billing-store';
 import { testServerConfig } from '@/test/server-config';
 import { Webhooks } from '@paddle/paddle-node-sdk';
-import { transactionEvent } from '@/test/paddle-events';
+import { adjustmentEvent, transactionEvent } from '@/test/paddle-events';
+import type { PaddleAdjustment } from '@/server/integrations/paddle/list-adjustments';
 import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import { syncCustomer } from './customer-access';
 import { reconcileCustomer, resetRecoveryAlerts } from './reconcile-customer';
@@ -60,6 +61,7 @@ describe('reconcileCustomer', () => {
       access: 'unchanged',
       licence: 'current',
       paymentsRecovered: 0,
+      adjustmentsRecovered: 0,
     });
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
@@ -118,6 +120,99 @@ describe('reconcileCustomer', () => {
       await reconcileCustomer('ctm_1', deps);
 
       expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-03-01T00:00:00Z'));
+    });
+  });
+
+  describe('refunds and chargebacks whose notification was lost', () => {
+    const listedAdjustment = (eventId: string, extra: Partial<Parameters<typeof adjustmentEvent>[0]> = {}) =>
+      Webhooks.fromJson(
+        adjustmentEvent({
+          eventId,
+          action: 'refund',
+          status: 'approved',
+          customerId: 'ctm_1',
+          subscriptionId: 'sub_1',
+          transactionId: 'txn_kept',
+          occurredAt: '2026-09-20T00:00:00Z',
+          ...extra,
+        }) as unknown as Parameters<typeof Webhooks.fromJson>[0],
+      ).data as unknown as PaddleAdjustment;
+
+    beforeEach(async () => {
+      await memory.store.recordPayment({
+        transactionId: 'txn_kept',
+        customerId: 'ctm_1',
+        subscriptionId: 'sub_1',
+        origin: 'web',
+        priceId: 'pri_01month',
+        billingInterval: 'month',
+        billingFrequency: 1,
+        periodStartsAt: '2026-09-01T00:00:00Z',
+        periodEndsAt: '2026-10-01T00:00:00Z',
+        subtotal: 3900,
+        discount: 0,
+        total: 3900,
+        tax: 0,
+        currencyCode: 'GBP',
+        occurredAt: '2026-09-01T00:05:00Z',
+      });
+    });
+
+    it('records an adjustment Paddle lists that the ledger is missing, as the webhook would, and counts it', async () => {
+      await startAccess();
+      deps.listAdjustments.mockResolvedValue([listedAdjustment('lost', { subtotal: '1950', type: 'partial' })]);
+
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ adjustmentsRecovered: 1 });
+
+      expect(deps.listAdjustments).toHaveBeenCalledWith(['sub_1']);
+      expect([...memory.state.adjustments.values()]).toEqual([
+        expect.objectContaining({ adjustmentId: 'adj_lost', status: 'approved', amount: 1950, currencyCode: 'GBP' }),
+      ]);
+      expect(memory.state.payments.get('txn_kept')?.status).toBe('partially_refunded');
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Recovered 1 adjustment for customer ctm_1',
+        expect.stringContaining('adj_lost'),
+      );
+    });
+
+    it('records a status change it missed, and nothing it already has or that is older than the recovery window', async () => {
+      await startAccess();
+      await memory.store.recordPaymentAdjustment({
+        adjustmentId: 'adj_pending',
+        transactionId: 'txn_kept',
+        customerId: 'ctm_1',
+        subscriptionId: 'sub_1',
+        action: 'refund',
+        type: 'full',
+        itemTypes: ['full'],
+        status: 'pending_approval',
+        amount: 3900,
+        currencyCode: 'GBP',
+        createdAt: '2026-09-15T00:00:00Z',
+        updatedAt: '2026-09-15T00:00:00Z',
+        occurredAt: '2026-09-15T00:00:00Z',
+      });
+      deps.listAdjustments.mockResolvedValue([
+        listedAdjustment('pending', { createdAt: '2026-09-15T00:00:00Z', occurredAt: '2026-09-18T00:00:00Z' }),
+        listedAdjustment('ancient', { createdAt: '2026-01-01T00:00:00Z', occurredAt: '2026-01-02T00:00:00Z' }),
+      ]);
+
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ adjustmentsRecovered: 1 });
+      expect(memory.state.adjustments.get('adj_pending')).toMatchObject({ status: 'approved' });
+      expect(memory.state.adjustments.has('adj_ancient')).toBe(false);
+
+      vi.clearAllMocks();
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ adjustmentsRecovered: 0 });
+      expect(deps.alertOperator).not.toHaveBeenCalled();
+    });
+
+    it('carries on when Paddle cannot list adjustments', async () => {
+      await startAccess();
+      deps.listAdjustments.mockRejectedValue(new Error('Paddle unavailable'));
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ adjustmentsRecovered: null });
+      expect(deps.alertOperator).toHaveBeenCalledWith('Reconcile cannot list payments from Paddle', expect.any(String));
     });
   });
 

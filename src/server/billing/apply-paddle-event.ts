@@ -12,6 +12,7 @@ import {
 import { syncCustomer } from '@/server/billing/customer-access';
 import { adjustmentAmount } from '@/server/billing/paddle-assumptions';
 import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
+import type { PaddleAdjustment } from '@/server/integrations/paddle/list-adjustments';
 import { subscriptionEndedAt } from '@/server/billing/paddle-assumptions';
 import { normaliseEmail } from '@/server/db/customer-email';
 import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
@@ -184,22 +185,7 @@ function amount(value: string): number {
  * makes the worker retry; recording the adjustment again changes nothing.
  */
 async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, deps: BillingDeps) {
-  await deps.store.recordPaymentAdjustment({
-    adjustmentId: data.id,
-    transactionId: data.transactionId,
-    customerId: data.customerId,
-    subscriptionId: data.subscriptionId,
-    action: data.action,
-    type: data.type,
-    itemTypes: data.items.map((item) => item.type),
-    status: data.status,
-    // What it returns before tax (paddle-assumptions.ts: adjustmentAmount).
-    amount: adjustmentAmount(data.totals),
-    currencyCode: data.totals?.currencyCode ?? null,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
-    occurredAt,
-  });
+  await recordAdjustment(data, occurredAt, deps);
   await syncCustomer(data.customerId, deps);
 
   const endsAccess =
@@ -247,4 +233,32 @@ async function handleCustomer(eventData: CustomerCreatedEvent | CustomerUpdatedE
   if (!applied) {
     console.info(`Paddle webhook: ignoring a customer event for ${eventData.data.id} older than the last one applied.`);
   }
+}
+
+/**
+ * Records an adjustment in the payment ledger as one of its events describes it, unless a newer event for it has been
+ * recorded (record_payment_adjustment). The webhook records each adjustment.created and adjustment.updated this way,
+ * and reconcile any adjustment Paddle lists that the ledger is missing or holds in an older state.
+ */
+export async function recordAdjustment(
+  data: PaddleAdjustment,
+  occurredAt: string,
+  deps: BillingDeps = defaultBillingDeps,
+): Promise<boolean> {
+  return deps.store.recordPaymentAdjustment({
+    adjustmentId: data.id,
+    transactionId: data.transactionId,
+    customerId: data.customerId,
+    subscriptionId: data.subscriptionId,
+    action: data.action,
+    type: data.type,
+    itemTypes: data.items.map((item) => item.type),
+    status: data.status,
+    // What it returns before tax (paddle-assumptions.ts: adjustmentAmount).
+    amount: adjustmentAmount(data.totals),
+    currencyCode: data.totals?.currencyCode ?? data.currencyCode ?? null,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    occurredAt,
+  });
 }

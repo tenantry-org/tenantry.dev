@@ -93,3 +93,11 @@ export function adjustmentAmount(totals: { subtotal: string } | null | undefined
   const amount = Number(totals.subtotal);
   return Number.isSafeInteger(amount) && amount >= 0 ? amount : null;
 }
+
+/**
+ * Assumption 7: an adjustment listed through Paddle's API (adjustments.list, filtered by subscription) is the entity
+ * its adjustment.created and adjustment.updated notifications carried, with the same id, action, type, status, items,
+ * totals.subtotal, currency_code, created_at and updated_at; its updated_at orders it against the notifications
+ * recorded. The SDK's types say so; it has not been compared in the sandbox. The list has no date filter, so reconcile
+ * keeps the adjustments created within PAYMENT_RECOVERY_DAYS.
+ */

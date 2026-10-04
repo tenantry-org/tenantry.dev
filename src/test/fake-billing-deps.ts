@@ -24,6 +24,7 @@ export function fakeBillingDeps() {
     cancelSubscriptionNow: vi.fn<BillingDeps['cancelSubscriptionNow']>(async () => true),
     // Paddle lists nothing unless a test says otherwise; tests never call Paddle.
     listCompletedTransactions: vi.fn<BillingDeps['listCompletedTransactions']>(async () => []),
+    listAdjustments: vi.fn<BillingDeps['listAdjustments']>(async () => []),
   } satisfies BillingDeps;
 }
 
