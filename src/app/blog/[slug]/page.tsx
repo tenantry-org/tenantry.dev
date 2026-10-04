@@ -60,7 +60,7 @@ export async function generateMetadata(props: Readonly<{ params: Promise<{ slug:
   if (!post) notFound();
 
   return {
-    title: `${post.title} — Tenantry`,
+    title: `${post.title} | Tenantry`,
     description: post.description,
     authors: [{ name: post.author }],
     alternates: { canonical: post.url },

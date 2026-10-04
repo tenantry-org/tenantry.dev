@@ -56,7 +56,7 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
   const version = docsVersionOf(page.slugs);
 
   return {
-    title: `${page.data.title}${version.latest ? '' : ` (v${version.version})`} — Tenantry docs`,
+    title: `${page.data.title}${version.latest ? '' : ` (v${version.version})`} | Tenantry docs`,
     description: page.data.description,
     // Search engines should send readers to the latest docs, not an older version's copy of the page.
     alternates: version.latest ? undefined : { canonical: latestUrl(page.slugs) },

@@ -4,7 +4,7 @@ import { SimpleHeader } from '@/components/shared/simple-header';
 import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
-  title: 'Tenantry — Error',
+  title: 'Error | Tenantry',
 };
 
 export default function ErrorPage() {

@@ -4,7 +4,7 @@ import { PostByline } from '@/components/blog/post-byline';
 import { postsWithPages } from '@/lib/blog';
 
 export const metadata: Metadata = {
-  title: 'Blog — Tenantry',
+  title: 'Tenantry blog',
   description: 'Articles on multi-tenancy in .NET: tenant isolation in EF Core, tenant databases and their operations.',
   alternates: { canonical: '/blog', types: { 'application/rss+xml': '/blog/rss.xml' } },
 };
