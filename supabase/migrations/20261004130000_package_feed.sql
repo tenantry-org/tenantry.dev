@@ -147,6 +147,10 @@ language plpgsql
 set search_path = ''
 as $$
 begin
+  -- Held to the end of the transaction, so a concurrent first publish of the same id in another casing waits for this
+  -- one and then sees its row, instead of both passing the check below.
+  perform pg_advisory_xact_lock(hashtext('pro_packages.lower_id'), hashtext(new.lower_id));
+
   if exists (
     select 1 from public.pro_packages p where p.lower_id = new.lower_id and p.package_id <> new.package_id
   ) then
