@@ -40,8 +40,8 @@ import {
  * - A qualifying period is a series of billing periods at the offer prices, each starting no later than the continuity
  *   allowance after the billing periods so far end (paddle-assumptions.ts). Whatever was returned, a billing period
  *   continues the series; one that counts for nothing adds no time. A billing period whose subscription ended before
- *   the period did carries the series only to that end, or to the end of its counted time if later. It starts at the
- *   start of its first billing period that charged something, which no refund can move.
+ *   the period did carries the series only to that end (its counted time still counts in full). It starts at the
+ *   start of its first billing period that charged something. Neither depends on money returned.
  * - Its counted time served is how much of its counted parts lies between its start and now, overlapping parts once.
  *   It vests when that reaches 12 months (the length of the 12 calendar months from its start), and is then vested
  *   through its start plus its counted time served: never more time than was paid for and served, and never later
@@ -386,15 +386,15 @@ class Ledger {
   }
 
   /**
-   * How far a billing period carries a qualifying period: to its end, or, if its subscription ended before then, to
-   * that end or the end of its counted time, whichever is later. A period refunded in full (which cancels its
-   * subscription at once, apply-paddle-event.ts) therefore cannot keep a qualifying period going after it.
+   * How far a billing period carries a qualifying period: to its end, or to when its subscription ended, if sooner. A
+   * period refunded in full (which cancels its subscription at once, apply-paddle-event.ts) therefore cannot keep a
+   * qualifying period going after it. It never depends on money returned, so returning money can never split a
+   * qualifying period and start a later one afresh.
    */
   private billedThrough(payment: Payment): Date {
     const endedAt = this.input.subscriptions.find((sub) => sub.subscriptionId === payment.subscriptionId)?.endedAt;
     if (!endedAt || endedAt >= payment.periodEndsAt) return payment.periodEndsAt;
-    const countedEnd = this.countedPeriod(payment)?.endsAt ?? payment.periodStartsAt;
-    return new Date(Math.max(endedAt.getTime(), countedEnd.getTime(), payment.periodStartsAt.getTime()));
+    return new Date(Math.max(endedAt.getTime(), payment.periodStartsAt.getTime()));
   }
 
   /** Whether the payment was at one of the prices Pro is offered at. */

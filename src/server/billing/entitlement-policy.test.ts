@@ -471,18 +471,21 @@ describe('a subscription ending with its payment kept in full', () => {
     );
   });
 
-  it('counts a period paused part-way, and the resumed period that overlaps it, once', () => {
+  it('counts a period paused part-way in full, but a pause of more than an hour starts a new qualifying period', () => {
     const before = monthly('2027-01-01T00:00:00Z', 6, { subscriptionId: 'sub_1' });
     // Paused on 15 June with June kept; resumed on 20 June, when Paddle bills a new period from the resumption.
-    const after = monthly('2027-06-20T00:00:00Z', 7, { subscriptionId: 'sub_2' });
+    const after = monthly('2027-06-20T00:00:00Z', 13, { subscriptionId: 'sub_2' });
+    const at = (now: string) =>
+      compute({
+        payments: [...before, ...after],
+        subscriptions: [ended('sub_1', '2027-06-15T00:00:00Z', 'paused'), running('sub_2')],
+        now,
+      });
 
-    const entitlement = compute({
-      payments: [...before, ...after],
-      subscriptions: [ended('sub_1', '2027-06-15T00:00:00Z', 'paused'), running('sub_2')],
-      now: '2028-01-05T00:00:00Z',
-    });
-
-    expect(vested(entitlement)).toBe('2028-01-05T00:00:00.000Z');
+    // The first six months, June in full, are a qualifying period of their own; it does not reach 12 months.
+    expect(at('2028-01-05T00:00:00Z').vestedThrough).toBeNull();
+    expect(at('2028-01-05T00:00:00Z').run).toMatchObject({ startedAt: date('2027-06-20T00:00:00Z') });
+    expect(vested(at('2028-06-20T00:00:00Z'))).toBe('2028-06-20T00:00:00.000Z');
   });
 });
 
@@ -740,6 +743,23 @@ describe('attempts to vest more than the money kept pays for', () => {
     expect(at('2028-06-15T00:00:00Z').vestedThrough).toBeNull();
     expect(at('2028-06-15T00:00:00Z').run).toMatchObject({ startedAt: date('2027-12-01T00:00:00Z') });
     expect(vested(at('2028-12-01T00:00:00Z'))).toBe('2028-12-01T00:00:00.000Z');
+  });
+
+  it('never moves the vested-through date later by a refund that ends a subscription early', () => {
+    // March refunded; the first subscription cancelled at once on 10 December with December kept, and a second from
+    // 20 December. A refund of December must not split the qualifying period so that the second starts afresh,
+    // clear of March's missing month.
+    const first = monthly('2027-01-01T00:00:00Z', 12, { subscriptionId: 'sub_1' });
+    const second = monthly('2027-12-20T00:00:00Z', 24, { subscriptionId: 'sub_2' });
+    const march = adjustment(first[2], 'refund', '2027-03-05T00:00:00Z');
+    const december = adjustment(first[11], 'refund', '2027-12-10T00:00:00Z');
+    const subscriptions = [ended('sub_1', '2027-12-10T00:00:00Z'), running('sub_2')];
+    const now = '2029-06-01T00:00:00Z';
+
+    const before = compute({ payments: [...first, ...second], adjustments: [march], subscriptions, now });
+    const after = compute({ payments: [...first, ...second], adjustments: [march, december], subscriptions, now });
+
+    expect(after.vestedThrough!.getTime()).toBeLessThanOrEqual(before.vestedThrough!.getTime());
   });
 
   it('never counts time not yet served, however much is paid ahead', () => {
@@ -1028,12 +1048,20 @@ describe('properties over generated histories', () => {
       amount: Math.max(1, Math.floor(next() * target.charged)),
     });
 
-    for (const now of nows) {
-      const before = compute({ payments, adjustments: made, now });
-      const after = compute({ payments, adjustments: [...made, extra], now });
+    // With both subscriptions running, and with one of them cancelled at some point.
+    const cancelledAt = new Date(date('2027-01-01T00:00:00Z').getTime() + Math.floor(next() * 900) * DAY);
+    const [which, other] = next() < 0.5 ? ['sub_1', 'sub_2'] : ['sub_2', 'sub_1'];
+    for (const subscriptions of [
+      [running('sub_1'), running('sub_2')],
+      [ended(which, cancelledAt.toISOString()), running(other)],
+    ]) {
+      for (const now of nows) {
+        const before = compute({ payments, adjustments: made, subscriptions, now });
+        const after = compute({ payments, adjustments: [...made, extra], subscriptions, now });
 
-      expect(after.vestedThrough?.getTime() ?? 0).toBeLessThanOrEqual(before.vestedThrough?.getTime() ?? 0);
-      expect(vestedTime(after)).toBeLessThanOrEqual(vestedTime(before));
+        expect(after.vestedThrough?.getTime() ?? 0).toBeLessThanOrEqual(before.vestedThrough?.getTime() ?? 0);
+        expect(vestedTime(after)).toBeLessThanOrEqual(vestedTime(before));
+      }
     }
   });
 

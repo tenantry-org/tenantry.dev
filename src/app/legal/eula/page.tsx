@@ -54,11 +54,11 @@ export default function EulaPage() {
       <p>
         A qualifying period is a series of billing periods, at the monthly or yearly price, in which each billing period
         starts no more than one hour after the end of the billing periods before it. A billing period whose subscription
-        ended before the period did reaches only to when the subscription ended, or to the end of its paid period if
-        that is later. A gap of more than one hour breaks a qualifying period, for example when your subscription ends
-        and no billing period follows within the hour, or a renewal is not paid; the next billing period then starts a
-        new qualifying period from zero. Returning money does not break a qualifying period: a billing period of which
-        part or all of the payment was returned, or for which nothing was charged, continues it, and adds only its paid
+        ended before the period did reaches only to when the subscription ended, though its paid period still counts in
+        full. A gap of more than one hour breaks a qualifying period, for example when your subscription ends and no
+        billing period follows within the hour, or a renewal is not paid; the next billing period then starts a new
+        qualifying period from zero. Returning money does not break a qualifying period: a billing period of which part
+        or all of the payment was returned, or for which nothing was charged, continues it, and adds only its paid
         period, if any. A qualifying period starts at the start of its first billing period for which something was
         charged.
       </p>
