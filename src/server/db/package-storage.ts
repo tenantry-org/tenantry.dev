@@ -21,15 +21,22 @@ export async function signedDownloadUrl(path: string, expiresInSeconds: number):
 }
 
 /**
- * Stores a package file. A file already at `path` is replaced: the publish step stores the file before recording the
- * package, and refuses a package already recorded, so a file without a record was never served (a publish that failed
- * part-way) and may be replaced by its retry.
+ * Stores a package file at `path` unless a file is already there, which is kept: the publish step stores each package
+ * at a path named by its SHA-512 (feed/publish.ts), so a file already there holds the same bytes. Never replacing a file
+ * means a path, once recorded, always serves the bytes whose hash was recorded with it.
  */
 export async function storePackageFile(path: string, bytes: Uint8Array): Promise<void> {
   const supabase = createServiceRoleClient();
   const { error } = await supabase.storage
     .from(PACKAGE_BUCKET)
-    .upload(path, bytes, { contentType: 'application/octet-stream', upsert: true });
+    .upload(path, bytes, { contentType: 'application/octet-stream', upsert: false });
 
+  if (error && isAlreadyStored(error)) return;
   if (error) throw error;
+}
+
+// Storage answers an upload to a path already stored with 409 (as statusCode; the HTTP status may be 400 or 409).
+function isAlreadyStored(error: Error): boolean {
+  const { status, statusCode } = error as Error & { status?: number; statusCode?: string };
+  return status === 409 || statusCode === '409';
 }

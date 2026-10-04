@@ -90,7 +90,11 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
     throw error;
   }
 
-  const storagePath = `${lowerId}/${nuspec.version}/${lowerId}.${nuspec.version}.nupkg`;
+  // Stored at a path named by the package's own hash, never replacing a file: two concurrent publishes of one version
+  // with different bytes store at two paths, the record's unique key picks one, and the recorded path always holds the
+  // recorded bytes. The loser's file is left unreferenced.
+  const sha512 = createHash('sha512').update(bytes).digest();
+  const storagePath = `${lowerId}/${nuspec.version}/sha512-${sha512.toString('hex')}/${lowerId}.${nuspec.version}.nupkg`;
   await deps.storage.storePackageFile(storagePath, bytes);
 
   const recorded = await deps.store.recordPackage({
@@ -98,7 +102,7 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
     version: nuspec.version,
     storagePath,
     size: bytes.byteLength,
-    sha512: createHash('sha512').update(bytes).digest('base64'),
+    sha512: sha512.toString('base64'),
     nuspec: [...files].find(([name]) => name.toLowerCase().endsWith('.nuspec'))![1],
     description: nuspec.description,
     authors: nuspec.authors,

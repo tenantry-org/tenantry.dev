@@ -66,10 +66,8 @@ describe('handlePublish', () => {
 
     expect(response.status).toBe(201);
     const bytes = vi.mocked(deps.storage.storePackageFile).mock.calls[0][1];
-    expect(deps.storage.storePackageFile).toHaveBeenCalledWith(
-      'tenantry.pro.efcore/1.4.0/tenantry.pro.efcore.1.4.0.nupkg',
-      expect.any(Uint8Array),
-    );
+    const path = `tenantry.pro.efcore/1.4.0/sha512-${createHash('sha512').update(bytes).digest('hex')}/tenantry.pro.efcore.1.4.0.nupkg`;
+    expect(deps.storage.storePackageFile).toHaveBeenCalledWith(path, expect.any(Uint8Array));
     expect(store.ensureRelease).toHaveBeenCalledWith({
       version: '1.4.0',
       major: 1,
@@ -81,7 +79,7 @@ describe('handlePublish', () => {
     expect(store.recordPackage).toHaveBeenCalledWith({
       packageId: 'Tenantry.Pro.EfCore',
       version: '1.4.0',
-      storagePath: 'tenantry.pro.efcore/1.4.0/tenantry.pro.efcore.1.4.0.nupkg',
+      storagePath: path,
       size: bytes.byteLength,
       sha512: createHash('sha512').update(bytes).digest('base64'),
       nuspec: efCore['Tenantry.Pro.EfCore.nuspec'],
@@ -167,5 +165,37 @@ describe('handlePublish', () => {
 
     expect(response.status).toBe(409);
     expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
+  });
+});
+
+describe('concurrent publishes of one version', () => {
+  it('records the bytes that are stored at the recorded path, whichever push wins', async () => {
+    // Storage that never replaces a stored file (Supabase's upload with upsert off). The first upload is the slower
+    // one, so the second push records first: the interleaving that left a record's hash describing other bytes.
+    const stored = new Map<string, Uint8Array>();
+    let uploads = 0;
+    deps.storage.storePackageFile = vi.fn(async (path: string, bytes: Uint8Array) => {
+      if (!stored.has(path)) stored.set(path, bytes);
+      const delay = uploads++ === 0 ? 20 : 1;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    });
+    const records = new Map<string, { storagePath: string; sha512: string }>();
+    store.recordPackage.mockImplementation(
+      async (record: { packageId: string; version: string; storagePath: string; sha512: string }) => {
+        const key = `${record.packageId.toLowerCase()}@${record.version}`;
+        if (records.has(key)) return false;
+        records.set(key, record);
+        return true;
+      },
+    );
+
+    const first = { ...efCore, 'lib/net9.0/Tenantry.Pro.EfCore.dll': 'first build' };
+    const second = { ...efCore, 'lib/net9.0/Tenantry.Pro.EfCore.dll': 'second build' };
+    const statuses = (await Promise.all([push(first), push(second)])).map((response) => response.status).sort();
+
+    expect(statuses).toEqual([201, 409]);
+    const [record] = records.values();
+    const bytes = stored.get(record.storagePath)!;
+    expect(createHash('sha512').update(bytes).digest('base64')).toBe(record.sha512);
   });
 });

@@ -8,7 +8,7 @@ export type FeedStore = typeof packageFeed;
 
 /**
  * Where the packages' files are stored (db/package-storage.ts: a private Supabase Storage bucket). Anything that can
- * store a file and hand out a short-lived download URL for it can replace it.
+ * store a file without ever replacing one, and hand out a short-lived download URL for it, can replace it.
  */
 export interface PackageStorage {
   signedDownloadUrl: (path: string, expiresInSeconds: number) => Promise<string>;
