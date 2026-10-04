@@ -113,7 +113,7 @@ const nextMinor = minor === undefined ? `${major + 1}` : `${major}.${minor + 1}`
 const QUESTIONS = [
   {
     question: 'What does the subscription include?',
-    answer: `Every Tenantry Pro package from a private NuGet feed, each release while you subscribe, a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. One price for your whole company, billed monthly or yearly.`,
+    answer: `Every Tenantry Pro package from a private NuGet feed, each release while you subscribe, a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. After 12 consecutive paid months, or a completed annual term, you also hold a perpetual licence to the releases published up to then. One price for your whole company, billed monthly or yearly.`,
   },
   {
     question: 'How does my team install it, locally and in CI?',
@@ -124,7 +124,7 @@ const QUESTIONS = [
   {
     question: 'Will the package feed change?',
     answer:
-      'Yes, before Tenantry Pro goes on sale. The packages are on GitHub Packages today, the feed the subscription system has been built and tested with, so the docs describe it. A private Tenantry feed will replace it, and after a subscription ends it will still let you restore the versions released while you subscribed.',
+      'Yes, before Tenantry Pro goes on sale. The packages are on GitHub Packages today, the feed the subscription system has been built and tested with, so the docs describe it. A private Tenantry feed will replace it, and after a subscription ends it will still let you restore the releases your perpetual licence covers.',
   },
   {
     question: 'Which versions and databases?',
@@ -144,19 +144,20 @@ const QUESTIONS = [
   },
   {
     question: 'Does it phone home?',
-    answer: 'No. The licence key is checked offline when the application starts, and it does not expire.',
+    answer:
+      'No. The licence key is checked offline when the application starts, and it does not expire. It does not decide which releases you may use: your subscription and the EULA do.',
     link: { label: 'Licensing', href: '/docs/pro/licensing' },
   },
   {
     question: 'What happens when the subscription ends?',
     answer:
-      'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.6 on Core 0.6.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Security fixes are released as a patch to every affected minor version. Restoring them from today’s GitHub feed needs an active subscription, so after it ends, email support@tenantry.dev for the latest patch of any minor version released while you subscribed. The private feed that replaces it will let you restore those yourself.',
+      'After 12 consecutive paid months, or a completed annual term, you hold a perpetual licence to every release published up to the end of your last paid period, and it extends with each month you stay. When the subscription ends you keep it. Releases published after that date stop being licensed to you, and if you have no perpetual licence yet, so do all of them. A new subscription starts a new 12 months and never reduces what you already hold. Your application keeps starting with the licence key either way, since the key does not enforce the subscription. Access to today’s GitHub feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.6 on Core 0.6.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Until 1.0, security fixes are released as a patch to the latest two Pro minor versions, and a security patch is covered by your perpetual licence when the minor version it patches is. Restoring them from today’s GitHub feed needs an active subscription, so after it ends, email support@tenantry.dev for them. The private feed that replaces it will let you restore those yourself.',
     link: { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
   },
   {
     question: 'What if Tenantry stops?',
     answer:
-      'Core stays Apache-2.0 on GitHub, and the Pro versions you have stay licensed and keep working, as when a subscription ends.',
+      'Core stays Apache-2.0 on GitHub, and the Pro releases your perpetual licence covers stay licensed and keep working, as when a subscription ends.',
     link: { label: 'EULA', href: '/legal/eula' },
   },
 ];
