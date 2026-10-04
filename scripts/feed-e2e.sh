@@ -464,9 +464,11 @@ if output="$(restore "$dir")"; then pass "the subscriber's other token keeps wor
   fail "the subscriber's other token keeps working" "$output"
 fi
 
-# Vesting computed from the ledger: scripts/rehearse.mjs backdates 12 paid months, /api/reconcile vests them, a
-# chargeback withdraws the vesting, and undo removes what the script wrote. The customer has no subscription, so
-# reconcile asks Paddle nothing.
+# Vesting computed from the ledger: scripts/rehearse.mjs backdates 12 paid months, /api/reconcile vests them, a refund
+# of half the newest one or a chargeback of it takes the vesting away (the money kept no longer pays for 12 continuous
+# months), and undo removes what the script wrote. The customer has no subscription, so reconcile asks Paddle nothing.
+# Their real payment is kept, so the qualifying period runs through it and the vested-through date is the reconcile's
+# time, on or after that payment's start.
 signup computed lapsed
 anchor="$(iso_before 86400)"
 rest payments "{\"transaction_id\":\"txn_e2e_$run_id\",\"customer_id\":\"$(customer_of computed)\",
@@ -483,11 +485,21 @@ vested_of() {
   rest_get vested_entitlements "customer_id=eq.$(customer_of computed)&kind=eq.qualifying_run&select=status,vested_through" |
     jq -r '.[0] | if . == null then "none" else .status + " " + (.vested_through | sub("\\+00:00$"; "Z") | sub("\\.[0-9]+Z$"; "Z")) end'
 }
+vested_on_or_after_anchor() {
+  local vested
+  vested="$(vested_of)"
+  [[ "$vested" == confirmed* && ! "${vested#confirmed }" < "$anchor" ]]
+}
 output="$(rehearse vested)"
-check 'scripts/rehearse.mjs backdates 12 paid months, and reconcile vests them through the first real payment' \
-  '[[ "$(vested_of)" == "confirmed $anchor" ]]' "$output"
+check 'scripts/rehearse.mjs backdates 12 paid months, and reconcile vests them through the time served' \
+  'vested_on_or_after_anchor' "$output"
+output="$(rehearse partial)"
+check 'a refund of half of the newest of them takes the vesting away' '[[ "$(vested_of)" == none ]]' "$output"
+output="$(rehearse undo)"
+output="$(rehearse vested)"
+check 'vesting again after undo' 'vested_on_or_after_anchor' "$output"
 output="$(rehearse chargeback)"
-check 'a chargeback of one of them withdraws the vesting' '[[ "$(vested_of)" == withdrawn* ]]' "$output"
+check 'a chargeback of the newest of them takes the vesting away' '[[ "$(vested_of)" == none ]]' "$output"
 output="$(rehearse undo)"
 check 'undo removes what the script wrote, and the customer is vested in nothing' \
   '[[ "$(vested_of)" == none && "$(rest_get payments "customer_id=eq.$(customer_of computed)&select=transaction_id" | jq length)" == 1 ]]' \

@@ -11,13 +11,15 @@
  *                                  has reached 12 months: the releases published up to that payment's start are vested
  *   annual <email>                 a completed annual term before the customer's first real payment: its grant is
  *                                  confirmed, and the same releases are vested
- *   refund <email>                 an approved full refund of the newest rehearsal payment, now: a refund after vesting
- *                                  leaves the vesting in place
- *   chargeback <email>             an approved chargeback of the newest rehearsal payment, now: it withdraws the
- *                                  vesting that relied on it
+ *   refund <email>                 an approved full refund of the newest rehearsal payment, now: it takes away the time
+ *                                  that payment paid for, and any vesting that relied on it
+ *   partial <email> [percent]      an approved refund of part of the newest rehearsal payment (50% unless given): the
+ *                                  payment then counts for the share of its period the money kept pays for
+ *   chargeback <email>             an approved chargeback of the newest rehearsal payment, now: like a full refund
  *   grant <email> <date> <note>    an operator grant vesting the releases published up to <date> (ISO 8601)
  *   undo <email>                   deletes every row this script wrote for the customer
- *   show <email>                   prints the customer's access, grants and payments
+ *   show <email>                   prints the customer's access, grants and payments, with the time each payment counts
+ *                                  for: the share of its period the money kept pays for (entitlement-policy.ts)
  *
  * Every row it writes is marked: payments `txn_rehearsal_…`, adjustments `adj_rehearsal_…`, operator grants a note
  * starting `Rehearsal:`. `undo` deletes exactly those. Paddle never sends those ids, and reconcile only adds payments
@@ -40,7 +42,7 @@ function fail(message) {
 }
 
 const [command, email, ...rest] = process.argv.slice(2);
-const COMMANDS = ['vested', 'annual', 'refund', 'chargeback', 'grant', 'undo', 'show'];
+const COMMANDS = ['vested', 'annual', 'refund', 'partial', 'chargeback', 'grant', 'undo', 'show'];
 if (!COMMANDS.includes(command) || !email) {
   fail(`Usage: node --env-file=<sandbox env file> scripts/rehearse.mjs <${COMMANDS.join('|')}> <customer email> …`);
 }
@@ -113,7 +115,7 @@ async function newestRehearsalPayment() {
   const payments = await query(
     db
       .from('payments')
-      .select('transaction_id,subscription_id')
+      .select('transaction_id,subscription_id,subtotal,discount,total,tax,currency_code')
       .eq('customer_id', customerId)
       .like('transaction_id', `${TXN}%`)
       .order('period_starts_at', { ascending: false })
@@ -123,9 +125,18 @@ async function newestRehearsalPayment() {
   return payments[0];
 }
 
-// Paid periods before the anchor payment's start, each a copy of it with its own period, as Paddle would have billed.
+/** What a payment charged before tax, as the site counts it (src/server/db/payment-amounts.ts). */
+function charged(payment) {
+  return payment.tax === null || payment.tax === undefined
+    ? Number(payment.subtotal) - Number(payment.discount)
+    : Number(payment.total) - Number(payment.tax);
+}
+
+// Paid periods before the anchor payment's start, each a copy of it with its own period, as Paddle would have billed:
+// the same charge, tax and currency, and never nothing charged, so each counts in full.
 async function insertPeriods(anchor, periods, interval) {
   const now = new Date().toISOString();
+  const kept = charged(anchor) > 0;
   const rows = periods.map(([startsAt, endsAt], n) => ({
     transaction_id: `${TXN}${customerId}_${interval}_${n}_${startsAt.getTime()}`,
     customer_id: customerId,
@@ -136,9 +147,10 @@ async function insertPeriods(anchor, periods, interval) {
     billing_frequency: 1,
     period_starts_at: startsAt.toISOString(),
     period_ends_at: endsAt.toISOString(),
-    subtotal: Math.max(Number(anchor.subtotal), 1),
-    discount: 0,
-    total: Math.max(Number(anchor.total), 1),
+    subtotal: kept ? Number(anchor.subtotal) : 3900,
+    discount: kept ? Number(anchor.discount) : 0,
+    total: kept ? Number(anchor.total) : 3900,
+    tax: kept ? anchor.tax : 0,
     currency_code: anchor.currency_code,
     completed_at: startsAt.toISOString(),
     last_event_at: now,
@@ -147,10 +159,14 @@ async function insertPeriods(anchor, periods, interval) {
   return rows.map((row) => `${row.transaction_id}: ${row.period_starts_at} to ${row.period_ends_at}`);
 }
 
-async function adjust(action) {
+// An approved refund or chargeback of `share` (0 to 1) of the newest rehearsal payment's charge, with its amount
+// before tax and currency, as the webhook records Paddle's (record_payment_adjustment).
+async function adjust(action, share = 1) {
   const payment = await newestRehearsalPayment();
   const now = new Date().toISOString();
   const adjustmentId = `${ADJ}${action}_${customerId}_${Date.now()}`;
+  const full = share >= 1;
+  const amount = Math.round(charged(payment) * Math.min(1, share));
   await query(
     db.from('payment_adjustments').insert({
       adjustment_id: adjustmentId,
@@ -158,14 +174,18 @@ async function adjust(action) {
       customer_id: customerId,
       subscription_id: payment.subscription_id,
       action,
-      type: 'full',
-      item_types: ['full'],
+      type: full ? 'full' : 'partial',
+      item_types: [full ? 'full' : 'partial'],
       status: 'approved',
+      subtotal: amount,
+      currency_code: payment.currency_code,
       approved_at: now,
       last_event_at: now,
     }),
   );
-  return [`${adjustmentId}: an approved ${action} of ${payment.transaction_id}`];
+  return [
+    `${adjustmentId}: an approved ${action} of ${amount} of ${charged(payment)} charged for ${payment.transaction_id}`,
+  ];
 }
 
 async function show() {
@@ -181,18 +201,51 @@ async function show() {
     query(
       db
         .from('payments')
-        .select('transaction_id,billing_interval,period_starts_at,period_ends_at,status')
+        .select('transaction_id,billing_interval,period_starts_at,period_ends_at,status,subtotal,discount,total,tax')
         .eq('customer_id', customerId)
         .order('period_starts_at'),
     ),
     query(
       db
         .from('payment_adjustments')
-        .select('adjustment_id,transaction_id,action,type,status,approved_at')
+        .select('adjustment_id,transaction_id,action,type,status,subtotal,approved_at')
         .eq('customer_id', customerId),
     ),
   ]);
-  console.log(JSON.stringify({ customerId, access: state, grants, payments, adjustments }, null, 2));
+
+  // The time each payment counts for, for reading only: approved refunds, credits and chargebacks not marked reversed
+  // (a full one, or one of unknown amount, returns everything). The site's own rule, with reversal adjustments and
+  // tax-only corrections, is entitlement-policy.ts; reconcile stores its result in active_subscriptions.
+  const counted = payments.map((payment) => {
+    const charge = charged(payment);
+    const returned = adjustments
+      .filter((a) => a.transaction_id === payment.transaction_id && a.status === 'approved')
+      .filter((a) => ['refund', 'credit', 'chargeback'].includes(a.action))
+      .reduce((sum, a) => sum + (a.type === 'full' || a.subtotal === null ? charge : Number(a.subtotal)), 0);
+    const share = charge > 0 ? Math.max(0, (charge - returned) / charge) : 0;
+    const startsAt = new Date(payment.period_starts_at).getTime();
+    const endsAt = new Date(payment.period_ends_at).getTime();
+    return {
+      transaction_id: payment.transaction_id,
+      charged: charge,
+      returned,
+      counts_for:
+        share > 0
+          ? `${payment.period_starts_at} to ${new Date(startsAt + share * (endsAt - startsAt)).toISOString()}`
+          : 'nothing',
+    };
+  });
+  const qualifying = state?.run_started_at
+    ? {
+        from: state.run_started_at,
+        paid_through: state.paid_through,
+        months: state.months_paid,
+        vests_at: state.vests_at,
+      }
+    : null;
+  console.log(
+    JSON.stringify({ customerId, access: state, qualifying, grants, counted, payments, adjustments }, null, 2),
+  );
 }
 
 async function reconcile() {
@@ -249,6 +302,12 @@ switch (command) {
   case 'chargeback':
     written = await adjust(command);
     break;
+  case 'partial': {
+    const percent = rest[0] === undefined ? 50 : Number(rest[0]);
+    if (!(percent > 0 && percent < 100)) fail('Usage: partial <email> [percent of the payment, between 0 and 100]');
+    written = await adjust('refund', percent / 100);
+    break;
+  }
   case 'grant': {
     const [through, ...noteWords] = rest;
     if (!through || Number.isNaN(new Date(through).getTime())) {
