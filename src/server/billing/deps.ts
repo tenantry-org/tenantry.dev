@@ -15,6 +15,7 @@ import { issueLicence, type LicenceClaims } from '@/server/integrations/licensin
 import { type EmailMessage, sendEmail } from '@/server/integrations/email/send';
 import { alertOperator } from '@/server/integrations/email/alerts';
 import { cancelSubscriptionNow } from '@/server/integrations/paddle/cancel-subscription';
+import { listCompletedTransactions, type PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import { type ServerConfig, serverConfig } from '@/server/config/server-config';
 
 /** The billing tables (db/billing-store.ts). */
@@ -46,6 +47,8 @@ export interface BillingDeps {
   /** Never throws (alerts.ts). */
   alertOperator: (subject: string, detail: string) => Promise<void>;
   cancelSubscriptionNow: (subscriptionId: string) => Promise<boolean>;
+  /** The completed transactions of these subscriptions billed since the date, from Paddle's API. */
+  listCompletedTransactions: (subscriptionIds: string[], billedSince: Date) => Promise<PaddleTransaction[]>;
   withCustomerLease: typeof withCustomerLease;
   /** The signed-in user, read from the request's session, or null. */
   currentUser: () => Promise<User | null>;
@@ -62,6 +65,7 @@ export const defaultBillingDeps: BillingDeps = {
   sendEmail,
   alertOperator,
   cancelSubscriptionNow,
+  listCompletedTransactions: (subscriptionIds, billedSince) => listCompletedTransactions(subscriptionIds, billedSince),
   withCustomerLease,
   currentUser: async () => {
     const supabase = await createUserClient();

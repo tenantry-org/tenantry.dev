@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
 import { memory } from '@/test/memory-billing-store';
 import { testServerConfig } from '@/test/server-config';
+import { Webhooks } from '@paddle/paddle-node-sdk';
+import { transactionEvent } from '@/test/paddle-events';
+import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import { syncCustomer } from './customer-access';
 import { reconcileCustomer } from './reconcile-customer';
 
@@ -61,9 +64,87 @@ describe('reconcileCustomer', () => {
       access: 'unchanged',
       licence: 'current',
       github: 'unchanged',
+      paymentsRecovered: 0,
     });
     expect(deps.github.grantAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
+  });
+
+  describe('payments whose notification was lost', () => {
+    // A completed Pro renewal of sub_1, as Paddle's API lists it: the same entity the notification carries.
+    const listed = (transactionId: string, startsAt: string, endsAt: string, productId = 'pro_01') =>
+      Webhooks.fromJson(
+        transactionEvent({
+          eventId: `evt_${transactionId}`,
+          transactionId,
+          customerId: 'ctm_1',
+          subscriptionId: 'sub_1',
+          productId,
+          occurredAt: startsAt,
+          period: { startsAt, endsAt },
+        }) as unknown as Parameters<typeof Webhooks.fromJson>[0],
+      ).data as unknown as PaddleTransaction;
+
+    it('records a completed payment Paddle lists that the ledger is missing, and counts it', async () => {
+      await startAccess();
+      deps.listCompletedTransactions.mockResolvedValue([
+        listed('txn_september', '2026-09-01T00:00:00Z', '2026-10-01T00:00:00Z'),
+        listed('txn_october', '2026-10-01T00:00:00Z', '2026-11-01T00:00:00Z'),
+      ]);
+      await memory.store.recordPayment({
+        transactionId: 'txn_september',
+        customerId: 'ctm_1',
+        subscriptionId: 'sub_1',
+        origin: 'web',
+        priceId: 'pri_01month',
+        billingInterval: 'month',
+        billingFrequency: 1,
+        periodStartsAt: '2026-09-01T00:00:00Z',
+        periodEndsAt: '2026-10-01T00:00:00Z',
+        subtotal: 3900,
+        discount: 0,
+        total: 3900,
+        currencyCode: 'GBP',
+        occurredAt: '2026-09-01T00:05:00Z',
+      });
+
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ paymentsRecovered: 1 });
+
+      expect(deps.listCompletedTransactions).toHaveBeenCalledWith(['sub_1'], expect.any(Date));
+      expect([...memory.state.payments.keys()].sort()).toEqual(['txn_october', 'txn_september']);
+      // The recovered month is in the run the reconcile stores.
+      expect(memory.state.entitlementStates.get('ctm_1')?.run).toMatchObject({
+        startedAt: new Date('2026-09-01T00:00:00Z'),
+        paidThrough: new Date('2026-11-01T00:00:00Z'),
+      });
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Recovered 1 payment for customer ctm_1',
+        expect.stringContaining('txn_october'),
+      );
+    });
+
+    it('records nothing Paddle lists for another product, and asks nothing for a customer with no Pro subscription', async () => {
+      await startAccess();
+      deps.listCompletedTransactions.mockResolvedValue([
+        listed('txn_other', '2026-09-01T00:00:00Z', '2026-10-01T00:00:00Z', 'pro_02'),
+      ]);
+
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ paymentsRecovered: 0 });
+      expect(memory.state.payments.size).toBe(0);
+      expect(deps.alertOperator).not.toHaveBeenCalled();
+
+      memory.state.subscriptions.clear();
+      deps.listCompletedTransactions.mockClear();
+      await reconcileCustomer('ctm_1', deps);
+      expect(deps.listCompletedTransactions).not.toHaveBeenCalled();
+    });
+
+    it('fails the reconcile when Paddle cannot be reached, so the job is retried', async () => {
+      await startAccess();
+      deps.listCompletedTransactions.mockRejectedValue(new Error('Paddle unavailable'));
+
+      await expect(reconcileCustomer('ctm_1', deps)).rejects.toThrow('Paddle unavailable');
+    });
   });
 
   describe('org invitations', () => {

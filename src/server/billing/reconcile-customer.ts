@@ -8,6 +8,8 @@ import {
   syncCustomer,
 } from '@/server/billing/customer-access';
 import { isEntitled } from '@/server/billing/entitlement-policy';
+import { recordCompletedTransaction } from '@/server/billing/apply-paddle-event';
+import { PAYMENT_RECOVERY_DAYS } from '@/server/billing/paddle-assumptions';
 import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
 
 /**
@@ -26,6 +28,8 @@ export interface CustomerReconciliation {
   access: AccessChange;
   licence: LicenceOutcome | null;
   github: GithubReconciliation;
+  /** Completed Pro payments Paddle lists that the ledger was missing (a lost notification), now recorded. */
+  paymentsRecovered: number;
 }
 
 /**
@@ -40,6 +44,8 @@ export interface CustomerReconciliation {
  *   - an org invitation that was accepted (recorded as a member from then on), or that GitHub dropped
  *     after 7 days unaccepted, or a member removed from the team while still entitled (invited again),
  *   - a removal that failed part-way, such as an invitation left pending after leaving the team,
+ *   - a completed Pro payment whose transaction.completed notification never arrived or failed for good: Paddle's
+ *     completed transactions of the customer's Pro subscriptions are listed, and any missing is recorded,
  *   - perpetual entitlement that changes with time alone: a run that reaches 12 months or serves another period,
  *     and an annual grant whose term ends (syncCustomer recomputes it).
  *
@@ -49,11 +55,12 @@ export async function reconcileCustomer(
   customerId: string,
   deps: BillingDeps = defaultBillingDeps,
 ): Promise<CustomerReconciliation> {
+  const paymentsRecovered = await recoverPayments(customerId, deps);
   const { change, licence } = await syncCustomer(customerId, deps);
   const access = await deps.store.getCustomerAccess(customerId);
   const entitled = access !== null && isEntitled(access.status);
   const githubLogin = await linkedGithubLogin(customerId, deps);
-  const result: CustomerReconciliation = { access: change, licence, github: 'unchanged' };
+  const result: CustomerReconciliation = { access: change, licence, github: 'unchanged', paymentsRecovered };
 
   if (githubLogin) {
     result.github = entitled
@@ -105,4 +112,39 @@ async function reconcileRemoval(githubLogin: string, deps: BillingDeps): Promise
 
   await github.revokeAccess(githubLogin);
   return 'removed';
+}
+
+// Records the completed Pro payments of the customer's Pro subscriptions that Paddle lists and the ledger is missing,
+// through the webhook's own path, and returns how many. The operator is told: a lost notification is worth knowing
+// about. Paddle unreachable throws, and the reconcile job is retried.
+async function recoverPayments(customerId: string, deps: BillingDeps): Promise<number> {
+  const { store } = deps;
+  const subscriptionIds = (await store.listSubscriptions(customerId))
+    .filter((subscription) => subscription.productId === deps.config.paddle.proProductId)
+    .map((subscription) => subscription.subscriptionId);
+  if (subscriptionIds.length === 0) return 0;
+
+  const since = new Date(Date.now() - PAYMENT_RECOVERY_DAYS * 24 * 60 * 60 * 1000);
+  const [listed, recorded] = await Promise.all([
+    deps.listCompletedTransactions(subscriptionIds, since),
+    store.listPayments(customerId),
+  ]);
+  const known = new Set(recorded.map((payment) => payment.transactionId));
+
+  const recovered: string[] = [];
+  for (const transaction of listed) {
+    if (known.has(transaction.id) || transaction.customerId !== customerId) continue;
+    if (await recordCompletedTransaction(transaction, transaction.updatedAt, deps)) recovered.push(transaction.id);
+  }
+
+  if (recovered.length > 0) {
+    await deps.alertOperator(
+      `Recovered ${recovered.length} payment${recovered.length === 1 ? '' : 's'} for customer ${customerId}`,
+      `Reconcile found completed Pro transactions in Paddle that the payment ledger was missing, and recorded them: ` +
+        `${recovered.join(', ')}. Their transaction.completed notifications were lost or failed; check the ` +
+        'notification destination and customer_jobs.',
+    );
+  }
+
+  return recovered.length;
 }

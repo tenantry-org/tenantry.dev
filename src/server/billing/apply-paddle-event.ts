@@ -10,6 +10,7 @@ import {
   SubscriptionStatus,
 } from '@paddle/paddle-node-sdk';
 import { syncCustomer } from '@/server/billing/customer-access';
+import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import { subscriptionEndedAt } from '@/server/billing/paddle-assumptions';
 import { normaliseEmail } from '@/server/db/customer-email';
 import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
@@ -24,20 +25,6 @@ interface SubscriptionEventData {
   scheduledChange: { action?: string; effectiveAt?: string } | null;
   canceledAt: string | null;
   pausedAt: string | null;
-}
-
-// Structural view of the bits of TransactionNotification this handler needs.
-interface TransactionEventData {
-  id: string;
-  status: string;
-  customerId: string | null;
-  origin: string;
-  subscriptionId: string | null;
-  billingPeriod: { startsAt: string; endsAt: string } | null;
-  items: {
-    price: { id: string; productId: string; billingCycle: { interval: string; frequency: number } | null } | null;
-  }[];
-  details: { totals: { subtotal: string; discount: string; total: string; currencyCode: string } | null } | null;
 }
 
 // Structural view of the bits of AdjustmentNotification this handler needs.
@@ -83,7 +70,7 @@ export async function applyPaddleEvent(eventData: EventEntity, deps: BillingDeps
     // others (created, ready, billed, paid, past_due, payment_failed, canceled, revised, updated) come before that or
     // change nothing the entitlement rules read.
     case EventName.TransactionCompleted:
-      await handleTransactionCompleted(eventData.data as unknown as TransactionEventData, eventData.occurredAt, deps);
+      await handleTransactionCompleted(eventData.data as unknown as PaddleTransaction, eventData.occurredAt, deps);
       break;
   }
 }
@@ -124,23 +111,37 @@ async function handleSubscription(data: SubscriptionEventData, occurredAt: strin
 }
 
 /**
- * A completed transaction: recorded in the payment ledger if it pays a billing period of a Pro subscription (it has a
- * subscription, a billing period, and a recurring Pro price), whatever its origin; then the customer is brought in
- * line (syncCustomer). Anything else (a one-time charge, another product) is ignored. Recording is idempotent on the
- * transaction id, and the job on the event id. Throws a foreign-key error, retried, if the customer is not recorded
- * yet.
+ * A completed transaction: recorded in the payment ledger if it pays a billing period of a Pro subscription
+ * (recordCompletedTransaction), then the customer is brought in line (syncCustomer). Throws a foreign-key error,
+ * retried, if the customer is not recorded yet.
  */
-async function handleTransactionCompleted(data: TransactionEventData, occurredAt: string, deps: BillingDeps) {
+async function handleTransactionCompleted(data: PaddleTransaction, occurredAt: string, deps: BillingDeps) {
+  if (!(await recordCompletedTransaction(data, occurredAt, deps))) return;
+  await syncCustomer(data.customerId!, deps);
+}
+
+/**
+ * Records a completed transaction in the payment ledger if it pays a billing period of a Pro subscription (it has a
+ * customer, a subscription, a billing period, and a recurring Pro price), whatever its origin, and returns whether it
+ * does. Anything else (a one-time charge, another product) is ignored. Recording is idempotent on the transaction id.
+ * The webhook records each transaction.completed this way, and reconcile any completed transaction Paddle lists that
+ * the ledger is missing (reconcile-customer.ts).
+ */
+export async function recordCompletedTransaction(
+  data: PaddleTransaction,
+  occurredAt: string,
+  deps: BillingDeps = defaultBillingDeps,
+): Promise<boolean> {
   const proItem = data.items.find((item) => item.price?.productId === deps.config.paddle.proProductId);
   const price = proItem?.price;
   const totals = data.details?.totals;
 
   if (!data.customerId || !data.subscriptionId || !data.billingPeriod || !price?.billingCycle || !totals) {
     console.info(
-      `Paddle webhook: transaction ${data.id} (${data.origin}) pays no billing period of a Tenantry Pro ` +
-        'subscription; not recorded.',
+      `Paddle: transaction ${data.id} (${data.origin}) pays no billing period of a Tenantry Pro subscription; ` +
+        'not recorded.',
     );
-    return;
+    return false;
   }
 
   await deps.store.recordPayment({
@@ -160,7 +161,7 @@ async function handleTransactionCompleted(data: TransactionEventData, occurredAt
     occurredAt,
   });
 
-  await syncCustomer(data.customerId, deps);
+  return true;
 }
 
 // Paddle's amounts are strings of whole numbers in the currency's lowest unit.

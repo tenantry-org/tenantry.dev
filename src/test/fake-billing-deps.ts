@@ -31,6 +31,8 @@ export function fakeBillingDeps() {
     sendEmail: vi.fn<BillingDeps['sendEmail']>(async () => true),
     alertOperator: vi.fn<BillingDeps['alertOperator']>(async () => undefined),
     cancelSubscriptionNow: vi.fn<BillingDeps['cancelSubscriptionNow']>(async () => true),
+    // Paddle lists nothing unless a test says otherwise; tests never call Paddle.
+    listCompletedTransactions: vi.fn<BillingDeps['listCompletedTransactions']>(async () => []),
     // Holds the lease at once (spy on it to make the customer busy); customer-lease.test.ts tests the real one.
     withCustomerLease: <T>(_customerId: string, work: () => Promise<T>) => work(),
     currentUser: vi.fn<() => Promise<User | null>>(async () => null),

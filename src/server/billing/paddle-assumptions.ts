@@ -70,3 +70,12 @@ export function subscriptionEndedAt(subscription: {
  * months after the start. A run that is that close to 12 months counts as 12 months once its last period is served.
  */
 export const MONTH_END_TOLERANCE_MS = 3 * DAY_MS;
+
+/**
+ * Assumption 5: a completed transaction listed through Paddle's API (transactions.list, status completed) is the
+ * entity its transaction.completed notification carried, with the same id, billingPeriod, items[].price and
+ * details.totals. The SDK's types say so; it has not been compared in the sandbox. Reconcile lists the transactions
+ * billed in this many days, for each customer it reconciles, and records any the ledger is missing: a notification
+ * lost for longer than that, or for a customer reconcile no longer visits (one who lapsed), is not recovered.
+ */
+export const PAYMENT_RECOVERY_DAYS = 90;
