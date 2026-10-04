@@ -2,9 +2,12 @@ import { defineCollections, defineConfig, defineDocs } from 'fumadocs-mdx/config
 import { pageSchema } from 'fumadocs-core/source/schema';
 import { z } from 'zod';
 
-// Docs are synced from the Core/Pro repos into content/docs by scripts/sync-docs.mjs.
+// Docs are synced from the Core/Pro repos into content/docs by scripts/sync-docs.mjs. Each page's Markdown is kept
+// with its compiled page, for its Markdown copy and llms.txt (src/lib/docs-markdown.ts); without Fumadocs' heading
+// ids (`## Title [#id]`), which are not Markdown.
 export const docs = defineDocs({
   dir: 'content/docs',
+  docs: { postprocess: { includeProcessedMarkdown: { headingIds: false } } },
 });
 
 // Blog posts (src/lib/blog.ts): Markdown files (.md, not MDX), since each published post is also copied to dev.to

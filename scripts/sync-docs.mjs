@@ -140,9 +140,11 @@ function toFrontmatter(raw, group, source, dir, context) {
     }
     firstParagraph.push(text);
   }
+  // A link or image keeps only its text; parentheses in the prose stay.
   const cleaned = firstParagraph
     .join(' ')
-    .replace(/[`*[\]()]/g, '')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[`*]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   const description = (cleaned.match(/^.*?\.(?:\s|$)/)?.[0] ?? cleaned).trim();

@@ -32,6 +32,11 @@ describe('the proxy', () => {
     '/docs.rsc',
     '/docs.segments/_tree.segment.rsc',
     '/docs/pro/installation.rsc',
+    '/docs.md',
+    '/docs/core/getting-started.md',
+    '/llms.txt',
+    '/llms-full.txt',
+    '/llms.mdx/core/getting-started',
     '/api/webhook',
     '/api/search?query=tenant',
     '/api/reconcile',
@@ -45,5 +50,6 @@ describe('the proxy', () => {
   it('leaves out whole path segments only', () => {
     expect(matches('/docs-archive')).toBe(true);
     expect(matches('/apis')).toBe(true);
+    expect(matches('/llmsx')).toBe(true);
   });
 });
