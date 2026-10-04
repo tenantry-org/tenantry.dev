@@ -91,6 +91,50 @@ not running, then `supabase db reset`, which discards its data), and run `pnpm d
 from the migrations and fails if the committed file differs, so generate them with the Supabase CLI version its
 database job pins.
 
+## Package feed: publishing
+
+Tenantry Pro's release workflow and `scripts/feed-publish.sh` publish packages with the endpoint below. This is the
+contract both rely on; change it here and in both clients together.
+
+`PUT /feed/v3/package`, which is what `dotnet nuget push --source <site>/feed/v3/index.json --api-key <key>` sends: the
+`.nupkg` as a multipart form file, with the publish key in the `X-NuGet-ApiKey` header. The deployment holds only the
+key's SHA-256 (`FEED_PUBLISH_KEY_SHA256`); without it every push is refused.
+
+| Answer | Meaning                                                                               | What a client does  |
+| ------ | ------------------------------------------------------------------------------------- | ------------------- |
+| 201    | Published. The package's release is recorded with its first package.                  | Carry on.           |
+| 409    | This id and version is already published with exactly these bytes (the same SHA-512). | Treat as published. |
+| 400    | Refused, with the reason as text (below).                                             | Fail.               |
+| 403    | No publish key, or the wrong one.                                                     | Fail.               |
+| 413    | Larger than 4 MB (a Vercel function takes a body of at most 4.5 MB).                  | Fail.               |
+
+`dotnet nuget push --skip-duplicate` and the script treat 409 as published, so re-running a release is safe. Every
+other refusal is 400, never 409, so that `--skip-duplicate` cannot hide it: an id that is not `Tenantry.Pro` or
+`Tenantry.Pro.*`, or differs only in case from a published one; a version that is not `major.minor.patch`; different
+bytes under a version already published (a published version never changes: publish a new one); a
+`tenantry-release.json` date outside the rules below, or a security flag that disagrees with its release; a security
+patch whose `X.Y.0` is not published; a package that cannot be read.
+
+A package may carry `tenantry-release.json` at its root: `{ "releasedAt": "<ISO 8601>", "security": <bool> }`, which
+Pro's release workflow writes from the signed tag (its date, and `Security:` in its message). `releasedAt` may be at most
+3 days before the push and 5 minutes after it, and not before an earlier version's date; without it the release is dated
+when its first package is published. A security patch is dated as its `X.Y.0` for vesting, so customers whose vested
+releases include `X.Y.0` can restore the fix. The first package of a release fixes its date and flag; later packages of
+the same release are checked only for the flag.
+
+`GET /feed/v3/package` with the same header lists what the feed holds: each release's version, dates and security flag,
+with its packages' ids, sizes and SHA-512s. Feed tokens cannot read it.
+
+The publish key is a random string, generated once per environment; only its hash goes into the deployment:
+
+```bash
+key="$(openssl rand -base64 48 | tr -d '\n/+=')"   # store it in the password manager and the release workflow's secret
+printf '%s' "$key" | shasum -a 256 | cut -d' ' -f1  # FEED_PUBLISH_KEY_SHA256 for that environment
+```
+
+`FEED_PUBLISH_KEY="$key" scripts/feed-publish.sh push https://sandbox.tenantry.dev ./artifacts` pushes a folder of
+packages oldest version first, and `scripts/feed-publish.sh list https://sandbox.tenantry.dev` prints the listing.
+
 ## Docs pipeline
 
 `/docs` is rendered by Fumadocs from Markdown under `content/docs/` (gitignored, generated). `pnpm sync:docs`

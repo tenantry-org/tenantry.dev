@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nuspec, zip } from '@/test/zip';
 import type { FeedDeps, FeedStore } from './deps';
-import { handlePublish } from './publish';
+import { handlePublish, handlePublishedList } from './publish';
 
 // What `dotnet nuget push` sends: a PUT of the .nupkg as multipart form data, with the key in X-NuGet-ApiKey.
 
@@ -20,7 +20,8 @@ beforeEach(() => {
     readPackageNuspec: vi.fn(),
     createFeedTokenRecord: vi.fn(),
     revokeFeedTokenRecord: vi.fn(),
-    packageExists: vi.fn(async () => false),
+    recordedPackageHash: vi.fn(async () => null),
+    listPublishedReleases: vi.fn(async () => []),
     // As pro_releases does: the first package records the release; a security patch needs its X.Y.0.
     ensureRelease: vi.fn(
       async (release: { version: string; minor: number; major: number; security: boolean; publishedAt: string }) => {
@@ -120,10 +121,26 @@ describe('handlePublish', () => {
     expect((await push(efCore)).status).toBe(403);
   });
 
-  it('answers 409 for a package already published, which --skip-duplicate treats as done', async () => {
-    store.packageExists.mockResolvedValue(true);
+  it('answers 409 for the same package published again, which --skip-duplicate treats as done', async () => {
+    await push(efCore);
+    const bytes = vi.mocked(deps.storage.storePackageFile).mock.calls[0][1];
+    store.recordedPackageHash.mockResolvedValue(createHash('sha512').update(bytes).digest('base64'));
+    vi.mocked(deps.storage.storePackageFile).mockClear();
 
-    expect((await push(efCore)).status).toBe(409);
+    const response = await push(efCore);
+
+    expect(response.status).toBe(409);
+    expect(store.recordedPackageHash).toHaveBeenCalledWith('tenantry.pro.efcore', '1.4.0');
+    expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
+  });
+
+  it('answers 400 for different content under a version already published, so no client takes it as done', async () => {
+    store.recordedPackageHash.mockResolvedValue('c29tZXRoaW5nIGVsc2U=');
+
+    const response = await push(efCore);
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('already published with different content');
     expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
   });
 
@@ -163,7 +180,7 @@ describe('handlePublish', () => {
     expect(releases.get('1.4.3')).toMatchObject({ security: true });
   });
 
-  it('refuses a package whose manifest disagrees with its release about being a security patch', async () => {
+  it('refuses with 400, not 409, a package whose manifest disagrees with its release about being a security patch', async () => {
     releases.set('1.4.0', { security: false, publishedAt: '2027-11-20T12:00:00Z' });
     releases.set('1.4.3', { security: false, publishedAt: '2028-03-15T12:00:00Z' });
 
@@ -172,7 +189,7 @@ describe('handlePublish', () => {
       'tenantry-release.json': JSON.stringify({ security: true }),
     });
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(400);
     expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
   });
 });
@@ -207,12 +224,16 @@ describe('concurrent publishes of one version', () => {
         return true;
       },
     );
+    store.recordedPackageHash.mockImplementation(
+      async (lowerId: string, version: string) => records.get(`${lowerId}@${version}`)?.sha512 ?? null,
+    );
 
     const first = { ...efCore, 'lib/net9.0/Tenantry.Pro.EfCore.dll': 'first build' };
     const second = { ...efCore, 'lib/net9.0/Tenantry.Pro.EfCore.dll': 'second build' };
     const statuses = (await Promise.all([push(first), push(second)])).map((response) => response.status).sort();
 
-    expect(statuses).toEqual([201, 409]);
+    // The loser's bytes differ from the recorded ones, so it is refused rather than taken as published.
+    expect(statuses).toEqual([201, 400]);
     const [record] = records.values();
     const bytes = stored.get(record.storagePath)!;
     expect(createHash('sha512').update(bytes).digest('base64')).toBe(record.sha512);
@@ -293,9 +314,54 @@ describe('package id casing', () => {
 
     const response = await push({ 'Tenantry.Pro.attack.nuspec': nuspec('Tenantry.Pro.attack', '1.4.0') });
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(400);
     expect(await response.text()).toContain('Tenantry.Pro.Attack');
     expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
     expect((await push({ 'Tenantry.Pro.Attack.nuspec': nuspec('Tenantry.Pro.Attack', '1.4.1') })).status).toBe(201);
+  });
+});
+
+describe('handlePublishedList', () => {
+  const list = (key: string | null) => {
+    const headers = new Headers();
+    if (key !== null) headers.set('x-nuget-apikey', key);
+    return handlePublishedList(new Request('https://sandbox.example.com/feed/v3/package', { headers }), deps);
+  };
+
+  it('lists the releases and their packages for the holder of the publish key, kept out of shared caches', async () => {
+    store.listPublishedReleases.mockResolvedValue([
+      {
+        version: '1.4.0',
+        publishedAt: new Date('2028-01-01T00:00:00Z'),
+        security: false,
+        entitlementAt: new Date('2028-01-01T00:00:00Z'),
+        packages: [{ id: 'Tenantry.Pro', size: 1000, sha512: 'abc=' }],
+      },
+    ]);
+
+    const response = await list(KEY);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.json()).toEqual({
+      releases: [
+        {
+          version: '1.4.0',
+          publishedAt: '2028-01-01T00:00:00.000Z',
+          security: false,
+          entitlementAt: '2028-01-01T00:00:00.000Z',
+          packages: [{ id: 'Tenantry.Pro', size: 1000, sha512: 'abc=' }],
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ['no key', null],
+    ['a wrong key', 'guess'],
+    ['a feed token', 'tpf_token'],
+  ])('refuses a listing with %s', async (_, key) => {
+    expect((await list(key)).status).toBe(403);
+    expect(store.listPublishedReleases).not.toHaveBeenCalled();
   });
 });

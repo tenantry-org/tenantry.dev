@@ -247,17 +247,49 @@ export async function recordedPackageId(lowerId: string): Promise<string | null>
   return data?.package_id ?? null;
 }
 
-/** Whether this package and version is recorded. */
-export async function packageExists(lowerId: string, version: string): Promise<boolean> {
+/** The base64 SHA-512 of this package and version as recorded, or null if it is not recorded. */
+export async function recordedPackageHash(lowerId: string, version: string): Promise<string | null> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('pro_packages')
-    .select('version')
+    .select('sha512')
     .eq('lower_id', lowerId)
     .eq('version', version)
     .maybeSingle();
 
   if (error) throw error;
 
-  return data !== null;
+  return data?.sha512 ?? null;
+}
+
+/** A release as an operator lists it, with its packages. */
+export interface PublishedRelease {
+  version: string;
+  publishedAt: Date;
+  security: boolean;
+  entitlementAt: Date;
+  packages: { id: string; size: number; sha512: string }[];
+}
+
+/** Every recorded release with its packages, oldest version first. */
+export async function listPublishedReleases(): Promise<PublishedRelease[]> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('pro_releases')
+    .select('version,major,minor,patch,published_at,security,entitlement_at,pro_packages(package_id,size,sha512)')
+    .order('major')
+    .order('minor')
+    .order('patch');
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    version: row.version,
+    publishedAt: new Date(row.published_at),
+    security: row.security,
+    entitlementAt: new Date(row.entitlement_at),
+    packages: row.pro_packages
+      .map((pkg) => ({ id: pkg.package_id, size: Number(pkg.size), sha512: pkg.sha512 }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  }));
 }

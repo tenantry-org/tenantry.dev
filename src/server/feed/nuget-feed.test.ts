@@ -79,7 +79,8 @@ beforeEach(() => {
     revokeFeedTokenRecord: vi.fn(),
     ensureRelease: vi.fn(),
     recordPackage: vi.fn(),
-    packageExists: vi.fn(),
+    recordedPackageHash: vi.fn(),
+    listPublishedReleases: vi.fn(),
     listReleases: vi.fn(),
     recordedPackageId: vi.fn(),
   };
