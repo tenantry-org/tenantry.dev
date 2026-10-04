@@ -31,6 +31,9 @@ while they subscribed.
 
 Key code is in `src/server`, in layers whose imports point only down this list (ESLint enforces it):
 
+- `feed/` — Tenantry Pro's NuGet v3 feed (`/feed/v3/index.json`, routed by `src/app/feed/v3`): each customer's feed
+  tokens, the read resources filtered to the releases they may use, and publishing for the release workflow.
+  `scripts/feed-e2e.sh` runs a real `dotnet restore` against it.
 - `billing/` — the rules and services: what a customer may access now and owns for good, computed from their
   subscriptions and payments (`entitlement-policy.ts`, with the Paddle behaviour it assumes in
   `paddle-assumptions.ts`); storing that and keeping their GitHub membership, licence and emails in line with it
