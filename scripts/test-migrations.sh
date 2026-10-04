@@ -25,6 +25,7 @@ test_migration 20261004120000_entitlement_ledger 20261002120000 || status=1
 test_migration 20261005090000_retire_github_delivery 20261004130000 || status=1
 test_migration 20261005100000_feed_access 20261005090000 || status=1
 test_migration 20261005120000_money_kept 20261005100000 || status=1
+test_migration 20261005140000_test_customers 20261005130000 || status=1
 
 supabase db reset --local >/dev/null
 exit $status

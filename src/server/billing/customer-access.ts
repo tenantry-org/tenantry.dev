@@ -57,14 +57,17 @@ export async function syncCustomer(
   deps: BillingDeps = defaultBillingDeps,
   now: Date = new Date(),
 ): Promise<CustomerSync> {
-  const { store } = deps;
-  const [subscriptions, payments, adjustments, email, previousGrants] = await Promise.all([
-    store.listSubscriptions(customerId),
-    store.listPayments(customerId),
-    store.listPaymentAdjustments(customerId),
-    store.getCustomerEmail(customerId),
-    store.listGrants(customerId),
+  const [subscriptions, payments, adjustments, email, previousGrants, isTest] = await Promise.all([
+    deps.store.listSubscriptions(customerId),
+    deps.store.listPayments(customerId),
+    deps.store.listPaymentAdjustments(customerId),
+    deps.store.getCustomerEmail(customerId),
+    deps.store.listGrants(customerId),
+    deps.store.isTestCustomer(customerId),
   ]);
+  // A test customer (customers.is_test) is kept by the operator for checks: nobody is emailed or alerted about it.
+  if (isTest) deps = { ...deps, sendEmail: async () => false, alertOperator: async () => undefined };
+  const { store } = deps;
   const entitlement = computeEntitlement({
     subscriptions,
     payments,

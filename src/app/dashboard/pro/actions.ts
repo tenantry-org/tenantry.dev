@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getCustomerId } from '@/server/db/customer-dashboard';
+import { getCustomerId, isTestCustomer } from '@/server/db/customer-dashboard';
 import { getCurrentUser } from '@/server/db/current-user';
 import { confirmedEmail } from '@/server/db/customer-email';
 import { FEED_TOKEN_LIMIT, readEntitlement } from '@/server/billing/pro-pages';
@@ -61,7 +61,8 @@ export async function createFeedToken(name: unknown): Promise<Result<{ token: st
 
     console.info(`Feed token ${created.id} created for customer ${customerId}.`);
     const email = confirmedEmail(await getCurrentUser());
-    if (email) {
+    // A test customer, such as the release check's, is sent no emails.
+    if (email && !(await isTestCustomer(customerId))) {
       // Never throws (send.ts). Tells the customer, so a token they did not create is noticed.
       await sendEmail(feedTokenCreatedEmail(email, { name: trimmed, prefix: created.prefix }, serverConfig().siteUrl));
     }

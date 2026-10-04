@@ -25,6 +25,14 @@ export async function getCustomerId(): Promise<string | null> {
   return data?.customer_id ?? null;
 }
 
+/** Whether the signed-in user's customer is a test customer (customers.is_test), which is sent no emails. */
+export async function isTestCustomer(customerId: string): Promise<boolean> {
+  const supabase = await createUserClient();
+  const { data } = await supabase.from('customers').select('is_test').eq('customer_id', customerId).maybeSingle();
+
+  return data?.is_test ?? false;
+}
+
 /** The customer's access and the progress of their current qualifying period, as last stored (active_subscriptions). */
 export interface StoredState {
   access: Access;

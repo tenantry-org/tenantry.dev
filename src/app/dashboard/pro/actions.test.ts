@@ -5,13 +5,17 @@ import { createFeedToken, revokeFeedToken } from './actions';
 
 const mocks = vi.hoisted(() => ({
   customerId: 'ctm_mine' as string | null,
+  isTest: false,
   entitlement: null as unknown,
   user: { email: 'Buyer@Example.com', email_confirmed_at: '2026-09-01T00:00:00Z' } as Record<string, unknown> | null,
   // The feed's tables: tokens by id, each with its customer; create_feed_token refuses an eleventh live one.
   tokens: new Map<string, { customerId: string; revoked: boolean }>(),
   sendEmail: vi.fn(async () => true),
 }));
-vi.mock('@/server/db/customer-dashboard', () => ({ getCustomerId: async () => mocks.customerId }));
+vi.mock('@/server/db/customer-dashboard', () => ({
+  getCustomerId: async () => mocks.customerId,
+  isTestCustomer: async () => mocks.isTest,
+}));
 vi.mock('@/server/db/current-user', () => ({ getCurrentUser: async () => mocks.user }));
 vi.mock('@/server/billing/pro-pages', () => ({
   FEED_TOKEN_LIMIT: 10,
@@ -42,6 +46,7 @@ const someoneElsesToken = '00000000-0000-4000-8000-0000000000aa';
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.customerId = 'ctm_mine';
+  mocks.isTest = false;
   mocks.entitlement = ENTITLEMENT.active;
   mocks.user = { email: 'Buyer@Example.com', email_confirmed_at: '2026-09-01T00:00:00Z' };
   mocks.tokens.clear();
@@ -70,6 +75,13 @@ describe('createFeedToken', () => {
     expect(message.html).toContain('Build server');
     expect(message.html).toContain('tpf_ssss');
     expect(message.html).not.toContain(`tpf_${'s'.repeat(43)}`);
+  });
+
+  it('sends no email for a test customer, such as the release check’s', async () => {
+    mocks.isTest = true;
+
+    await expect(createFeedToken('Release check')).resolves.toMatchObject({ name: 'Release check' });
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
 
   it('refuses a login with no billing account', async () => {

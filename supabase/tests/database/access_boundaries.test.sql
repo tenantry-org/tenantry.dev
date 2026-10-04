@@ -9,7 +9,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(45);
+select plan(46);
 
 -- Structure: holds for every table and function, not only the ones listed below.
 select is_empty(
@@ -137,6 +137,9 @@ select results_eq(
 select results_eq(
   $$with changed as (update public.customers set email = 'bob@example.com' returning 1) select count(*)::int from changed$$,
   $$values (0)$$, 'she cannot change her customer''s email to take over another account');
+select results_eq(
+  $$with changed as (update public.customers set is_test = true returning 1) select count(*)::int from changed$$,
+  $$values (0)$$, 'she cannot mark herself a test customer');
 select results_eq(
   $$with removed as (delete from public.licences returning 1) select count(*)::int from removed$$,
   $$values (0)$$, 'she cannot delete licences');

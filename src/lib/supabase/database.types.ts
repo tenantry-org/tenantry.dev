@@ -100,6 +100,7 @@ export type Database = {
           created_at: string;
           customer_id: string;
           email: string;
+          is_test: boolean;
           last_event_at: string | null;
           updated_at: string;
         };
@@ -107,6 +108,7 @@ export type Database = {
           created_at?: string;
           customer_id: string;
           email: string;
+          is_test?: boolean;
           last_event_at?: string | null;
           updated_at?: string;
         };
@@ -114,6 +116,7 @@ export type Database = {
           created_at?: string;
           customer_id?: string;
           email?: string;
+          is_test?: boolean;
           last_event_at?: string | null;
           updated_at?: string;
         };

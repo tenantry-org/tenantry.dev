@@ -92,6 +92,23 @@ describe('syncCustomer', () => {
     expect(emailLinks()).toEqual(['https://sandbox.example.com/#pricing']);
   });
 
+  it('sends a test customer no email and the operator no alert, whatever happens to its access', async () => {
+    memory.state.testCustomers.add('ctm_1');
+    // A licence that cannot be issued is alerted on for any other customer.
+    deps.issueLicence.mockImplementationOnce(() => {
+      throw new Error('signing key missing');
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(entitle()).resolves.toBe('started');
+    await expect(reconcileLicence()).resolves.toBe('issued');
+    await expect(entitle({ status: 'canceled' })).resolves.toBe('ended');
+
+    expect(memory.licences('ctm_1')).toHaveLength(1);
+    expect(deps.sendEmail).not.toHaveBeenCalled();
+    expect(deps.alertOperator).not.toHaveBeenCalled();
+  });
+
   it('does nothing for a customer whose only subscription never entitled them', async () => {
     await expect(entitle({ status: 'canceled' })).resolves.toBe('unchanged');
 

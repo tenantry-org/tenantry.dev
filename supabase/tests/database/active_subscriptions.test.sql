@@ -8,7 +8,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(25);
+select plan(26);
 
 insert into public.customers (customer_id, email) values ('ctm_1', 'buyer@example.com');
 insert into public.payments (
@@ -72,6 +72,20 @@ select results_eq(
   $$values ('operator'::text, 'confirmed'::text), ('qualifying_run'::text, 'confirmed'::text)$$,
   'grants no longer computed are removed; the operator grant is kept');
 select is(public.vested_through('ctm_1'), '2028-02-01 00:00+00'::timestamptz, 'vests through the latest confirmed grant');
+
+-- An operator grant can only be added by hand: one in the computed grants is not stored.
+select public.set_customer_entitlement('ctm_1',
+  '{"access_status": "grace", "grace_ends_at": "2028-03-02T00:00:00Z"}',
+  '[{"kind": "qualifying_run", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
+     "status": "confirmed", "confirmed_at": "2028-01-01T00:00:00Z", "transaction_id": null, "withdrawn_reason": null},
+    {"kind": "operator", "started_at": "2027-06-01T00:00:00Z", "vested_through": "2100-01-01T00:00:00Z",
+     "status": "confirmed", "confirmed_at": "2027-06-01T00:00:00Z", "transaction_id": null, "withdrawn_reason": null}]',
+  '{}');
+select results_eq(
+  $$select kind, vested_through from public.vested_entitlements where customer_id = 'ctm_1' order by kind$$,
+  $$values ('operator'::text, '2026-06-01 00:00+00'::timestamptz),
+    ('qualifying_run'::text, '2028-02-01 00:00+00'::timestamptz)$$,
+  'stores no operator grant from the computed grants, and keeps the one added by hand');
 
 -- The run is confirmed again later, unchanged.
 select is(

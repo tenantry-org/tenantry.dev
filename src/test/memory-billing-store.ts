@@ -42,6 +42,8 @@ const state = {
   adjustments: new Map<string, StoredAdjustment>(),
   /** Each customer's last stored state: their run (active_subscriptions) and grants (vested_entitlements). */
   entitlementStates: new Map<string, Entitlement>(),
+  /** The customers marked as test customers (customers.is_test). */
+  testCustomers: new Set<string>(),
 };
 
 /** The customer's licences, oldest first. */
@@ -63,6 +65,7 @@ export const memory = {
     state.payments.clear();
     state.adjustments.clear();
     state.entitlementStates.clear();
+    state.testCustomers.clear();
   },
 
   /**
@@ -92,6 +95,10 @@ export const memory = {
   store: {
     async getCustomerEmail(customerId: string) {
       return state.emails.get(customerId) ?? null;
+    },
+
+    async isTestCustomer(customerId: string) {
+      return state.testCustomers.has(customerId);
     },
 
     async recordCustomerEvent(event: { customerId: string; email: string; occurredAt: string }) {

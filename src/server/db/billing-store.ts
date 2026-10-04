@@ -129,6 +129,20 @@ export async function getCustomerEmail(customerId: string): Promise<string | nul
   return data?.email ?? null;
 }
 
+/** Whether the customer is a test customer the operator keeps for checks (customers.is_test). */
+export async function isTestCustomer(customerId: string): Promise<boolean> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('customers')
+    .select('is_test')
+    .eq('customer_id', customerId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data?.is_test ?? false;
+}
+
 /**
  * Records the customer's email as of one of their Paddle events, unless a newer event for the customer has
  * already been applied (`record_customer_event`). Returns whether it was applied.
