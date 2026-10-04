@@ -177,7 +177,7 @@ export function BillingCard({ access, subscriptions }: Readonly<Props>) {
         description={
           confirming?.kind === 'keep'
             ? 'The scheduled cancellation is removed, and the subscription renews as normal.'
-            : 'Your subscription runs to the end of the period you have paid for. After that, restores from the private package feed fail, but the versions you have keep working with your licence key, so keep copies of them. Paddle asks you to confirm on the next page.'
+            : 'Your subscription runs to the end of the period you have paid for. After that, restores from the private package feed fail, so keep copies of the packages you build with. You stay licensed to use only the releases your perpetual licence covers, if you hold one: it comes after 12 consecutive paid months or a completed annual term. Your licence key keeps working either way. Paddle asks you to confirm on the next page.'
         }
         confirmLabel={confirming?.kind === 'keep' ? 'Keep subscription' : 'Continue to cancel'}
         destructive={confirming?.kind === 'cancel'}
