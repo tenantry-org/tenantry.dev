@@ -235,8 +235,31 @@ describe('release dates', () => {
     expect((await dated('9.9.0', '2028-05-20T00:00:00Z')).status).toBe(400);
   });
 
-  it('refuses a release dated in the future', async () => {
+  it('refuses a release dated in the future, beyond a few minutes of clock skew', async () => {
     expect((await dated('9.9.0', '2028-06-03T00:00:00Z')).status).toBe(400);
+    expect((await dated('9.9.0', '2028-06-01T00:30:00Z')).status).toBe(400);
+    expect((await dated('9.9.0', '2028-06-01T00:04:00Z')).status).toBe(201);
+  });
+
+  it('dates a release without a manifest no earlier than the release before it, so a skewed date blocks nothing', async () => {
+    releases.set('9.9.0', { security: false, publishedAt: '2028-06-01T00:04:00Z' });
+
+    const response = await push({ 'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', '9.9.1') });
+
+    expect(response.status).toBe(201);
+    expect(releases.get('9.9.1')?.publishedAt).toBe('2028-06-01T00:04:00.000Z');
+  });
+
+  it('ignores the date of a package whose release is recorded already, such as a late retry of its second package', async () => {
+    releases.set('9.9.0', { security: false, publishedAt: '2028-05-20T00:00:00Z' });
+
+    const response = await push({
+      'Tenantry.Pro.EfCore.nuspec': nuspec('Tenantry.Pro.EfCore', '9.9.0'),
+      'tenantry-release.json': JSON.stringify({ releasedAt: '2028-05-20T00:00:00Z' }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(releases.get('9.9.0')?.publishedAt).toBe('2028-05-20T00:00:00Z');
   });
 
   it('accepts a date within a few days before now, such as the tag date of a release published later', async () => {
