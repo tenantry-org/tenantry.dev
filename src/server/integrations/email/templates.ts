@@ -40,8 +40,8 @@ export function accessRevokedEmail(to: string, siteUrl: string): EmailMessage {
     subject: 'Your Tenantry Pro subscription has ended',
     html: layout(
       `<h1 style="font-size:20px">Your Tenantry Pro access has ended</h1>
-<p>You no longer have an active Tenantry Pro subscription, so your access to the private package feed has been removed.</p>
-<p>The versions of Tenantry Pro you already have keep working with your licence key, as the licence agreement allows, but you won't receive new versions. You can resubscribe any time:</p>
+<p>You no longer have an active Tenantry Pro subscription, so the package feed now serves you only your vested releases: those published up to your vested-through date, as the licence agreement sets out. If nothing was vested, it serves you none, and the releases you downloaded are no longer licensed to you.</p>
+<p>Your licence key keeps working either way; it does not extend your licence. You can resubscribe any time:</p>
 <p><a href="${siteUrl}/#pricing" style="${BUTTON}">View pricing</a></p>`,
     ),
   };
