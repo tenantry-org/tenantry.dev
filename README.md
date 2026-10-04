@@ -86,9 +86,10 @@ database job pins.
 
 ## Docs pipeline
 
-`/docs` is rendered by Fumadocs from MDX under `content/docs/` (gitignored, generated). `pnpm sync:docs`
+`/docs` is rendered by Fumadocs from Markdown under `content/docs/` (gitignored, generated). `pnpm sync:docs`
 (`scripts/sync-docs.mjs`) runs before `dev`/`build`: it reads each docs version's markdown from git and transforms
-it (injects frontmatter, rewrites links, `.md`→`.mdx`).
+it (injects frontmatter, rewrites links). The pages stay `.md`, compiled as plain Markdown, so nothing in a release's
+docs runs as code when the site builds.
 
 The versions are listed in [`docs-versions.json`](docs-versions.json), newest first: each release line (`0.4`)
 with the Core and Pro release tags its docs come from (Core's repository, and the public `tenantry-pro-docs`

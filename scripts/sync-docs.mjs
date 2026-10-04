@@ -8,6 +8,8 @@
  *   - derives a short `description` from the first paragraph,
  *   - rewrites relative `.md` links to clean docs paths (e.g. `(tenant-stores.md)` → `(tenant-stores)`),
  *   - adds the release line's part of each tag's CHANGELOG.md as the group's Changelog page (docs-changelog.mjs).
+ * The pages are written as `.md`, which Fumadocs compiles as plain Markdown: braces and tags in a release's docs are
+ * text, never code run while the site builds. Only the version's landing page, which this script writes, is MDX.
  *
  * The versions are listed in docs-versions.json (docs-versions.mjs), each with the release tags of Core's
  * repository and of the public tenantry-pro-docs repository (which each Pro release publishes to and tags; Vercel
@@ -162,7 +164,7 @@ function syncFolder(sourceDir, outDir, group, linkSource, dir, context) {
     const content = toFrontmatter(readFileSync(join(sourceDir, file), 'utf8'), group.name, linkSource, dir, context);
     for (const link of relativeLinks(content))
       brokenLinks.push(`${context.version} ${group.name}/${dir ? `${dir}/` : ''}${file}: ${link}`);
-    writeFileSync(join(outDir, `${slug}.mdx`), content);
+    writeFileSync(join(outDir, `${slug}.md`), content);
     slugs.push(slug);
     total += 1;
   }
@@ -233,7 +235,7 @@ function syncChangelog(source, outDir, group, linkSource, context) {
   });
   const content = toFrontmatter(page, group.name, linkSource, '', context);
   for (const link of relativeLinks(content)) brokenLinks.push(`${context.version} ${group.name}/CHANGELOG.md: ${link}`);
-  writeFileSync(join(outDir, 'changelog.mdx'), content);
+  writeFileSync(join(outDir, 'changelog.md'), content);
   total += 1;
   return 'changelog';
 }
@@ -380,8 +382,8 @@ writeFileSync(join(docsRoot, 'meta.json'), JSON.stringify({ pages: folders }, nu
 const written = new Map();
 for (const folder of folders) {
   const base = folder === '(latest)' ? '/docs' : `/docs/${folder}`;
-  for (const file of readdirSync(join(docsRoot, folder), { recursive: true }).filter((f) => f.endsWith('.mdx'))) {
-    const path = `${base}/${file.replace(/\\/g, '/').replace(/\.mdx$/, '')}`.replace(/\/index$/, '');
+  for (const file of readdirSync(join(docsRoot, folder), { recursive: true }).filter((f) => /\.mdx?$/.test(f))) {
+    const path = `${base}/${file.replace(/\\/g, '/').replace(/\.mdx?$/, '')}`.replace(/\/index$/, '');
     written.set(path, readFileSync(join(docsRoot, folder, file), 'utf8'));
   }
 }
