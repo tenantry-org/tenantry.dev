@@ -82,10 +82,10 @@ own. Each failure is logged once, as an error, and the run ends with a summary.
 
 ### What a run does with failures
 
-A failure in one database never stops the others, and the report says which failed and why. EF Core applies only what
-is pending, so after fixing the cause the same command finishes the job. Tenants that share a database or schema, such
-as the shared database in mixed mode, are migrated once and share one result. Cancelling abandons the databases in
-progress and starts no more; those already migrated stay migrated.
+A failure in one database never stops the others, unless `MaxFailures` says to stop, and the report says which failed
+and why. EF Core applies only what is pending, so after fixing the cause the same command finishes the job. Tenants
+that share a database or schema, such as the shared database in mixed mode, are migrated once and share one result.
+Cancelling abandons the databases in progress and starts no more; those already migrated stay migrated.
 
 From code, `ITenantMigrationRunner<TKey>` returns the report, and can report each database as it completes:
 
