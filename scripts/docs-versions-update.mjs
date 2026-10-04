@@ -14,6 +14,7 @@
  *   pnpm docs:check    fail unless both files match the releases
  */
 import { execFileSync } from 'child_process';
+import { appendFileSync } from 'fs';
 import { isDeepStrictEqual } from 'util';
 import {
   docsProblem,
@@ -103,9 +104,22 @@ async function problem(group, tag, newest) {
   }
 }
 
-const expected = await resolvePublishable(released, problem, ({ group, tag, reason }) =>
-  console.warn(`::warning::docs-versions: leaving out ${group} ${tag}: ${reason}.`),
-);
+const leftOut = [];
+const expected = await resolvePublishable(released, problem, ({ group, tag, reason }) => {
+  console.warn(`::warning::docs-versions: leaving out ${group} ${tag}: ${reason}.`);
+  leftOut.push(`- ${group} ${tag}: ${reason}.`);
+});
+
+// In the docs-versions workflow, the releases left out go to the run's summary, and their number to the step's output,
+// which fails the run once what could be published is committed.
+if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `left_out=${leftOut.length}\n`);
+if (process.env.GITHUB_STEP_SUMMARY && leftOut.length > 0) {
+  appendFileSync(
+    process.env.GITHUB_STEP_SUMMARY,
+    `### Releases left out\n\nThe site keeps the release before each of these until it is fixed or replaced.\n\n` +
+      `${leftOut.join('\n')}\n`,
+  );
+}
 
 if (expected.length === 0) {
   console.error(

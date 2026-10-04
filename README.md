@@ -125,18 +125,20 @@ master's head runs those workflows if they never ran on it, and fast-forwards st
 lacks is left alone. A release is live at the first run after its packages are published, so within the hour, plus the
 few minutes the checks and the build take. Run the workflow from the Actions tab to publish sooner.
 
-A release whose tag has no `docs` folder, or whose `CHANGELOG.md` has no section for it, is left out with a warning on
-the workflow run, and its line keeps the release before it. So is a release of the newest line that does not give the
-facts above: a nuspec without target frameworks, no sample folder, or an installation guide without those snippets. A
-release build fails before deploying, and production keeps the last deployment, if a listed tag cannot be read or its
-docs are incomplete. The code samples on the home and Pro pages are not release data: when a minor release changes the
-API they show, they are updated by hand.
+A release whose tag has no `docs` folder, or whose `CHANGELOG.md` has no section for it, is left out, and its line keeps
+the release before it. So is a release of the newest line that does not give the facts above: a nuspec without target
+frameworks, no sample folder, or an installation guide without those snippets. The run commits what it can publish, then
+fails, with the releases left out and why in its summary, and fails again each hour until the release is fixed or
+replaced. A run that cannot reach NuGet or read a file from a tag publishes nothing. A release build fails before
+deploying, and production keeps the last deployment, if a listed tag cannot be read or its docs are incomplete. The code
+samples on the home and Pro pages are not release data: when a minor release changes the API they show, they are updated
+by hand.
 
 If a release has not reached the site after an hour, check in this order: NuGet lists the Core version
 (`https://www.nuget.org/packages/Tenantry.Core`), or tenantry-pro-docs has the Pro tag (Pro's publish-docs job may need
-a re-run); the latest `docs-versions` run, whose warnings name any release it left out and whose failure means it
-published nothing; the test and audit runs on its commit on master; then the Vercel deployment. `pnpm docs:update` does
-the same as the workflow locally, and `pnpm docs:check` fails unless both files match the releases.
+a re-run); the latest `docs-versions` run, whose summary names any release it left out; the test and audit runs on its
+commit on master; then the Vercel deployment. `pnpm docs:update` does the same as the workflow locally, and
+`pnpm docs:check` fails unless both files match the releases.
 
 To preview unreleased docs locally, set an override, for example `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or
 `CORE_DOCS_DIR`); it replaces the newest version's docs. Vercel and CI builds refuse overrides.

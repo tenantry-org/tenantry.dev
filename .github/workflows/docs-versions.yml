@@ -32,7 +32,8 @@ jobs:
         with:
           node-version-file: '.nvmrc'
       # Plain Node and git; nothing is installed. A run that fails publishes nothing, and the next one tries again.
-      - run: node scripts/docs-versions-update.mjs update
+      - id: update
+        run: node scripts/docs-versions-update.mjs update
       - name: Commit and deploy a change
         run: |
           # Production deploys a commit only once the test and audit workflows pass on it (Vercel Deployment Checks),
@@ -76,3 +77,12 @@ jobs:
           git push --force-with-lease="staging:$staging" origin HEAD:staging
         env:
           GH_TOKEN: ${{ github.token }}
+      # Last, so what could be published is committed first: a release left out (its docs folder, changelog section or
+      # facts are missing) fails the run, which notifies, with the reasons in the run's summary.
+      - name: Fail when a release was left out
+        if: always() && steps.update.outputs.left_out != '' && steps.update.outputs.left_out != '0'
+        env:
+          LEFT_OUT: ${{ steps.update.outputs.left_out }}
+        run: |
+          echo "::error::$LEFT_OUT release(s) left out; the run's summary gives the reasons."
+          exit 1
