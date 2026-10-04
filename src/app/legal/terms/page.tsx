@@ -61,7 +61,8 @@ export default function TermsPage() {
       <h2>7. Termination</h2>
       <p>
         We may suspend or terminate access for breach of these Terms. You may cancel at any time; cancellation stops
-        future renewals. It does not affect the vested releases, which only a chargeback can withdraw (EULA, section 2).
+        future renewals. It does not affect the vested releases, which only a refund, credit or chargeback of the
+        payments they rely on can withdraw (EULA, section 2).
       </p>
 
       <h2>8. Governing law</h2>

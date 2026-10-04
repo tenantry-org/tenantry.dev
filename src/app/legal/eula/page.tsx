@@ -33,51 +33,49 @@ export default function EulaPage() {
         or when those 30 days pass without the payment being collected. All dates and times in this section are in UTC.
       </p>
       <p>
-        A paid period is a billing period of any of your Tenantry Pro subscriptions whose payment has been completed and
-        charged more than zero after discounts. It counts from the start of the billing period to its end, or to when
-        the subscription was cancelled, or paused and not resumed, if that was sooner. Refunds, credits and chargebacks
-        change what counts, as set out below.
+        Vesting follows the money you keep. Each payment for a billing period of any of your Tenantry Pro subscriptions
+        gives a paid period: the part of that billing period that the money kept from the payment pays for, counted from
+        the start of the billing period. A payment kept in full gives the whole billing period, even if the subscription
+        was cancelled or paused before the period ended. If part of a payment has been returned to you, the paid period
+        is the same share of the billing period as the share of the payment you kept: if half of a month&apos;s payment
+        is refunded, the paid period is the first half of that month. A payment of which everything has been returned,
+        or for which nothing was charged (a trial, or a period discounted to zero), gives no paid period. Amounts are
+        compared before tax. A discount does not count as money returned, so a discounted payment that you keep gives
+        the whole billing period.
+      </p>
+      <p>
+        Money is returned to you by a refund, a credit or a chargeback once it has been approved. A correction of tax
+        alone returns nothing. If a chargeback or a credit is reversed, the money it returned counts as kept again. Your
+        paid periods, and everything that follows from them in this section, are always worked out from your payments as
+        they stand: money returned after a vesting takes away the time it paid for and any vesting that relied on that
+        time, and a reversal restores it.
       </p>
       <p>
         A qualifying period is a series of paid periods in which each starts no more than one hour after the end of the
         series so far. Paid periods that overlap, as when you change plan, count once. Any gap of more than one hour
         breaks a qualifying period: for example when your subscription ends and no paid period follows within the hour,
-        a renewal is not paid, or a period does not count, including a period discounted to zero. The next paid period
+        a renewal is not paid, or part of a payment is returned so that its paid period ends early. The next paid period
         then starts a new qualifying period from zero.
       </p>
       <p>
         A qualifying period vests when it has lasted 12 calendar months (&quot;12 consecutive paid months&quot;). It
-        vests earlier, at the end of one of its paid periods, if that period runs to the end of its billing period and
-        ends no more than three days before the 12 months are reached, which allows for billing dates at the end of
-        shorter months. A paid period cut short by a cancellation, a pause, a refund or a credit does not vest it early.
-        The moment it vests is then a vested-through date. While the same qualifying period continues, the end of each
-        further paid period, once reached, becomes its new vested-through date.
+        vests up to three days earlier, at the end of one of its paid periods, if that payment was kept in full and the
+        period ends no more than three days before the 12 months are reached, which allows for billing dates at the end
+        of shorter months. Once it has vested, its vested-through date is the end of its paid periods or the present
+        time, whichever is earlier, so the date moves on while the qualifying period continues.
       </p>
       <p>
         When you pay for an annual billing period (an &quot;annual term&quot;), Tenantry grants you at once, on
-        condition that you complete the term, that every release whose release date is on or before the end of the term
-        is vested (the &quot;term&apos;s grant&quot;). The term&apos;s grant is confirmed when the term ends, and the
-        end of the term is then a vested-through date. It is withdrawn if the subscription is cancelled, or paused and
-        not resumed, before the term ends, if by the end of the term the payment has been refunded or credited in full
-        or in part (other than a correction of tax), or if the payment is charged back at any time.
-      </p>
-      <p>
-        Only refunds, credits and chargebacks that have been approved have any effect, and a correction of tax alone has
-        none. A paid period stops counting when a full refund or credit of its payment is approved. A partial refund or
-        credit leaves a monthly paid period counting in full. An annual term partially refunded or credited counts only
-        up to when the refund or credit was approved. A refund or credit approved after a vesting was confirmed does not
-        undo that vesting. From then on the refunded period counts only as this paragraph sets out, which can break the
-        qualifying period it was part of.
-      </p>
-      <p>
-        A payment that is charged back does not count towards any qualifying period or annual term. Vesting already
-        confirmed is worked out again as if that payment had never been made, and is withdrawn if it relied on the
-        payment. If the chargeback is reversed, the payment counts again.
+        condition that you keep the whole payment, that every release whose release date is on or before the end of the
+        term is vested (the &quot;term&apos;s grant&quot;). The term&apos;s grant is confirmed when the term ends, and
+        the end of the term is then a vested-through date. Any refund, credit or chargeback of the payment withdraws the
+        term&apos;s grant, at any time, including after the term has ended. The part of the term that the money kept
+        pays for is still a paid period.
       </p>
       <p>
         Your vested-through date is the latest vested-through date of any of your qualifying periods or annual terms.
-        Your subscription ending, or a new qualifying period starting, does not reduce it; only a chargeback can, as set
-        out above.
+        Your subscription ending, or a new qualifying period starting, does not reduce it; only money returned to you
+        can, as set out above.
       </p>
       <p>
         Each release of the Software has a release date: the date Tenantry records for it when it is published on the

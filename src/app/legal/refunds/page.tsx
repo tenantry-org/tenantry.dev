@@ -13,8 +13,8 @@ export default function RefundsPage() {
       <h2>1. 14-day refund window</h2>
       <p>
         If you are not satisfied with Tenantry Pro, you may request a full refund within 14 days of your initial
-        purchase. After 14 days, subscription payments are generally non-refundable. If that purchase was an annual
-        term, a refund also withdraws the term&apos;s grant (see section 4).
+        purchase. After 14 days, subscription payments are generally non-refundable. A refund affects vesting as section
+        4 sets out.
       </p>
 
       <h2>2. Renewals</h2>
@@ -33,35 +33,20 @@ export default function RefundsPage() {
       <p>
         The terms used here (subscription, paid period, qualifying period, 12 consecutive paid months, annual term, the
         term&apos;s grant, vested releases, vested-through date) are defined in the <a href="/legal/eula">EULA</a>,
-        section 2, which this section follows. Only refunds, credits and chargebacks that have been approved have any
-        effect, and a correction of tax alone has none.
+        section 2. Vesting follows the money you keep: a refund, a credit or a chargeback of a payment takes away the
+        time that money paid for, and any vesting that relied on it, whenever it is approved, as that section sets out.
+        For example, a refund of half a month&apos;s payment leaves the first half of that month as a paid period, and
+        any refund of an annual term withdraws the term&apos;s grant.
       </p>
       <p>
         When a full refund is approved, or a payment is charged back, your subscription is cancelled immediately, and it
-        ends as the EULA, section 8, sets out. The refunded or charged-back period does not count, which breaks the
-        qualifying period at that period. A full refund of an annual term also withdraws the term&apos;s grant.
+        ends as the EULA, section 8, sets out. A partial refund or a credit does not cancel your subscription or change
+        your access while it continues. If a chargeback is later reversed, the money counts as kept again, but your
+        subscription stays cancelled.
       </p>
       <p>
-        A partial refund does not cancel your subscription or change your access. A partially refunded monthly period
-        still counts in full. A partially refunded annual term counts only up to the moment the refund was approved, so
-        the qualifying period is broken there unless another paid period starts within an hour of then or already covers
-        that moment, and the term&apos;s grant is withdrawn. A partial refund approved exactly at the end of an annual
-        term still withdraws the term&apos;s grant, but the whole term counts towards the 12 consecutive paid months.
-      </p>
-      <p>
-        A credit to a payment has the same effect on vesting as a refund of the same size. It does not cancel your
-        subscription.
-      </p>
-      <p>
-        A refund approved after your qualifying period has vested, or after an annual term has ended, does not take that
-        vesting away. A full refund of a month inside the qualifying period breaks the qualifying period at that month
-        from then on, so your vested-through date stops advancing until a new qualifying period reaches 12 consecutive
-        paid months.
-      </p>
-      <p>
-        A charged-back payment never counts towards vesting. If vesting already confirmed relied on it, that vesting is
-        withdrawn: your vested-through date is worked out again as if the payment had never been made. If the chargeback
-        is later reversed, the payment counts again, but your subscription stays cancelled.
+        If the purchase you are refunded within the 14-day window was an annual term, its grant is withdrawn and the
+        term gives no paid period.
       </p>
 
       <p className="text-sm text-muted-foreground">
