@@ -5,7 +5,7 @@ export const metadata = { title: 'Privacy Policy — Tenantry' };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" lastUpdated="2026-09-29">
+    <LegalPage title="Privacy Policy" lastUpdated="2026-10-04">
       <p>
         This Privacy Policy explains how {LegalEntity.name} (&quot;Tenantry&quot;, &quot;we&quot;) collects, uses, and
         protects personal data when you use our website and Services.
@@ -21,11 +21,15 @@ export default function PrivacyPage() {
           give you access to the private package feed.
         </li>
         <li>
-          <strong>Billing data:</strong> processed by Paddle.com as merchant of record. We receive subscription status
-          and customer identifiers, not payment-card details.
+          <strong>Billing data:</strong> processed by Paddle.com as merchant of record. We receive subscription status,
+          customer identifiers and, for each Tenantry Pro payment, its billing period, amounts, currency and any
+          refunds, credits or chargebacks, not payment-card details.
         </li>
         <li>
-          <strong>Entitlement records:</strong> subscription status and the licence keys issued to your account.
+          <strong>Entitlement records:</strong> subscription status, the licence keys issued to your account, and the
+          vesting worked out from your payments (each qualifying period and annual term, and the date it vests through).
+          For each feed token: the name you give it, its first few characters, when it was created and revoked, and when
+          it was last used, recorded at most once an hour. We store a hash of each feed token, not the token itself.
         </li>
         <li>
           <strong>Usage and performance data:</strong> pages visited, referring site, country, browser, device type and
