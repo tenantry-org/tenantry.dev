@@ -6,7 +6,10 @@ import { Footer } from '@/components/home/footer/footer';
 import { Button } from '@/components/ui/button';
 import { CodeFigure } from '@/components/shared/code-figure';
 import { TrackedLink } from '@/components/shared/tracked-link';
+import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
+import { latestDocsVersion } from '@/lib/docs-versions';
+import newestRelease from '../../../newest-release.json';
 
 export const metadata: Metadata = {
   title: 'Tenantry Pro: the tenant in jobs and messages, audit logging, onboarding and migrations',
@@ -89,18 +92,23 @@ const ALSO = [
   },
 ];
 
-// What a buyer can check for themselves.
+// What a buyer can check for themselves. The samples are counted at the newest release's tags (newest-release.json).
+const { samples } = newestRelease;
 const PROOF = [
   {
     text: 'Core’s isolation tests run on every build against SQL Server, PostgreSQL, MySQL and SQLite',
     href: '/docs/core/compatibility#databases',
   },
   {
-    text: '18 runnable samples: 6 for Core, 12 for Pro',
-    href: 'https://github.com/tenantry-org/tenantry-pro-docs/tree/master/samples',
+    text: `${samples.core + samples.pro} runnable samples: ${samples.core} for Core, ${samples.pro} for Pro`,
+    href: `https://github.com/tenantry-org/tenantry-pro-docs/tree/${latestDocsVersion.pro}/samples`,
   },
   { text: 'Core is Apache-2.0, on GitHub', href: 'https://github.com/tenantry-org/tenantry-core' },
 ];
+
+// The release line after the newest, for the example of a minor release: 0.6 → 0.7 (from 1.0, 1 → 2).
+const [major, minor] = latestDocsVersion.version.split('.').map(Number);
+const nextMinor = minor === undefined ? `${major + 1}` : `${major}.${minor + 1}`;
 
 const QUESTIONS = [
   {
@@ -120,14 +128,12 @@ const QUESTIONS = [
   },
   {
     question: 'Which versions and databases?',
-    answer:
-      '.NET 10 with EF Core 10. .NET 8 and 9, with their EF Core, until 10 November 2027, a year after Microsoft’s support ends. Provisioning and migrations on SQL Server, PostgreSQL and MySQL; schema per tenant on SQL Server and PostgreSQL.',
+    answer: `${DOTNET_SUPPORT}, each with its own EF Core version. Provisioning and migrations on SQL Server, PostgreSQL and MySQL; schema per tenant on SQL Server and PostgreSQL.`,
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
     question: 'Is it production-ready?',
-    answer:
-      "Tenantry Core and Pro are in beta until 1.0, which comes no earlier than 10 November 2027. The isolation is tested on every build against SQL Server, PostgreSQL, MySQL and SQLite. Releases are numbered 0.x, and a minor release (0.6 to 0.7) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.",
+    answer: `Tenantry Core and Pro are in beta until 1.0, which comes no earlier than 10 November 2027. The isolation is tested on every build against SQL Server, PostgreSQL, MySQL and SQLite. Releases are numbered 0.x, and a minor release (${latestDocsVersion.version} to ${nextMinor}) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.`,
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {

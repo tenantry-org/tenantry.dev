@@ -3,6 +3,7 @@ import Link from 'next/link';
 import Header from '@/components/home/header/header';
 import { Footer } from '@/components/home/footer/footer';
 import { ComparisonTable } from '@/components/home/comparison/comparison';
+import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 
 export const metadata: Metadata = {
   title: 'Tenantry compared with Finbuckle.MultiTenant, ABP and your own query filters',
@@ -31,7 +32,7 @@ const NOTES = [
   },
   {
     title: '.NET versions',
-    text: 'From version 10, Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only. Tenantry supports .NET 10, and .NET 8 and 9 until November 2027.',
+    text: `From version 10, Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only. Tenantry supports ${DOTNET_SUPPORT}.`,
   },
 ];
 

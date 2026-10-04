@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight, Check, Layers, ServerCog, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { LogoMark } from '@/components/brand/logo';
+import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 import { ProOffer } from '@/constants/pro-offer';
 import { publishedSince } from '@/lib/docs-versions';
 import { cn } from '@/lib/utils';
@@ -25,7 +26,7 @@ const PRINCIPLES = [
   {
     icon: ServerCog,
     title: 'HTTP and beyond',
-    text: 'ASP.NET Core middleware and access validation, and the same isolation in workers, console and desktop apps. .NET 10, and .NET 8 and 9 until November 2027; Native AOT for every Core package except Tenantry.EfCore.',
+    text: `ASP.NET Core middleware and access validation, and the same isolation in workers, console and desktop apps. ${DOTNET_SUPPORT}; Native AOT for every Core package except Tenantry.EfCore.`,
   },
 ];
 
