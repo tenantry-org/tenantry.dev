@@ -121,9 +121,9 @@ that the portal's own text names (`scripts/install-snippets.mjs`). The home, Pro
 take these from the file, and the version badge and the docs from `docs-versions.json`. When either file changes, the
 workflow commits both to master and staging and runs the test and audit workflows on the commit, since its own pushes
 start none. Production deploys the commit once they pass. A run that finds nothing new but sees its own commit at
-master's head runs those workflows if they never ran on it, and brings staging up to it. A release is live at the first
-run after its packages are published, so within the hour, plus the few minutes the checks and the build take. Run the
-workflow from the Actions tab to publish sooner.
+master's head runs those workflows if they never ran on it, and fast-forwards staging to it; staging with commits master
+lacks is left alone. A release is live at the first run after its packages are published, so within the hour, plus the
+few minutes the checks and the build take. Run the workflow from the Actions tab to publish sooner.
 
 A release whose tag has no `docs` folder, or whose `CHANGELOG.md` has no section for it, is left out with a warning on
 the workflow run, and its line keeps the release before it. So is a release of the newest line that does not give the

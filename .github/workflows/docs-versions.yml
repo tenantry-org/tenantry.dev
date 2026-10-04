@@ -39,7 +39,7 @@ jobs:
           # and a push made with this token starts no workflow, so this job runs both on its own commits. If that
           # failed last time, master's head is still this job's commit without those runs, and it runs them now. The
           # sandbox follows production (staging is master): a run that pushed master but not staging is caught up the
-          # same way.
+          # same way, by a fast-forward only, so a change pushed to staging to try out is left alone.
           bot='41898282+github-actions[bot]@users.noreply.github.com'
           run_on_master() {
             for _ in 1 2 3; do
@@ -56,10 +56,7 @@ jobs:
             done
           }
           follow_master() {
-            staging="$(git ls-remote origin refs/heads/staging | cut -f1)"
-            if [ "$staging" != "$(git rev-parse HEAD)" ]; then
-              git push --force-with-lease="staging:$staging" origin HEAD:staging
-            fi
+            git push origin HEAD:staging || echo "::warning::staging has commits master lacks; left as it is"
           }
           if git diff --quiet -- docs-versions.json newest-release.json; then
             echo "No change."
@@ -72,8 +69,10 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email "$bot"
           git commit -q -m 'Docs: publish the docs of the latest releases' -m "$(cat docs-versions.json)" -- docs-versions.json newest-release.json
+          staging="$(git ls-remote origin refs/heads/staging | cut -f1)"
           git push origin HEAD:master
           check_master
-          follow_master
+          # The sandbox follows production (staging is master).
+          git push --force-with-lease="staging:$staging" origin HEAD:staging
         env:
           GH_TOKEN: ${{ github.token }}
