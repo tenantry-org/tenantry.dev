@@ -187,6 +187,7 @@ export function computeEntitlement(input: EntitlementInput): Entitlement {
     paymentStatuses: Object.fromEntries(
       input.payments.map((payment) => [payment.transactionId, ledger.status(payment)]),
     ),
+    ambiguousReversals: input.payments.flatMap((payment) => ledger.ambiguousReversals(payment)).sort(),
   };
 }
 
@@ -271,11 +272,22 @@ class Ledger {
         const made = adjustments.filter(
           (a) => a.action === action && (a.status === 'approved' || a.status === 'reversed'),
         );
-        const reversals = adjustments.filter((a) => a.action === `${action}_reverse` && a.status === 'approved');
-        const restored = reversalsOf(made, reversals, payment);
+        const { restored } = this.reversals(payment, action);
         return [action, sum(made.map((a) => Math.max(0, amountOf(a, payment) - (restored.get(a) ?? 0))))];
       }),
     ) as Record<(typeof RETURNING_ACTIONS)[number], number>;
+  }
+
+  /** The payment's reversals that could be either of two things (`reversalsOf`), by adjustment id. */
+  ambiguousReversals(payment: Payment): string[] {
+    return RETURNING_ACTIONS.flatMap((action) => this.reversals(payment, action).ambiguous);
+  }
+
+  private reversals(payment: Payment, action: (typeof RETURNING_ACTIONS)[number]) {
+    const adjustments = this.adjustments.get(payment.transactionId) ?? [];
+    const made = adjustments.filter((a) => a.action === action && (a.status === 'approved' || a.status === 'reversed'));
+    const reversals = adjustments.filter((a) => a.action === `${action}_reverse` && a.status === 'approved');
+    return reversalsOf(made, reversals, payment);
   }
 
   /** The share of its period the money kept from the payment pays for, from 0 to 1. */
@@ -472,54 +484,67 @@ function amountOf(adjustment: PaymentAdjustment, payment: Payment): number {
 }
 
 // How much of each adjustment in `made` has been reversed. One marked reversed is reversed in full. Each `*_reverse`
-// adjustment, oldest first, is either a second record of such a reversal (approved within REVERSAL_RECORD_WINDOW_MS of
-// it: it adds nothing) or reverses one adjustment still in force approved before it, the one of the same amount if
-// any, else the oldest, restoring its own amount (everything if Paddle calls it full; nothing if its amount is
-// unknown or in another currency) up to what that adjustment returned. A reversal with nothing left to reverse
-// restores nothing.
+// adjustment, oldest first, restores its own amount (everything if Paddle calls it full; nothing if its amount is
+// unknown or in another currency), up to what the adjustment it reverses returned. Paddle does not say which one that
+// is, so it is either a second record of a reversal already marked (one marked within REVERSAL_RECORD_WINDOW_MS of it,
+// which adds nothing) or the reversal of one still in force approved before it, or within the window after it (clocks
+// differ). When both are possible, the one of its amount is taken; if that does not decide, it is taken as a second
+// record, restoring nothing, and returned in `ambiguous` for the operator. Otherwise the adjustment of its amount is
+// taken, else the oldest. Ties are broken by adjustment id, so the order the ledger lists them in never matters.
 function reversalsOf(
   made: PaymentAdjustment[],
   reversals: PaymentAdjustment[],
   payment: Payment,
-): Map<PaymentAdjustment, number> {
+): { restored: Map<PaymentAdjustment, number>; ambiguous: string[] } {
   const restored = new Map<PaymentAdjustment, number>();
   const paired = new Set<PaymentAdjustment>();
-  const time = (at: Date | null) => at?.getTime() ?? Number.POSITIVE_INFINITY;
+  const ambiguous: string[] = [];
+  const time = (at: Date | null, missing: number) => at?.getTime() ?? missing;
+  const byTime = (at: (a: PaymentAdjustment) => number) => (a: PaymentAdjustment, b: PaymentAdjustment) =>
+    at(a) - at(b) || a.adjustmentId.localeCompare(b.adjustmentId);
+  // One with no recorded approval time may be the one reversed.
+  const approved = (a: PaymentAdjustment) => time(a.approvedAt, Number.NEGATIVE_INFINITY);
 
   for (const adjustment of made) {
     if (adjustment.status === 'reversed') restored.set(adjustment, amountOf(adjustment, payment));
   }
 
-  for (const reversal of [...reversals].sort((a, b) => time(a.approvedAt) - time(b.approvedAt))) {
-    const at = time(reversal.approvedAt);
-    const record = made.find(
-      (a) =>
-        !paired.has(a) &&
-        a.status === 'reversed' &&
-        a.reversedAt !== null &&
-        Math.abs(a.reversedAt.getTime() - at) <= REVERSAL_RECORD_WINDOW_MS,
-    );
-    if (record) {
-      paired.add(record);
-      continue;
-    }
-
+  for (const reversal of [...reversals].sort(byTime((a) => time(a.approvedAt, Number.POSITIVE_INFINITY)))) {
+    const at = time(reversal.approvedAt, Number.POSITIVE_INFINITY);
     let amount = 0;
     if (reversal.type === 'full') amount = payment.charged;
     else if (reversal.amount !== null && reversal.currencyCode === payment.currencyCode) amount = reversal.amount;
+    const ofAmount = (a: PaymentAdjustment) => amountOf(a, payment) === amount;
 
-    // One with no recorded approval time may be the one reversed.
-    const approved = (a: PaymentAdjustment) => a.approvedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const records = made
+      .filter(
+        (a) =>
+          !paired.has(a) &&
+          a.status === 'reversed' &&
+          a.reversedAt !== null &&
+          Math.abs(a.reversedAt.getTime() - at) <= REVERSAL_RECORD_WINDOW_MS,
+      )
+      .sort(byTime((a) => a.reversedAt!.getTime()));
     const inForce = made
-      .filter((a) => !paired.has(a) && a.status === 'approved' && approved(a) <= at)
-      .sort((a, b) => approved(a) - approved(b));
-    const reversed = inForce.find((a) => amountOf(a, payment) === amount) ?? inForce[0];
-    if (!reversed) continue;
+      .filter((a) => !paired.has(a) && a.status === 'approved' && approved(a) <= at + REVERSAL_RECORD_WINDOW_MS)
+      .sort(byTime(approved));
 
+    if (records.length > 0) {
+      const inForceOfAmount = inForce.filter(ofAmount);
+      if (inForceOfAmount.length === 0 || records.some(ofAmount)) {
+        if (inForce.length > 0) ambiguous.push(reversal.adjustmentId);
+        paired.add(records.find(ofAmount) ?? records[0]);
+        continue;
+      }
+      inForce.splice(0, inForce.length, ...inForceOfAmount);
+    }
+
+    const reversed = inForce.find(ofAmount) ?? inForce[0];
+    if (!reversed) continue;
     paired.add(reversed);
     restored.set(reversed, Math.min(amountOf(reversed, payment), Math.max(0, amount)));
   }
-  return restored;
+  return { restored, ambiguous };
 }
 
 function sum(values: number[]): number {

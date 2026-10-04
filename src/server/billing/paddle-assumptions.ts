@@ -107,7 +107,10 @@ export function adjustmentAmount(totals: { subtotal: string } | null | undefined
  * Assumption 8: a reversal. Paddle's adjustments do not say which adjustment a `chargeback_reverse` or `credit_reverse`
  * reverses, and a reversal may be recorded twice: as the original's status `reversed` and as a `*_reverse` adjustment.
  * Assumed, not confirmed: when both record one reversal, the original's updated_at on the reversing event and the
- * reversal's approval are within this window of each other. A `*_reverse` adjustment approved within it of an
- * original's reversal is taken as a second record of that reversal; any other one reverses an original still in force.
+ * reversal's approval are within this window of each other; and a reversal's approval is never more than this window
+ * before its original's. A `*_reverse` adjustment approved within it of an original's reversal is taken as a second
+ * record of that reversal, unless another adjustment still in force has its amount and the marked one does not. When
+ * that does not decide (two chargebacks of one amount, one marked reversed, and a reversal within the window), it is
+ * taken as a second record, restoring nothing, and the operator is alerted (entitlement-policy.ts: reversalsOf).
  */
 export const REVERSAL_RECORD_WINDOW_MS = HOUR_MS;

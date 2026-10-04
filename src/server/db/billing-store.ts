@@ -118,6 +118,11 @@ export interface Entitlement {
   grants: Grant[];
   /** Each payment's status now. */
   paymentStatuses: Record<string, PaymentStatus>;
+  /**
+   * The `*_reverse` adjustments that could be a second record of a reversal already marked or the reversal of another
+   * adjustment still in force: taken as the first, so they restore nothing, for the operator to check.
+   */
+  ambiguousReversals: string[];
 }
 
 /** Returns the customer's email (populated by Paddle customer webhooks), or null if unknown. */

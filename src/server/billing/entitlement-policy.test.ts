@@ -659,6 +659,32 @@ describe('attempts to vest more than the money kept pays for', () => {
     const entitlement = compute({ payments, adjustments: [firstReversed, second, sameReversal], now });
     expect(entitlement.paymentStatuses[payments[4].transactionId]).toBe('charged_back');
     expect(entitlement.vestedThrough).toBeNull();
+    // It could be either: nothing is restored for it, and it is flagged for the operator.
+    expect(entitlement.ambiguousReversals).toEqual([sameReversal.adjustmentId]);
+  });
+
+  it('reverses the chargeback of the same amount when a reversal could be a second record of another one', () => {
+    const first = adjustment(payments[4], 'chargeback', '2027-06-01T00:00:00Z', { amount: 1000 });
+    const second = adjustment(payments[4], 'chargeback', '2027-06-03T00:00:00Z', { amount: 2000 });
+    const firstReversed = { ...first, status: 'reversed', reversedAt: date('2027-06-10T00:00:00Z') };
+    const secondReversal = adjustment(payments[4], 'chargeback_reverse', '2027-06-10T00:30:00Z', { amount: 2000 });
+
+    const entitlement = compute({ payments, adjustments: [firstReversed, second, secondReversal], now });
+    expect(entitlement.paymentStatuses[payments[4].transactionId]).toBe('paid');
+    expect(entitlement.ambiguousReversals).toEqual([]);
+  });
+
+  it('pairs a reversal recorded as approved a little before its chargeback', () => {
+    const chargeback = adjustment(payments[4], 'chargeback', '2027-06-01T00:01:00Z');
+    const reversal = adjustment(payments[4], 'chargeback_reverse', '2027-06-01T00:00:00Z');
+    const longBefore = adjustment(payments[4], 'chargeback_reverse', '2027-05-31T00:00:00Z');
+
+    expect(
+      compute({ payments, adjustments: [chargeback, reversal], now }).paymentStatuses[payments[4].transactionId],
+    ).toBe('paid');
+    expect(
+      compute({ payments, adjustments: [chargeback, longBefore], now }).paymentStatuses[payments[4].transactionId],
+    ).toBe('charged_back');
   });
 
   it('gains nothing from a second subscription refunded in full, or from overlapping kept periods', () => {
@@ -952,7 +978,12 @@ describe('properties over generated histories', () => {
         const at = new Date(paid.periodStartsAt.getTime() + Math.floor(next() * 400) * DAY);
         made.push(adjustment(paid, action, at.toISOString(), { amount }));
         if (reversals && action !== 'refund' && next() < 0.3) {
-          made.push(adjustment(paid, `${action}_reverse`, new Date(at.getTime() + DAY).toISOString(), { amount }));
+          const reversedAt = new Date(at.getTime() + DAY);
+          // Recorded as a *_reverse adjustment, as the original marked reversed, or both.
+          const original = made.length - 1;
+          const how = next();
+          if (how > 0.4) made[original] = { ...made[original], status: 'reversed', reversedAt };
+          if (how < 0.7) made.push(adjustment(paid, `${action}_reverse`, reversedAt.toISOString(), { amount }));
         }
       }
       start = paid.periodEndsAt;

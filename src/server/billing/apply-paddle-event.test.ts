@@ -455,6 +455,45 @@ describe('applyPaddleEvent', () => {
       );
     });
 
+    it('tells the operator about a reversal that cannot be told apart from a second record of another', async () => {
+      for (const id of ['first', 'second']) {
+        await adjusted({
+          eventId: `evt_cb_${id}`,
+          action: 'chargeback',
+          type: 'partial',
+          subtotal: '1000',
+          status: 'approved',
+          occurredAt: '2026-09-10T00:00:00Z',
+          transactionId: 'txn_01',
+        });
+      }
+      await adjusted({
+        eventId: 'evt_cb_first',
+        action: 'chargeback',
+        type: 'partial',
+        subtotal: '1000',
+        status: 'reversed',
+        occurredAt: '2026-09-12T00:00:00Z',
+        transactionId: 'txn_01',
+      });
+      vi.clearAllMocks();
+
+      await adjusted({
+        eventId: 'evt_reverse',
+        action: 'chargeback_reverse',
+        type: 'partial',
+        subtotal: '1000',
+        status: 'approved',
+        occurredAt: '2026-09-12T00:20:00Z',
+        transactionId: 'txn_01',
+      });
+
+      expect(deps.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Paddle reversal to check for customer ctm_01',
+        expect.stringContaining('adj_evt_reverse'),
+      );
+    });
+
     it('tells the operator about a refund with no subscription, changing nothing', async () => {
       await adjusted({ eventId: 'evt_orphan', action: 'refund', status: 'approved', subscriptionId: null });
 

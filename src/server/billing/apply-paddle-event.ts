@@ -199,7 +199,18 @@ function amount(value: string): number {
  */
 async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, deps: BillingDeps) {
   await recordAdjustment(data, occurredAt, deps);
-  await syncCustomer(data.customerId, deps);
+  const { entitlement } = await syncCustomer(data.customerId, deps);
+
+  if (entitlement.ambiguousReversals.includes(data.id)) {
+    await deps.alertOperator(
+      `Paddle reversal to check for customer ${data.customerId}`,
+      `Adjustment ${data.id} (${data.action}) on transaction ${data.transactionId} could be a second record of a ` +
+        'reversal already recorded, or the reversal of another adjustment of the same kind still in force: Paddle ' +
+        'does not say which (paddle-assumptions.ts, assumption 8). It is counted as the first, restoring nothing. ' +
+        "If it reverses another, the customer is owed that time: add an operator grant once you have checked Paddle's " +
+        'records.',
+    );
+  }
 
   const endsAccess =
     data.status === 'approved' && ((data.action === 'refund' && data.type === 'full') || data.action === 'chargeback');
