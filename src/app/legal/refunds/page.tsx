@@ -45,8 +45,9 @@ export default function RefundsPage() {
         subscription stays cancelled.
       </p>
       <p>
-        If the purchase you are refunded within the 14-day window was an annual term, its grant is withdrawn and the
-        term gives no paid period.
+        If the purchase you are refunded in full within the 14-day window was an annual term, its grant is withdrawn and
+        the term gives no paid period. A partial refund of an annual term also withdraws its grant, and the term then
+        gives a paid period only for the part of it that the money you keep pays for.
       </p>
 
       <p className="text-sm text-muted-foreground">

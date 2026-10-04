@@ -33,15 +33,15 @@ export default function EulaPage() {
         or when those 30 days pass without the payment being collected. All dates and times in this section are in UTC.
       </p>
       <p>
-        Vesting follows the money you keep. Each payment for a billing period of any of your Tenantry Pro subscriptions
-        gives a paid period: the part of that billing period that the money kept from the payment pays for, counted from
-        the start of the billing period. A payment kept in full gives the whole billing period, even if the subscription
-        was cancelled or paused before the period ended. If part of a payment has been returned to you, the paid period
-        is the same share of the billing period as the share of the payment you kept: if half of a month&apos;s payment
-        is refunded, the paid period is the first half of that month. A payment of which everything has been returned,
-        or for which nothing was charged (a trial, or a period discounted to zero), gives no paid period. Amounts are
-        compared before tax. A discount does not count as money returned, so a discounted payment that you keep gives
-        the whole billing period.
+        Vesting follows the money you keep. Each payment for a billing period of any of your Tenantry Pro subscriptions,
+        at the monthly or yearly price offered on this site, gives a paid period: the part of that billing period that
+        the money kept from the payment pays for, counted from the start of the billing period. A payment kept in full
+        gives the whole billing period, even if the subscription was cancelled or paused before the period ended. If
+        part of a payment has been returned to you, the paid period is the same share of the billing period as the share
+        of the payment you kept: if half of a month&apos;s payment is refunded, the paid period is the first half of
+        that month. A payment of which everything has been returned, or for which nothing was charged (a trial, or a
+        period discounted to zero), gives no paid period. Amounts are compared before tax. A discount does not count as
+        money returned, so a discounted payment that you keep gives the whole billing period.
       </p>
       <p>
         Money is returned to you by a refund, a credit or a chargeback once it has been approved. A correction of tax
@@ -65,12 +65,12 @@ export default function EulaPage() {
         time, whichever is earlier, so the date moves on while the qualifying period continues.
       </p>
       <p>
-        When you pay for an annual billing period (an &quot;annual term&quot;), Tenantry grants you at once, on
-        condition that you keep the whole payment, that every release whose release date is on or before the end of the
-        term is vested (the &quot;term&apos;s grant&quot;). The term&apos;s grant is confirmed when the term ends, and
-        the end of the term is then a vested-through date. Any refund, credit or chargeback of the payment withdraws the
-        term&apos;s grant, at any time, including after the term has ended. The part of the term that the money kept
-        pays for is still a paid period.
+        When you pay the yearly price for an annual billing period (an &quot;annual term&quot;), Tenantry grants you at
+        once, on condition that you keep the whole payment, that every release whose release date is on or before the
+        end of the term is vested (the &quot;term&apos;s grant&quot;). The term&apos;s grant is confirmed when the term
+        ends, and the end of the term is then a vested-through date. Any refund, credit or chargeback of the payment
+        withdraws the term&apos;s grant, at any time, including after the term has ended. The part of the term that the
+        money kept pays for is still a paid period.
       </p>
       <p>
         Your vested-through date is the latest vested-through date of any of your qualifying periods or annual terms.
