@@ -124,7 +124,7 @@ const QUESTIONS = [
   {
     question: 'Will the package feed change?',
     answer:
-      'Yes, before Tenantry Pro goes on sale. The packages are on GitHub Packages today, the feed the subscription system has been built and tested with, so the docs describe it. A private Tenantry feed will replace it, and after a subscription ends it will still let you restore the vested releases.',
+      'Yes, before Tenantry Pro goes on sale. The packages are on GitHub Packages today, the feed the subscription system has been built and tested with, so the docs describe it. A package feed run by Tenantry will replace it, and after a subscription ends it will still let you restore the vested releases.',
   },
   {
     question: 'Which versions and databases?',
