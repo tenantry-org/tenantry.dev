@@ -66,7 +66,7 @@ describe('syncGithubLinkForCurrentUser', () => {
   });
 
   it("links but does not grant access when none of the customer's subscriptions entitles them", async () => {
-    memory.state.access.set('ctm_1', { status: 'revoked', githubState: 'none', githubInvitedAt: null });
+    memory.state.access.set('ctm_1', { status: 'lapsed', githubState: 'none', githubInvitedAt: null });
 
     const result = await syncGithubLinkForCurrentUser(deps);
 

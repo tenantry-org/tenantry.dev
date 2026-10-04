@@ -2,7 +2,7 @@ import 'server-only';
 import { confirmedEmail } from '@/server/db/customer-email';
 import { CUSTOMER_BUSY } from '@/server/jobs/customer-lease';
 import { grantAndRecord } from '@/server/billing/customer-access';
-import { isEntitled } from '@/server/billing/access-policy';
+import { isEntitled } from '@/server/billing/entitlement-policy';
 import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
 import type { LinkErrorCode } from '@/lib/link-errors';
 

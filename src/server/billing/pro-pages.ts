@@ -6,13 +6,12 @@ import { getCurrentUser } from '@/server/db/current-user';
 import {
   getCustomerId,
   readCustomerAccess,
-  readEntitlements,
   readGithubLogin,
   readLicenceKey,
   readSubscriptions,
 } from '@/server/db/customer-dashboard';
-import { graceEndsAt, isEntitled } from '@/server/billing/access-policy';
-import type { EntitlementStatus, GithubState } from '@/server/db/billing-store';
+import { graceEndsAt, isEntitled } from '@/server/billing/entitlement-policy';
+import type { AccessStatus, GithubState } from '@/server/db/billing-store';
 import { type ServerConfig, serverConfig } from '@/server/config/server-config';
 
 /**
@@ -59,11 +58,11 @@ export interface InstallView {
 export interface BillingView {
   noSubscription: false;
   /**
-   * The customer's access across all their subscriptions (`customer_access`), or null if they never had any. While
+   * The customer's access across all their subscriptions (`active_subscriptions`), or null if they never had any. While
    * every subscription that entitles them is past due, `grace` says when access ends if no payment recovers, and
    * whether that has passed (access is then removed by the next reconcile).
    */
-  access: { status: EntitlementStatus; grace: { endsAt: string; ended: boolean } | null } | null;
+  access: { status: AccessStatus; grace: { endsAt: string; ended: boolean } | null } | null;
   /** The customer's Pro subscriptions that have not ended, from our own records. */
   subscriptions: BillingSubscription[];
 }
@@ -83,7 +82,7 @@ export async function getAccessView(): Promise<AccessView | NoSubscriptionView> 
   const customerId = await getCustomerId();
   if (!customerId) return noSubscription(false);
 
-  // Read with the access, not after it, saving a round trip: a former customer's licences are revoked, so none is read.
+  // Read with the access, not after it, saving a round trip.
   const [access, licenceKey, githubLogin] = await Promise.all([
     readCustomerAccess(customerId),
     readLicenceKey(customerId),
@@ -125,15 +124,14 @@ export async function getBillingView(paddle?: ServerConfig['paddle']): Promise<B
   const customerId = await getCustomerId();
   if (!customerId) return noSubscription(false);
 
-  const [access, entitlements, subscriptions] = await Promise.all([
-    readCustomerAccess(customerId),
-    readEntitlements(customerId),
-    readSubscriptions(customerId),
-  ]);
+  const [access, subscriptions] = await Promise.all([readCustomerAccess(customerId), readSubscriptions(customerId)]);
   const { proProductId, prices } = paddle ?? serverConfig().paddle;
 
-  const graceEnds = entitlements
-    .filter(({ status, grace_started_at }) => status === 'grace' && grace_started_at)
+  const graceEnds = subscriptions
+    .filter(
+      ({ product_id, status, grace_started_at }) =>
+        product_id === proProductId && status === 'past_due' && grace_started_at,
+    )
     .map(({ grace_started_at }) => graceEndsAt(new Date(grace_started_at!)).getTime());
   const graceEnd = graceEnds.length > 0 ? Math.max(...graceEnds) : null;
 
@@ -150,7 +148,7 @@ export async function getBillingView(paddle?: ServerConfig['paddle']): Promise<B
       : null,
     subscriptions: subscriptions
       .filter((row) => row.product_id === proProductId && row.status !== 'canceled')
-      .map((row) => billingSubscription(row, entitlements, prices)),
+      .map((row) => billingSubscription(row, prices)),
   };
 }
 
@@ -160,20 +158,19 @@ async function noSubscription(customer: boolean): Promise<NoSubscriptionView> {
   return { noSubscription: true, customer, accountEmail: user?.email ?? null };
 }
 
-type EntitlementRow = Pick<Tables<'entitlements'>, 'subscription_id' | 'current_period_ends_at'>;
-
 type SubscriptionRow = Pick<
   Tables<'subscriptions'>,
-  'subscription_id' | 'status' | 'price_id' | 'scheduled_change_at' | 'scheduled_change_action'
+  | 'subscription_id'
+  | 'status'
+  | 'price_id'
+  | 'scheduled_change_at'
+  | 'scheduled_change_action'
+  | 'current_period_ends_at'
 >;
 
-function billingSubscription(
-  row: SubscriptionRow,
-  entitlements: EntitlementRow[],
-  prices: OfferPrices,
-): BillingSubscription {
+function billingSubscription(row: SubscriptionRow, prices: OfferPrices): BillingSubscription {
   const endsAt = row.scheduled_change_action === 'cancel' ? row.scheduled_change_at : null;
-  const periodEndsAt = entitlements.find((e) => e.subscription_id === row.subscription_id)?.current_period_ends_at;
+  const periodEndsAt = row.current_period_ends_at;
 
   return {
     id: row.subscription_id,

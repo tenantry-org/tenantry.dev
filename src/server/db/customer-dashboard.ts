@@ -2,11 +2,11 @@ import 'server-only';
 import { createUserClient } from '@/server/db/user-client';
 import { getCurrentUser } from '@/server/db/current-user';
 import { confirmedEmail } from '@/server/db/customer-email';
-import type { CustomerAccessRecord, EntitlementStatus, GithubState } from '@/server/db/billing-store';
+import type { AccessStatus, CustomerAccessRecord, GithubState } from '@/server/db/billing-store';
 
 /**
  * Reads for the customer's dashboard, with the signed-in user's session: RLS lets a customer read only their own
- * customer, access, licence, GitHub link, entitlements and subscriptions. Each Pro page reads only the rows it shows;
+ * customer, access (active_subscriptions), licence, GitHub link and subscriptions. Each Pro page reads only the rows it shows;
  * its read model (billing/pro-pages.ts) maps them. Rows the session may not read come back empty.
  */
 
@@ -28,29 +28,28 @@ export async function getCustomerId(): Promise<string | null> {
 export async function readCustomerAccess(customerId: string): Promise<CustomerAccessRecord | null> {
   const supabase = await createUserClient();
   const { data } = await supabase
-    .from('customer_access')
-    .select('status,github_state,github_invited_at')
+    .from('active_subscriptions')
+    .select('access_status,github_state,github_invited_at')
     .eq('customer_id', customerId)
     .maybeSingle();
 
   return data
     ? {
-        // customer_access's check constraints allow only these.
-        status: data.status as EntitlementStatus,
+        // active_subscriptions' check constraints allow only these.
+        status: data.access_status as AccessStatus,
         githubState: data.github_state as GithubState,
         githubInvitedAt: data.github_invited_at ? new Date(data.github_invited_at) : null,
       }
     : null;
 }
 
-/** The customer's licence key: the newest one not revoked. */
+/** The customer's licence key: the newest one. Keys are kept for good, so a former customer still has theirs. */
 export async function readLicenceKey(customerId: string): Promise<string | null> {
   const supabase = await createUserClient();
   const { data } = await supabase
     .from('licences')
     .select('jwt')
     .eq('customer_id', customerId)
-    .eq('revoked', false)
     .order('issued_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -70,23 +69,14 @@ export async function readGithubLogin(customerId: string): Promise<string | null
   return data?.github_login ?? null;
 }
 
-/** The customer's entitlements, one per subscription. */
-export async function readEntitlements(customerId: string) {
-  const supabase = await createUserClient();
-  const { data } = await supabase
-    .from('entitlements')
-    .select('subscription_id,status,current_period_ends_at,grace_started_at')
-    .eq('customer_id', customerId);
-
-  return data ?? [];
-}
-
 /** The customer's subscriptions, as Paddle last reported them. */
 export async function readSubscriptions(customerId: string) {
   const supabase = await createUserClient();
   const { data } = await supabase
     .from('subscriptions')
-    .select('subscription_id,status,price_id,product_id,scheduled_change_at,scheduled_change_action')
+    .select(
+      'subscription_id,status,price_id,product_id,scheduled_change_at,scheduled_change_action,current_period_ends_at,grace_started_at',
+    )
     .eq('customer_id', customerId);
 
   return data ?? [];

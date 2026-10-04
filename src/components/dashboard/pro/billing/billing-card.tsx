@@ -34,7 +34,7 @@ export function BillingCard({ access, subscriptions }: Readonly<Props>) {
       : subscription,
   );
   // When every Pro subscription is set to end, access ends with the last of them.
-  const status = access?.status ?? 'revoked';
+  const status = access?.status ?? 'lapsed';
   const endsAt =
     status === 'active' && shown.length > 0 && shown.every((subscription) => subscription.endsAt)
       ? shown
@@ -100,7 +100,7 @@ export function BillingCard({ access, subscriptions }: Readonly<Props>) {
       </CardHeader>
       <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
         {status === 'grace' && <GraceNotice grace={access?.grace ?? null} />}
-        {status === 'revoked' && (
+        {status === 'lapsed' && (
           <EndedNotice paymentFailed={shown.some((subscription) => subscription.status === 'past_due')} />
         )}
 
@@ -195,7 +195,7 @@ function StatusBadge({ status, endsAt }: Readonly<{ status: string; endsAt: stri
     );
   }
 
-  if (status === 'revoked') {
+  if (status === 'lapsed') {
     return (
       <span className={'rounded-full bg-destructive-surface px-2.5 py-0.5 text-xs font-medium text-destructive'}>
         Ended

@@ -1,32 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EntitlementRecord } from '@/server/db/billing-store';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
 import { memory } from '@/test/memory-billing-store';
 import { testServerConfig } from '@/test/server-config';
-import { syncCustomerAccess } from './customer-access';
+import { syncCustomer } from './customer-access';
 import { reconcileCustomer } from './reconcile-customer';
 
 let deps: FakeBillingDeps;
 
 const OCTOBER = new Date('2026-10-01T00:00:00Z');
-const NOVEMBER = new Date('2026-11-01T00:00:00Z');
 
-async function record(overrides: Partial<EntitlementRecord> = {}) {
-  await memory.store.upsertEntitlement({
-    customerId: 'ctm_1',
-    subscriptionId: 'sub_1',
-    status: 'active',
-    currentPeriodEndsAt: NOVEMBER,
-    graceStartedAt: null,
-    ...overrides,
-  });
+/** Sets ctm_1's subscription as Paddle's newest event left it (status is Paddle's). */
+async function record({ status, graceStartedAt }: { status?: string; graceStartedAt?: Date } = {}) {
+  memory.subscribe('ctm_1', { status, graceStartedAt });
 }
 
 /** Starts the customer's access as the webhook does; GitHub answers the grant with `membership`. */
 async function startAccess(membership: 'active' | 'pending' = 'active') {
   deps.github.grantAccess.mockResolvedValueOnce(membership);
   await record();
-  await syncCustomerAccess('ctm_1', deps);
+  await syncCustomer('ctm_1', deps);
   vi.clearAllMocks();
 }
 
@@ -48,16 +40,16 @@ describe('reconcileCustomer', () => {
 
   it('ends access once the grace period is over, with no event from Paddle', async () => {
     await startAccess();
-    await record({ status: 'grace', graceStartedAt: OCTOBER });
-    await syncCustomerAccess('ctm_1', deps);
+    await record({ status: 'past_due', graceStartedAt: OCTOBER });
+    await syncCustomer('ctm_1', deps);
     vi.clearAllMocks();
 
     vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
     await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ access: 'ended' });
 
     expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'revoked', githubState: 'none' });
-    expect(memory.liveLicences('ctm_1')).toEqual([]);
+    expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'lapsed', githubState: 'none' });
+    expect(memory.licences('ctm_1')).toHaveLength(1);
     expect(deps.sendEmail).toHaveBeenCalledOnce();
   });
 
@@ -69,7 +61,6 @@ describe('reconcileCustomer', () => {
       access: 'unchanged',
       licence: 'current',
       github: 'unchanged',
-      licencesRevoked: false,
     });
     expect(deps.github.grantAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
@@ -126,8 +117,8 @@ describe('reconcileCustomer', () => {
 
     it('cancels the pending invitation of a customer who is no longer entitled', async () => {
       deps.config = testServerConfig({ provisioning: 'manual' });
-      await record({ status: 'revoked' });
-      await syncCustomerAccess('ctm_1', deps);
+      await record({ status: 'canceled' });
+      await syncCustomer('ctm_1', deps);
       deps.github.membershipOf.mockResolvedValue('pending');
 
       await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ github: 'removed' });
@@ -135,8 +126,8 @@ describe('reconcileCustomer', () => {
     });
 
     it('cancels an invitation left pending by a removal that failed after leaving the team', async () => {
-      await record({ status: 'revoked' });
-      await syncCustomerAccess('ctm_1', deps);
+      await record({ status: 'canceled' });
+      await syncCustomer('ctm_1', deps);
       deps.github.membershipOf.mockResolvedValue(null);
       deps.github.hasPendingInvitation.mockResolvedValue(true);
 
@@ -145,8 +136,8 @@ describe('reconcileCustomer', () => {
     });
 
     it('removes a lapsed customer whose GitHub account was renamed, under its new login', async () => {
-      await record({ status: 'revoked' });
-      await syncCustomerAccess('ctm_1', deps);
+      await record({ status: 'canceled' });
+      await syncCustomer('ctm_1', deps);
       memory.state.githubUsers.set(1, 'octocat-renamed');
       deps.github.membershipOf.mockImplementation(async (login: string) =>
         login === 'octocat-renamed' ? 'active' : null,
@@ -157,8 +148,8 @@ describe('reconcileCustomer', () => {
     });
 
     it('does nothing for a lapsed customer with neither a membership nor an invitation', async () => {
-      await record({ status: 'revoked' });
-      await syncCustomerAccess('ctm_1', deps);
+      await record({ status: 'canceled' });
+      await syncCustomer('ctm_1', deps);
 
       await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ github: 'unchanged' });
       expect(deps.github.hasPendingInvitation).toHaveBeenCalledWith('octocat');
@@ -181,21 +172,21 @@ describe('reconcileCustomer', () => {
     expect(githubState()).toBe('active');
   });
 
-  it('removes a customer who is not entitled from the team and revokes licences left live, whatever the mode', async () => {
+  it('removes a customer who is not entitled from the team but leaves their licence, whatever the mode', async () => {
     deps.config = testServerConfig({ provisioning: 'manual' });
-    await record({ status: 'revoked' });
-    await syncCustomerAccess('ctm_1', deps);
+    await record({ status: 'canceled' });
+    await syncCustomer('ctm_1', deps);
     await memory.store.recordLicence({ customerId: 'ctm_1', jwt: 'left-over' });
     deps.github.membershipOf.mockResolvedValue('active');
 
-    await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ github: 'removed', licencesRevoked: true });
+    await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ github: 'removed' });
     expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.liveLicences('ctm_1')).toEqual([]);
+    expect(memory.licences('ctm_1')).toEqual([{ customerId: 'ctm_1', jwt: 'left-over' }]);
   });
 
   it('restores access recorded as ended while a subscription still entitles the customer', async () => {
     await record();
-    memory.state.access.set('ctm_1', { status: 'revoked', githubState: 'none', githubInvitedAt: null });
+    memory.state.access.set('ctm_1', { status: 'lapsed', githubState: 'none', githubInvitedAt: null });
 
     await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ access: 'started', licence: 'issued' });
     expect(deps.github.grantAccess).toHaveBeenCalledWith('octocat');
@@ -205,7 +196,7 @@ describe('reconcileCustomer', () => {
   it('retries a grant that failed, and throws while it keeps failing so the worker retries the job', async () => {
     deps.github.grantAccess.mockRejectedValueOnce(new Error('GitHub unavailable'));
     await record();
-    await syncCustomerAccess('ctm_1', deps);
+    await syncCustomer('ctm_1', deps);
     expect(githubState()).toBe('failed');
 
     deps.github.grantAccess.mockRejectedValueOnce(new Error('GitHub unavailable'));

@@ -1,0 +1,150 @@
+-- set_customer_entitlement stores a customer's derived state (src/server/billing/entitlement-policy.ts computes it)
+-- and returns the access status it replaced, which decides whether access starts or ends. Run with
+-- `supabase test db` against the local database.
+begin;
+create extension if not exists pgtap with schema extensions;
+-- As postgres with pgTAP's schema on the path: `supabase test db --linked` connects to a hosted database as a
+-- CLI login role that cannot use the extensions schema.
+set local role postgres;
+set local search_path to public, extensions;
+
+select plan(27);
+
+insert into public.customers (customer_id, email) values ('ctm_1', 'buyer@example.com');
+insert into public.payments (
+  transaction_id, customer_id, subscription_id, origin, price_id, billing_interval, billing_frequency,
+  period_starts_at, period_ends_at, subtotal, discount, total, currency_code, completed_at, last_event_at
+) values
+  ('txn_1', 'ctm_1', 'sub_1', 'web', 'pri_1', 'month', 1, '2027-01-01', '2027-02-01', 3900, 0, 3900, 'GBP', now(), now()),
+  ('txn_2', 'ctm_1', 'sub_1', 'subscription_recurring', 'pri_1', 'month', 1, '2027-02-01', '2027-03-01', 3900, 0, 3900,
+    'GBP', now(), now());
+
+-- The state of a customer two months into a run, with one annual term that was refunded.
+create temporary table run_state as select
+  '{"access_status": "active", "run_started_at": "2027-01-01T00:00:00Z", "paid_through": "2027-03-01T00:00:00Z",
+    "months_paid": 2, "vests_at": "2028-01-01T00:00:00Z", "conditional_through": null}'::jsonb as state,
+  '[{"kind": "annual_term", "started_at": "2026-01-01T00:00:00Z", "vested_through": "2027-01-01T00:00:00Z",
+     "status": "withdrawn", "confirmed_at": null, "transaction_id": "txn_0", "withdrawn_reason": "refund"}]'::jsonb
+    as grants;
+
+select is(
+  public.set_customer_entitlement('ctm_1', (select state from run_state), (select grants from run_state),
+    '{"txn_2": "refunded"}'),
+  'lapsed', 'a customer seen for the first time had no access');
+select results_eq(
+  $$select access_status, github_state, run_started_at, paid_through, months_paid, vests_at
+    from public.active_subscriptions where customer_id = 'ctm_1'$$,
+  $$values ('active'::text, 'none'::text, '2027-01-01 00:00+00'::timestamptz, '2027-03-01 00:00+00'::timestamptz, 2,
+    '2028-01-01 00:00+00'::timestamptz)$$,
+  'records the access and the current run');
+select results_eq(
+  $$select kind, status, withdrawn_reason, transaction_id from public.vested_entitlements where customer_id = 'ctm_1'$$,
+  $$values ('annual_term'::text, 'withdrawn'::text, 'refund'::text, 'txn_0'::text)$$,
+  'records the grants');
+select results_eq(
+  $$select transaction_id, status from public.payments order by transaction_id$$,
+  $$values ('txn_1'::text, 'paid'::text), ('txn_2'::text, 'refunded'::text)$$,
+  'records each payment''s status');
+select is(public.vested_through('ctm_1'), null, 'a withdrawn grant vests nothing');
+
+-- An operator grant is kept through every recompute.
+insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at, note)
+values ('ctm_1', 'operator', '2025-01-01', '2026-06-01', 'confirmed', now(), 'Merged from ctm_old');
+
+update public.active_subscriptions set github_state = 'invited', github_invited_at = now() where customer_id = 'ctm_1';
+
+-- A month later: the run vested; the refunded annual term is no longer computed (as if its payment were gone).
+select is(
+  public.set_customer_entitlement('ctm_1',
+    '{"access_status": "grace", "run_started_at": "2027-01-01T00:00:00Z", "paid_through": "2028-02-01T00:00:00Z",
+      "months_paid": 13, "vests_at": "2028-01-01T00:00:00Z", "conditional_through": "2029-02-01T00:00:00Z"}',
+    '[{"kind": "qualifying_run", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
+       "status": "confirmed", "confirmed_at": "2028-01-01T00:00:00Z", "transaction_id": null,
+       "withdrawn_reason": null}]',
+    '{}'),
+  'active', 'returns the status it replaced');
+select results_eq(
+  $$select access_status, github_state, github_invited_at is not null, conditional_through
+    from public.active_subscriptions where customer_id = 'ctm_1'$$,
+  $$values ('grace'::text, 'invited'::text, true, '2029-02-01 00:00+00'::timestamptz)$$,
+  'staying entitled keeps the GitHub state');
+select results_eq(
+  $$select kind, status from public.vested_entitlements where customer_id = 'ctm_1' order by kind$$,
+  $$values ('operator'::text, 'confirmed'::text), ('qualifying_run'::text, 'confirmed'::text)$$,
+  'grants no longer computed are removed; the operator grant is kept');
+select is(public.vested_through('ctm_1'), '2028-02-01 00:00+00'::timestamptz, 'vests through the latest confirmed grant');
+
+-- The run is confirmed again later, unchanged.
+select is(
+  public.set_customer_entitlement('ctm_1',
+    '{"access_status": "lapsed"}',
+    '[{"kind": "qualifying_run", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
+       "status": "confirmed", "confirmed_at": "2028-01-01T00:00:00Z", "transaction_id": null,
+       "withdrawn_reason": null}]',
+    '{}'),
+  'grace', 'ending access returns the entitled status');
+select results_eq(
+  $$select access_status, github_state, github_invited_at, run_started_at, months_paid
+    from public.active_subscriptions where customer_id = 'ctm_1'$$,
+  $$values ('lapsed'::text, 'none'::text, null::timestamptz, null::timestamptz, 0)$$,
+  'ending access resets the GitHub state and the run');
+select is(public.vested_through('ctm_1'), '2028-02-01 00:00+00'::timestamptz, 'vested rights stay after a lapse');
+select is(
+  public.set_customer_entitlement('ctm_1', '{"access_status": "lapsed"}', null, null), 'lapsed',
+  'a repeated end is not a change');
+
+select throws_ok(
+  $$select public.set_customer_entitlement('ctm_1', '{"access_status": "expired"}', null, null)$$,
+  '23514', null, 'rejects an unknown access status');
+select throws_ok(
+  $$select public.set_customer_entitlement('ctm_unknown', '{"access_status": "active"}', null, null)$$,
+  '23503', null, 'rejects a customer that is not recorded');
+select throws_ok(
+  $$select public.set_customer_entitlement('ctm_1', '{"access_status": "active", "run_started_at": "2027-01-01T00:00:00Z"}',
+    null, null)$$,
+  '23514', null, 'rejects a run without how far it is paid');
+select throws_ok(
+  $$select public.set_customer_entitlement('ctm_1', '{"access_status": "active"}',
+    '[{"kind": "qualifying_run", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-01-01T00:00:00Z",
+       "status": "withdrawn", "confirmed_at": null, "transaction_id": null, "withdrawn_reason": null}]', null)$$,
+  '23514', null, 'rejects a withdrawn grant without its reason');
+select throws_ok(
+  $$insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at)
+    values ('ctm_1', 'operator', '2024-01-01', '2024-06-01', 'confirmed', now())$$,
+  '23514', null, 'rejects an operator grant without a note');
+select throws_ok(
+  $$insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status)
+    values ('ctm_1', 'annual_term', '2024-01-01', '2025-01-01', 'conditional')$$,
+  '23514', null, 'rejects an annual grant without its payment');
+
+-- The GitHub state, and when an invitation was sent.
+update public.active_subscriptions set access_status = 'active' where customer_id = 'ctm_1';
+select throws_ok(
+  $$update public.active_subscriptions set github_state = 'granted' where customer_id = 'ctm_1'$$,
+  '23514', null, 'rejects an unknown GitHub state');
+select throws_ok(
+  $$update public.active_subscriptions set github_state = 'invited', github_invited_at = null where customer_id = 'ctm_1'$$,
+  '23514', null, 'an invitation records when it was sent');
+select throws_ok(
+  $$update public.active_subscriptions set github_state = 'active', github_invited_at = now() where customer_id = 'ctm_1'$$,
+  '23514', null, 'only an invitation has a sent time');
+select lives_ok(
+  $$update public.active_subscriptions set github_state = 'failed', github_invited_at = null where customer_id = 'ctm_1'$$,
+  'a failed grant is recorded');
+
+select ok(
+  has_function_privilege('service_role', 'public.set_customer_entitlement(text, jsonb, jsonb, jsonb)', 'execute'),
+  'the service role can store a customer''s state');
+select ok(
+  not has_function_privilege('authenticated', 'public.set_customer_entitlement(text, jsonb, jsonb, jsonb)', 'execute'),
+  'a signed-in user cannot');
+select ok(
+  not has_function_privilege('anon', 'public.set_customer_entitlement(text, jsonb, jsonb, jsonb)', 'execute'),
+  'an anonymous user cannot');
+select ok(
+  has_function_privilege('service_role', 'public.vested_through(text)', 'execute')
+    and not has_function_privilege('authenticated', 'public.vested_through(text)', 'execute'),
+  'only the service role reads a customer''s vested-through date this way');
+
+select * from finish();
+rollback;

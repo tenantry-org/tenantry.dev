@@ -1,23 +1,31 @@
 import type {
+  AccessStatus,
   CustomerAccessRecord,
-  EntitlementStatus,
+  Entitlement,
   GithubAccount,
   GithubState,
-  EntitlementRecord,
+  PaymentAdjustmentEvent,
+  PaymentEvent,
+  PaymentStatus,
   SubscriptionEvent,
 } from '@/server/db/billing-store';
 import type { BillingStore } from '@/server/billing/deps';
 
 /**
  * In-memory stand-in for billing-store.ts, for tests that follow a customer's access through several
- * events. `recordCustomerEvent`, `recordSubscriptionEvent`, `setCustomerAccess`, `recordLicenceFailure` and
- * `customersToReconcile` behave as the database functions they call do (tested in supabase/tests/database), and
- * `linkGithubAccount` as github_links' unique github_id does.
+ * events. `recordCustomerEvent`, `recordSubscriptionEvent`, `recordLicenceFailure`, `recordPayment`,
+ * `recordPaymentAdjustment`, `saveCustomerState` and `customersToReconcile` behave as the database functions they call do (tested in supabase/tests/database), and `linkGithubAccount` as github_links' unique github_id
+ * does.
  */
 interface Licence {
   customerId: string;
   jwt: string;
-  revoked: boolean;
+}
+
+/** A recorded adjustment, with the times record_payment_adjustment derives. */
+interface StoredAdjustment extends PaymentAdjustmentEvent {
+  approvedAt: string | null;
+  reversedAt: string | null;
 }
 
 const state = {
@@ -25,26 +33,31 @@ const state = {
   emails: new Map<string, string>(),
   /** When each customer's last applied event occurred (customers.last_event_at). */
   customerEventAt: new Map<string, string>(),
-  /** Each subscription as its last applied event described it. */
-  subscriptions: new Map<string, SubscriptionEvent>(),
+  /** Each subscription as its last applied event described it, with the grace start the database keeps. */
+  subscriptions: new Map<string, SubscriptionEvent & { graceStartedAt: string | null }>(),
   /** Each customer's linked GitHub account, as github_links records it. */
   githubAccounts: new Map<string, GithubAccount>(),
   /** GitHub itself: each account's current login, by id. Renaming an account changes only this. */
   githubUsers: new Map<number, string>(),
-  entitlements: new Map<string, EntitlementRecord>(),
+  /** Each customer's access and GitHub state (active_subscriptions). */
   access: new Map<string, CustomerAccessRecord>(),
   licences: [] as Licence[],
   licenceFailures: new Map<string, { attempts: number; lastError: string }>(),
+  /** The payment ledger, by transaction id, with each payment's status as the last recompute stored it. */
+  payments: new Map<string, PaymentEvent & { status: PaymentStatus }>(),
+  adjustments: new Map<string, StoredAdjustment>(),
+  /** Each customer's last stored state: their run (active_subscriptions) and grants (vested_entitlements). */
+  entitlementStates: new Map<string, Entitlement>(),
 };
 
-/** The customer's licences that are not revoked, oldest first. */
-function liveLicences(customerId: string): Licence[] {
-  return state.licences.filter((licence) => licence.customerId === customerId && !licence.revoked);
+/** The customer's licences, oldest first. */
+function licences(customerId: string): Licence[] {
+  return state.licences.filter((licence) => licence.customerId === customerId);
 }
 
 export const memory = {
   state,
-  liveLicences,
+  licences,
 
   reset() {
     state.emails.clear();
@@ -52,10 +65,36 @@ export const memory = {
     state.subscriptions.clear();
     state.githubAccounts.clear();
     state.githubUsers.clear();
-    state.entitlements.clear();
     state.access.clear();
     state.licences.length = 0;
     state.licenceFailures.clear();
+    state.payments.clear();
+    state.adjustments.clear();
+    state.entitlementStates.clear();
+  },
+
+  /**
+   * Sets a subscription as a Paddle event would leave it, without the event's ordering: a test's shortcut to a
+   * customer's subscriptions. `status` is Paddle's; a past-due one is in grace from `graceStartedAt`.
+   */
+  subscribe(
+    customerId: string,
+    subscription: { subscriptionId?: string; status?: string; graceStartedAt?: Date | null; productId?: string } = {},
+  ) {
+    const { subscriptionId = 'sub_1', status = 'active', graceStartedAt = null, productId = 'pro_01' } = subscription;
+    state.subscriptions.set(subscriptionId, {
+      subscriptionId,
+      customerId,
+      status: status as SubscriptionEvent['status'],
+      priceId: 'pri_01month',
+      productId,
+      scheduledChangeAt: null,
+      scheduledChangeAction: null,
+      currentPeriodEndsAt: null,
+      endedAt: status === 'canceled' || status === 'paused' ? new Date().toISOString() : null,
+      occurredAt: new Date().toISOString(),
+      graceStartedAt: status === 'past_due' ? (graceStartedAt ?? new Date()).toISOString() : null,
+    });
   },
 
   /** Links a GitHub account to the customer, as connecting it on the dashboard does. */
@@ -86,13 +125,12 @@ export const memory = {
     },
 
     async recordSubscriptionEvent(event: SubscriptionEvent) {
-      if (!state.emails.has(event.customerId)) {
-        throw Object.assign(new Error('violates foreign key constraint "subscriptions_customer_id_fkey"'), {
-          code: '23503',
-        });
-      }
-      if (isOlder(event.occurredAt, state.subscriptions.get(event.subscriptionId)?.occurredAt)) return false;
-      state.subscriptions.set(event.subscriptionId, { ...event });
+      requireCustomer(event.customerId, 'subscriptions');
+      const existing = state.subscriptions.get(event.subscriptionId);
+      if (isOlder(event.occurredAt, existing?.occurredAt)) return false;
+      // As record_subscription_event does: a past-due subscription keeps its first past-due event's time.
+      const graceStartedAt = event.status === 'past_due' ? (existing?.graceStartedAt ?? event.occurredAt) : null;
+      state.subscriptions.set(event.subscriptionId, { ...event, graceStartedAt });
       return true;
     },
 
@@ -117,36 +155,6 @@ export const memory = {
       if (account) account.login = login;
     },
 
-    async upsertEntitlement(record: EntitlementRecord) {
-      // As entitlements_grace_started_check does: grace exactly when grace_started_at is set.
-      if ((record.status === 'grace') !== (record.graceStartedAt !== null)) {
-        throw Object.assign(new Error('violates check constraint "entitlements_grace_started_check"'), {
-          code: '23514',
-        });
-      }
-      state.entitlements.set(record.subscriptionId, { ...record });
-    },
-
-    async getEntitlement(subscriptionId: string) {
-      const entitlement = state.entitlements.get(subscriptionId);
-      return entitlement ? { ...entitlement } : null;
-    },
-
-    async listEntitlements(customerId: string) {
-      return [...state.entitlements.values()].filter((entitlement) => entitlement.customerId === customerId);
-    },
-
-    async setCustomerAccess(customerId: string, status: EntitlementStatus) {
-      const previous = state.access.get(customerId);
-      const ended = status === 'revoked';
-      state.access.set(customerId, {
-        status,
-        githubState: ended ? 'none' : (previous?.githubState ?? 'none'),
-        githubInvitedAt: ended ? null : (previous?.githubInvitedAt ?? null),
-      });
-      return previous?.status ?? 'revoked';
-    },
-
     async getCustomerAccess(customerId: string) {
       const access = state.access.get(customerId);
       return access ? { ...access } : null;
@@ -161,21 +169,17 @@ export const memory = {
 
     async setGithubState(customerId: string, githubState: Exclude<GithubState, 'none'>) {
       const access = state.access.get(customerId);
-      if (!access || access.status === 'revoked') return;
+      if (!access || access.status === 'lapsed') return;
       access.githubState = githubState;
       access.githubInvitedAt = githubState === 'invited' ? new Date() : null;
     },
 
-    async hasLiveLicence(customerId: string) {
-      return liveLicences(customerId).length > 0;
+    async hasLicence(customerId: string) {
+      return licences(customerId).length > 0;
     },
 
     async recordLicence(params: { customerId: string; jwt: string }) {
-      state.licences.push({ ...params, revoked: false });
-    },
-
-    async revokeLicences(customerId: string) {
-      for (const licence of liveLicences(customerId)) licence.revoked = true;
+      state.licences.push({ ...params });
     },
 
     async recordLicenceFailure(customerId: string, error: string) {
@@ -189,17 +193,113 @@ export const memory = {
     },
 
     async customersToReconcile() {
-      const entitled = (status: EntitlementStatus) => status === 'active' || status === 'grace';
+      const entitled = (status: AccessStatus) => status === 'active' || status === 'grace';
       const customers = new Set([
         ...[...state.access].filter(([, access]) => entitled(access.status)).map(([customerId]) => customerId),
-        ...[...state.entitlements.values()].filter((e) => entitled(e.status)).map((e) => e.customerId),
+        ...[...state.subscriptions.values()]
+          .filter((subscription) => ['active', 'trialing', 'past_due'].includes(subscription.status))
+          .map((subscription) => subscription.customerId),
         ...state.githubAccounts.keys(),
-        ...state.licences.filter((licence) => !licence.revoked).map((licence) => licence.customerId),
+        ...state.licenceFailures.keys(),
+        ...[...state.entitlementStates]
+          .filter(([, entitlement]) => entitlement.run || entitlement.grants.some((g) => g.status === 'conditional'))
+          .map(([customerId]) => customerId),
       ]);
       return [...customers].sort();
     },
+
+    async recordPayment(event: PaymentEvent) {
+      requireCustomer(event.customerId, 'payments');
+      const existing = state.payments.get(event.transactionId);
+      if (existing && isOlder(event.occurredAt, existing.occurredAt)) return false;
+      state.payments.set(event.transactionId, { ...event, status: existing?.status ?? 'paid' });
+      return true;
+    },
+
+    async recordPaymentAdjustment(event: PaymentAdjustmentEvent) {
+      requireCustomer(event.customerId, 'payment_adjustments');
+      const existing = state.adjustments.get(event.adjustmentId);
+      const approvedAt =
+        event.status === 'approved' ? event.updatedAt : event.status === 'reversed' ? event.createdAt : null;
+      const reversedAt = event.status === 'reversed' ? event.updatedAt : null;
+      const newer = !existing || !isOlder(event.occurredAt, existing.occurredAt);
+
+      if (!newer && (existing.approvedAt || !approvedAt) && (existing.reversedAt || !reversedAt)) return false;
+      state.adjustments.set(event.adjustmentId, {
+        ...(newer ? event : existing),
+        approvedAt: existing?.approvedAt ?? approvedAt,
+        reversedAt: existing?.reversedAt ?? reversedAt,
+      });
+      return true;
+    },
+
+    async listPayments(customerId: string) {
+      return [...state.payments.values()]
+        .filter((payment) => payment.customerId === customerId)
+        .map((payment) => ({
+          transactionId: payment.transactionId,
+          subscriptionId: payment.subscriptionId,
+          billingInterval: payment.billingInterval,
+          billingFrequency: payment.billingFrequency,
+          periodStartsAt: new Date(payment.periodStartsAt),
+          periodEndsAt: new Date(payment.periodEndsAt),
+          total: payment.total,
+        }));
+    },
+
+    async listPaymentAdjustments(customerId: string) {
+      return [...state.adjustments.values()]
+        .filter((adjustment) => adjustment.customerId === customerId)
+        .map((adjustment) => ({
+          adjustmentId: adjustment.adjustmentId,
+          transactionId: adjustment.transactionId,
+          action: adjustment.action,
+          type: adjustment.type,
+          itemTypes: adjustment.itemTypes,
+          status: adjustment.status,
+          approvedAt: adjustment.approvedAt ? new Date(adjustment.approvedAt) : null,
+          reversedAt: adjustment.reversedAt ? new Date(adjustment.reversedAt) : null,
+        }));
+    },
+
+    async listSubscriptions(customerId: string) {
+      return [...state.subscriptions.values()]
+        .filter((subscription) => subscription.customerId === customerId)
+        .map((subscription) => ({
+          subscriptionId: subscription.subscriptionId,
+          productId: subscription.productId,
+          status: subscription.status,
+          graceStartedAt: subscription.graceStartedAt ? new Date(subscription.graceStartedAt) : null,
+          endedAt: subscription.endedAt ? new Date(subscription.endedAt) : null,
+        }));
+    },
+
+    // As set_customer_entitlement does: returns the access it replaced, and ending access resets the GitHub state.
+    async saveCustomerState(customerId: string, entitlement: Entitlement) {
+      const previous = state.access.get(customerId);
+      const status = entitlement.access.status;
+      const ended = status === 'lapsed';
+      state.access.set(customerId, {
+        status,
+        githubState: ended ? 'none' : (previous?.githubState ?? 'none'),
+        githubInvitedAt: ended ? null : (previous?.githubInvitedAt ?? null),
+      });
+      state.entitlementStates.set(customerId, entitlement);
+      for (const [transactionId, paymentStatus] of Object.entries(entitlement.paymentStatuses)) {
+        const payment = state.payments.get(transactionId);
+        if (payment?.customerId === customerId) payment.status = paymentStatus;
+      }
+      return previous?.status ?? 'lapsed';
+    },
   } satisfies BillingStore,
 };
+
+// As the customers foreign key on each table does: a row for a customer not recorded yet fails, so the job is retried.
+function requireCustomer(customerId: string, table: string) {
+  if (!state.emails.has(customerId)) {
+    throw Object.assign(new Error(`violates foreign key constraint "${table}_customer_id_fkey"`), { code: '23503' });
+  }
+}
 
 // Whether an event occurred before the last one applied: the database applies an event unless it is older.
 function isOlder(occurredAt: string, lastAppliedAt: string | undefined): boolean {

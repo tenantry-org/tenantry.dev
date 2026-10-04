@@ -18,7 +18,7 @@ import { serverConfig } from '@/server/config/server-config';
  *
  * Adding someone who is not yet an org member sends them an org invitation: their membership is 'pending'
  * until they accept, and GitHub drops the invitation after 7 days. Callers record the outcome
- * (`customer_access.github_state`), and reconcile promotes or re-sends invitations (reconcile-customer.ts).
+ * (`active_subscriptions.github_state`), and reconcile promotes or re-sends invitations (reconcile-customer.ts).
  *
  * Auth is via a GitHub App installed on the org (scoped, auditable, rotatable — preferred over an
  * admin PAT). Configure with these env vars:

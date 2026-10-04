@@ -5,9 +5,9 @@ import {
   grantAndRecord,
   LicenceOutcome,
   linkedGithubLogin,
-  syncCustomerAccess,
+  syncCustomer,
 } from '@/server/billing/customer-access';
-import { isEntitled } from '@/server/billing/access-policy';
+import { isEntitled } from '@/server/billing/entitlement-policy';
 import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
 
 /**
@@ -26,7 +26,6 @@ export interface CustomerReconciliation {
   access: AccessChange;
   licence: LicenceOutcome | null;
   github: GithubReconciliation;
-  licencesRevoked: boolean;
 }
 
 /**
@@ -41,7 +40,8 @@ export interface CustomerReconciliation {
  *   - an org invitation that was accepted (recorded as a member from then on), or that GitHub dropped
  *     after 7 days unaccepted, or a member removed from the team while still entitled (invited again),
  *   - a removal that failed part-way, such as an invitation left pending after leaving the team,
- *   - licences left live after access ended.
+ *   - perpetual entitlement that changes with time alone: a run that reaches 12 months or serves another period,
+ *     and an annual grant whose term ends (syncCustomer recomputes it).
  *
  * Every step is idempotent, so a job that throws is retried later with backoff.
  */
@@ -49,21 +49,16 @@ export async function reconcileCustomer(
   customerId: string,
   deps: BillingDeps = defaultBillingDeps,
 ): Promise<CustomerReconciliation> {
-  const { change, licence } = await syncCustomerAccess(customerId, deps);
+  const { change, licence } = await syncCustomer(customerId, deps);
   const access = await deps.store.getCustomerAccess(customerId);
   const entitled = access !== null && isEntitled(access.status);
   const githubLogin = await linkedGithubLogin(customerId, deps);
-  const result: CustomerReconciliation = { access: change, licence, github: 'unchanged', licencesRevoked: false };
+  const result: CustomerReconciliation = { access: change, licence, github: 'unchanged' };
 
   if (githubLogin) {
     result.github = entitled
       ? await reconcileGrant(customerId, githubLogin, access, deps)
       : await reconcileRemoval(githubLogin, deps);
-  }
-
-  if (!entitled && (await deps.store.hasLiveLicence(customerId))) {
-    await deps.store.revokeLicences(customerId);
-    result.licencesRevoked = true;
   }
 
   return result;

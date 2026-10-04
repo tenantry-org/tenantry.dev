@@ -17,7 +17,7 @@ function billing(overrides: Partial<BillingView>): BillingView {
   return { noSubscription: false, access: null, subscriptions: [], ...overrides };
 }
 
-const revoked: BillingView['access'] = { status: 'revoked', grace: null };
+const revoked: BillingView['access'] = { status: 'lapsed', grace: null };
 
 const render = (view: BillingView | NoSubscriptionView) => renderToStaticMarkup(<BillingPanel view={view} />);
 

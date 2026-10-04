@@ -1,41 +1,118 @@
 import 'server-only';
 import type { SubscriptionStatus } from '@paddle/paddle-node-sdk';
 import { createServiceRoleClient } from '@/server/db/service-role-client';
-import type { Tables } from '@/lib/supabase/database.types';
+import type { Json } from '@/lib/supabase/database.types';
 
 /**
- * Service-role data access for the commercial tables: customers and subscriptions (as Paddle's events left them),
- * entitlements, customer_access, github_links, licences and licence_failures. It runs server-side, from the
+ * Service-role data access for the commercial tables: customers and subscriptions (as Paddle's events left them), the
+ * payment ledger (payments, payment_adjustments), each customer's derived state (active_subscriptions,
+ * vested_entitlements), github_links, licences and licence_failures. It runs server-side, from the
  * webhook, reconcile and account-linking paths (src/server/billing), and bypasses RLS with the service-role key. Only
  * the modules in src/server/db query the database (eslint.config.mjs); this one maps these tables' rows to the types
  * below in one place.
  */
 
-export type EntitlementStatus = 'active' | 'grace' | 'revoked';
+// The records the access and entitlement rules (src/server/billing/entitlement-policy.ts) read and compute. They are
+// declared here, with the tables they map to, since the billing layer imports this one and not the other way round.
+
+export type PaymentStatus = 'paid' | 'partially_refunded' | 'refunded' | 'charged_back';
+
+/** A completed Paddle transaction for a billing period of a Pro subscription (`payments`). */
+export interface Payment {
+  transactionId: string;
+  subscriptionId: string;
+  billingInterval: string;
+  billingFrequency: number;
+  periodStartsAt: Date;
+  periodEndsAt: Date;
+  /** `details.totals.total`, in the currency's lowest unit: zero when the period was fully discounted. */
+  total: number;
+}
+
+/** A Paddle adjustment to one of the customer's transactions (`payment_adjustments`). */
+export interface PaymentAdjustment {
+  adjustmentId: string;
+  transactionId: string;
+  /** Paddle's action: refund, credit, chargeback, chargeback_warning, or a *_reverse. */
+  action: string;
+  /** full or partial. */
+  type: string;
+  /** Its items' types (full, partial, tax, proration). */
+  itemTypes: string[];
+  /** Paddle's status: pending_approval, approved, rejected or reversed. */
+  status: string;
+  approvedAt: Date | null;
+  reversedAt: Date | null;
+}
+
+/** One of the customer's subscriptions, as its newest Paddle event left it (`subscriptions`). */
+export interface SubscriptionState {
+  subscriptionId: string;
+  productId: string | null;
+  /** Paddle's status: active, trialing, past_due, paused or canceled. */
+  status: string;
+  /** When it first became past due, while it is (record_subscription_event keeps the first). */
+  graceStartedAt: Date | null;
+  /** When it ended, if it is cancelled or paused. */
+  endedAt: Date | null;
+}
+
+export type AccessStatus = 'active' | 'grace' | 'lapsed';
+
+export interface Access {
+  status: AccessStatus;
+  /** While in grace: when it ends unless a payment recovers (the latest of the past-due subscriptions' ends). */
+  graceEndsAt: Date | null;
+}
+
+export type GrantKind = 'qualifying_run' | 'annual_term';
+export type GrantStatus = 'conditional' | 'confirmed' | 'withdrawn';
+export type WithdrawnReason = 'refund' | 'chargeback' | 'term_not_completed';
+
+/** A row of `vested_entitlements`, keyed by kind and start. */
+export interface Grant {
+  kind: GrantKind;
+  startedAt: Date;
+  vestedThrough: Date;
+  status: GrantStatus;
+  confirmedAt: Date | null;
+  /** The annual payment, for an annual term. */
+  transactionId: string | null;
+  withdrawnReason: WithdrawnReason | null;
+}
+
+/** The current run: its start, how far it is paid, and when it reaches (or reached) 12 months. */
+export interface CurrentRun {
+  startedAt: Date;
+  paidThrough: Date;
+  monthsPaid: number;
+  vestsAt: Date;
+}
+
+export interface Entitlement {
+  access: Access;
+  /** The current run, or null when the customer has no access or no paid period continues to now. */
+  run: CurrentRun | null;
+  /** The term end of an annual grant not yet confirmed. */
+  conditionalThrough: Date | null;
+  /** The latest confirmed grant's date, or null if none. */
+  vestedThrough: Date | null;
+  grants: Grant[];
+  /** Each payment's status now. */
+  paymentStatuses: Record<string, PaymentStatus>;
+}
 
 /**
- * Where the customer's GitHub access stands (`customer_access.github_state`): no grant attempted, an org
+ * Where the customer's GitHub access stands (`active_subscriptions.github_state`): no grant attempted, an org
  * invitation pending since `githubInvitedAt`, a member of the team, or the last grant attempt failed.
  */
 export type GithubState = 'none' | 'invited' | 'active' | 'failed';
 
+/** The customer's recorded access and GitHub state (`active_subscriptions`). */
 export interface CustomerAccessRecord {
-  status: EntitlementStatus;
+  status: AccessStatus;
   githubState: GithubState;
   githubInvitedAt: Date | null;
-}
-
-/**
- * A subscription's entitlement, as Paddle's events left it. GitHub access and the licence are per customer (see
- * customer-access.ts).
- */
-export interface EntitlementRecord {
-  customerId: string;
-  subscriptionId: string;
-  status: EntitlementStatus;
-  currentPeriodEndsAt: Date | null;
-  /** When the subscription became past due; set exactly while the status is 'grace' (see access-policy.ts). */
-  graceStartedAt: Date | null;
 }
 
 /** Returns the customer's email (populated by Paddle customer webhooks), or null if unknown. */
@@ -89,6 +166,10 @@ export interface SubscriptionEvent {
   /** When a scheduled change takes effect, and what it is (cancel, pause or resume); null when none is scheduled. */
   scheduledChangeAt: string | null;
   scheduledChangeAction: string | null;
+  /** The end of its current billing period, if it has one. */
+  currentPeriodEndsAt: string | null;
+  /** When it ended, if it is cancelled or paused (paddle-assumptions.ts: subscriptionEndedAt). */
+  endedAt: string | null;
   occurredAt: string;
 }
 
@@ -108,6 +189,8 @@ export async function recordSubscriptionEvent(event: SubscriptionEvent): Promise
     // The function takes null for no scheduled change; generated argument types are never nullable.
     p_scheduled_change_at: event.scheduledChangeAt as string,
     p_scheduled_change_action: event.scheduledChangeAction as string,
+    p_current_period_ends_at: event.currentPeriodEndsAt as string,
+    p_ended_at: event.endedAt as string,
     p_occurred_at: event.occurredAt,
   });
 
@@ -177,94 +260,12 @@ export async function setGithubLogin(customerId: string, login: string): Promise
   if (error) throw error;
 }
 
-/** Inserts or updates the entitlement for a subscription (idempotent on subscription_id). */
-export async function upsertEntitlement(record: EntitlementRecord): Promise<void> {
-  const supabase = createServiceRoleClient();
-  const now = new Date().toISOString();
-
-  const { error } = await supabase.from('entitlements').upsert(
-    {
-      customer_id: record.customerId,
-      subscription_id: record.subscriptionId,
-      status: record.status,
-      current_period_ends_at: record.currentPeriodEndsAt?.toISOString() ?? null,
-      grace_started_at: record.graceStartedAt?.toISOString() ?? null,
-      revoked_at: record.status === 'revoked' ? now : null,
-      updated_at: now,
-    },
-    { onConflict: 'subscription_id' },
-  );
-
-  if (error) throw error;
-}
-
-const ENTITLEMENT_COLUMNS = 'customer_id,subscription_id,status,current_period_ends_at,grace_started_at';
-
-/** Returns all of a customer's entitlements, one per subscription. */
-export async function listEntitlements(customerId: string): Promise<EntitlementRecord[]> {
-  const supabase = createServiceRoleClient();
-  const { data, error } = await supabase.from('entitlements').select(ENTITLEMENT_COLUMNS).eq('customer_id', customerId);
-
-  if (error) throw error;
-
-  return (data ?? []).map(toEntitlement);
-}
-
-/** Returns a subscription's entitlement, or null if none is recorded. */
-export async function getEntitlement(subscriptionId: string): Promise<EntitlementRecord | null> {
-  const supabase = createServiceRoleClient();
-  const { data, error } = await supabase
-    .from('entitlements')
-    .select(ENTITLEMENT_COLUMNS)
-    .eq('subscription_id', subscriptionId)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  return data ? toEntitlement(data) : null;
-}
-
-type EntitlementRow = Pick<
-  Tables<'entitlements'>,
-  'customer_id' | 'subscription_id' | 'status' | 'current_period_ends_at' | 'grace_started_at'
->;
-
-function toEntitlement(row: EntitlementRow): EntitlementRecord {
-  const date = (value: string | null) => (value ? new Date(value) : null);
-
-  return {
-    customerId: row.customer_id,
-    subscriptionId: row.subscription_id,
-    // entitlements_status_check allows only these.
-    status: row.status as EntitlementStatus,
-    currentPeriodEndsAt: date(row.current_period_ends_at),
-    graceStartedAt: date(row.grace_started_at),
-  };
-}
-
-/**
- * Records the customer's access (derived from all their entitlements) and returns the status it replaced,
- * 'revoked' for a customer seen for the first time. Ending access also resets the GitHub state to 'none'.
- */
-export async function setCustomerAccess(customerId: string, status: EntitlementStatus): Promise<EntitlementStatus> {
-  const supabase = createServiceRoleClient();
-  const { data, error } = await supabase.rpc('set_customer_access', {
-    p_customer_id: customerId,
-    p_status: status,
-  });
-
-  if (error) throw error;
-
-  // set_customer_access returns customer_access.status, which customer_access_status_check limits to these.
-  return data as EntitlementStatus;
-}
-
-/** The customer's recorded access, or null for a customer never seen by syncCustomerAccess. */
+/** The customer's recorded access, or null for a customer never seen by syncCustomer. */
 export async function getCustomerAccess(customerId: string): Promise<CustomerAccessRecord | null> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
-    .from('customer_access')
-    .select('status,github_state,github_invited_at')
+    .from('active_subscriptions')
+    .select('access_status,github_state,github_invited_at')
     .eq('customer_id', customerId)
     .maybeSingle();
 
@@ -272,8 +273,8 @@ export async function getCustomerAccess(customerId: string): Promise<CustomerAcc
 
   return data
     ? {
-        // customer_access's check constraints allow only these.
-        status: data.status as EntitlementStatus,
+        // active_subscriptions' check constraints allow only these.
+        status: data.access_status as AccessStatus,
         githubState: data.github_state as GithubState,
         githubInvitedAt: data.github_invited_at ? new Date(data.github_invited_at) : null,
       }
@@ -284,7 +285,7 @@ export async function getCustomerAccess(customerId: string): Promise<CustomerAcc
 export async function resetGithubState(customerId: string): Promise<void> {
   const supabase = createServiceRoleClient();
   const { error } = await supabase
-    .from('customer_access')
+    .from('active_subscriptions')
     .update({ github_state: 'none', github_invited_at: null, updated_at: new Date().toISOString() })
     .eq('customer_id', customerId);
 
@@ -299,22 +300,21 @@ export async function setGithubState(customerId: string, state: Exclude<GithubSt
   const supabase = createServiceRoleClient();
   const now = new Date().toISOString();
   const { error } = await supabase
-    .from('customer_access')
+    .from('active_subscriptions')
     .update({ github_state: state, github_invited_at: state === 'invited' ? now : null, updated_at: now })
     .eq('customer_id', customerId)
-    .in('status', ['active', 'grace']);
+    .in('access_status', ['active', 'grace']);
 
   if (error) throw error;
 }
 
-/** Whether the customer has a licence that is not revoked. */
-export async function hasLiveLicence(customerId: string): Promise<boolean> {
+/** Whether the customer has been issued a licence. Licences are kept for good, so one is enough. */
+export async function hasLicence(customerId: string): Promise<boolean> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('licences')
     .select('id')
     .eq('customer_id', customerId)
-    .eq('revoked', false)
     .limit(1)
     .maybeSingle();
 
@@ -332,23 +332,10 @@ export async function recordLicence(params: { customerId: string; jwt: string })
   if (error) throw error;
 }
 
-/** Marks all of a customer's licences as revoked, when their access ends. */
-export async function revokeLicences(customerId: string): Promise<void> {
-  const supabase = createServiceRoleClient();
-
-  const { error } = await supabase
-    .from('licences')
-    .update({ revoked: true })
-    .eq('customer_id', customerId)
-    .eq('revoked', false);
-
-  if (error) throw error;
-}
-
 /**
- * Everyone whose access, GitHub membership or licences might need correcting: entitled (by recorded access or by
- * a subscription), linked to GitHub, or holding a live licence. One array, so the API's row limit cannot leave
- * anyone out.
+ * Everyone whose access, GitHub membership, licence or entitlement might need correcting: entitled (by recorded access
+ * or by a subscription), linked to GitHub, with a failing licence, in a current run, or holding an annual grant not yet
+ * confirmed. One array, so the API's row limit cannot leave anyone out.
  */
 export async function customersToReconcile(): Promise<string[]> {
   const supabase = createServiceRoleClient();
@@ -381,4 +368,193 @@ export async function clearLicenceFailure(customerId: string): Promise<void> {
   const { error } = await supabase.from('licence_failures').delete().eq('customer_id', customerId);
 
   if (error) throw error;
+}
+
+/** A completed Pro transaction, as its transaction.completed event describes it (`record_payment`). */
+export interface PaymentEvent {
+  transactionId: string;
+  customerId: string;
+  subscriptionId: string;
+  origin: string;
+  priceId: string;
+  billingInterval: string;
+  billingFrequency: number;
+  periodStartsAt: string;
+  periodEndsAt: string;
+  /** details.totals, in the currency's lowest unit. */
+  subtotal: number;
+  discount: number;
+  total: number;
+  currencyCode: string;
+  occurredAt: string;
+}
+
+/**
+ * Records a completed transaction's payment, unless a newer event for it has been applied (`record_payment`). Returns
+ * whether it was applied. Throws a foreign-key error if the customer has not been recorded yet.
+ */
+export async function recordPayment(event: PaymentEvent): Promise<boolean> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.rpc('record_payment', {
+    p_transaction_id: event.transactionId,
+    p_customer_id: event.customerId,
+    p_subscription_id: event.subscriptionId,
+    p_origin: event.origin,
+    p_price_id: event.priceId,
+    p_billing_interval: event.billingInterval,
+    p_billing_frequency: event.billingFrequency,
+    p_period_starts_at: event.periodStartsAt,
+    p_period_ends_at: event.periodEndsAt,
+    p_subtotal: event.subtotal,
+    p_discount: event.discount,
+    p_total: event.total,
+    p_currency_code: event.currencyCode,
+    p_occurred_at: event.occurredAt,
+  });
+
+  if (error) throw error;
+
+  return data === true;
+}
+
+/** An adjustment, as one of its adjustment.created or adjustment.updated events describes it. */
+export interface PaymentAdjustmentEvent {
+  adjustmentId: string;
+  transactionId: string;
+  customerId: string;
+  subscriptionId: string | null;
+  action: string;
+  type: string;
+  itemTypes: string[];
+  status: string;
+  /** Paddle's created_at and updated_at on the adjustment. */
+  createdAt: string;
+  updatedAt: string;
+  occurredAt: string;
+}
+
+/**
+ * Records an adjustment as of one of its events, unless a newer one has been applied (`record_payment_adjustment`).
+ * Returns whether anything changed. Throws a foreign-key error if the customer has not been recorded yet.
+ */
+export async function recordPaymentAdjustment(event: PaymentAdjustmentEvent): Promise<boolean> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.rpc('record_payment_adjustment', {
+    p_adjustment_id: event.adjustmentId,
+    p_transaction_id: event.transactionId,
+    p_customer_id: event.customerId,
+    // The function takes null for no subscription; generated argument types are never nullable.
+    p_subscription_id: event.subscriptionId as string,
+    p_action: event.action,
+    p_type: event.type,
+    p_item_types: event.itemTypes,
+    p_status: event.status,
+    p_created_at: event.createdAt,
+    p_updated_at: event.updatedAt,
+    p_occurred_at: event.occurredAt,
+  });
+
+  if (error) throw error;
+
+  return data === true;
+}
+
+/** The customer's recorded payments, as the entitlement rules read them. */
+export async function listPayments(customerId: string): Promise<Payment[]> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('payments')
+    .select('transaction_id,subscription_id,billing_interval,billing_frequency,period_starts_at,period_ends_at,total')
+    .eq('customer_id', customerId);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    transactionId: row.transaction_id,
+    subscriptionId: row.subscription_id,
+    billingInterval: row.billing_interval,
+    billingFrequency: row.billing_frequency,
+    periodStartsAt: new Date(row.period_starts_at),
+    periodEndsAt: new Date(row.period_ends_at),
+    total: Number(row.total),
+  }));
+}
+
+/** The adjustments recorded on the customer's transactions. */
+export async function listPaymentAdjustments(customerId: string): Promise<PaymentAdjustment[]> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('payment_adjustments')
+    .select('adjustment_id,transaction_id,action,type,item_types,status,approved_at,reversed_at')
+    .eq('customer_id', customerId);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    adjustmentId: row.adjustment_id,
+    transactionId: row.transaction_id,
+    action: row.action,
+    type: row.type,
+    itemTypes: row.item_types,
+    status: row.status,
+    approvedAt: row.approved_at ? new Date(row.approved_at) : null,
+    reversedAt: row.reversed_at ? new Date(row.reversed_at) : null,
+  }));
+}
+
+/** The customer's subscriptions, as the access and entitlement rules read them. */
+export async function listSubscriptions(customerId: string): Promise<SubscriptionState[]> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('subscription_id,product_id,status,grace_started_at,ended_at')
+    .eq('customer_id', customerId);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    subscriptionId: row.subscription_id,
+    productId: row.product_id,
+    status: row.status,
+    graceStartedAt: row.grace_started_at ? new Date(row.grace_started_at) : null,
+    endedAt: row.ended_at ? new Date(row.ended_at) : null,
+  }));
+}
+
+/**
+ * Stores the customer's derived state in one transaction (`set_customer_entitlement`): their access and current run
+ * (active_subscriptions), their computed grants (vested_entitlements) and each payment's status. Returns the access
+ * status it replaced, 'lapsed' for a customer seen for the first time; ending access also resets the GitHub state.
+ */
+export async function saveCustomerState(customerId: string, entitlement: Entitlement): Promise<AccessStatus> {
+  const supabase = createServiceRoleClient();
+  const time = (value: Date | null | undefined) => value?.toISOString() ?? null;
+  const { run } = entitlement;
+
+  const { data, error } = await supabase.rpc('set_customer_entitlement', {
+    p_customer_id: customerId,
+    p_state: {
+      access_status: entitlement.access.status,
+      run_started_at: time(run?.startedAt),
+      paid_through: time(run?.paidThrough),
+      months_paid: run?.monthsPaid ?? 0,
+      vests_at: time(run?.vestsAt),
+      conditional_through: time(entitlement.conditionalThrough),
+    },
+    p_grants: entitlement.grants.map((grant) => ({
+      kind: grant.kind,
+      started_at: grant.startedAt.toISOString(),
+      vested_through: grant.vestedThrough.toISOString(),
+      status: grant.status,
+      confirmed_at: time(grant.confirmedAt),
+      transaction_id: grant.transactionId,
+      withdrawn_reason: grant.withdrawnReason,
+    })) satisfies Json,
+    p_payment_statuses: entitlement.paymentStatuses satisfies Record<string, PaymentStatus> as Json,
+  });
+
+  if (error) throw error;
+
+  // set_customer_entitlement returns active_subscriptions.access_status, which its check constraint limits to these.
+  return data as AccessStatus;
 }

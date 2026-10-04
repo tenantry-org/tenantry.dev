@@ -2,8 +2,9 @@ import { Webhooks } from '@paddle/paddle-node-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaddleEventJson } from '@/server/db/customer-jobs';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
-import { adjustmentEvent, customerEvent, subscriptionEvent } from '@/test/paddle-events';
+import { adjustmentEvent, customerEvent, subscriptionEvent, transactionEvent } from '@/test/paddle-events';
 import { memory } from '@/test/memory-billing-store';
+import { syncCustomer } from './customer-access';
 import { applyPaddleEvent } from './apply-paddle-event';
 
 // The in-memory store applies a subscription or customer event unless a newer one was applied already, as the
@@ -53,14 +54,14 @@ describe('applyPaddleEvent', () => {
     await applyPaddleEvent(delivered(cancelled), deps);
 
     expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
+    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
     vi.clearAllMocks();
 
     await applyPaddleEvent(delivered(earlierUpdate), deps);
 
-    expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
-    expect(memory.liveLicences('ctm_01')).toEqual([]);
+    expect(memory.state.subscriptions.get('sub_01')?.status).toBe('canceled');
+    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
+    expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(deps.github.grantAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
@@ -79,8 +80,7 @@ describe('applyPaddleEvent', () => {
     );
 
     expect(memory.state.subscriptions.get('sub_01')).toBeDefined();
-    expect(memory.state.entitlements.size).toBe(0);
-    expect(memory.state.access.size).toBe(0);
+    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
     expect(deps.github.grantAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
@@ -97,10 +97,9 @@ describe('applyPaddleEvent', () => {
     });
     await applyPaddleEvent(delivered(movedAway), deps);
 
-    expect(memory.state.entitlements.get('sub_01')).toMatchObject({ status: 'revoked', graceStartedAt: null });
-    expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
+    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
     expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.liveLicences('ctm_01')).toEqual([]);
+    expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(emailSubjects()).toEqual([ENDED]);
     vi.clearAllMocks();
 
@@ -118,7 +117,7 @@ describe('applyPaddleEvent', () => {
       deps,
     );
 
-    expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
+    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
     expect(deps.github.revokeAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
@@ -151,7 +150,7 @@ describe('applyPaddleEvent', () => {
       deps,
     );
 
-    expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
+    expect(memory.state.subscriptions.get('sub_01')?.productId).toBe('pro_02');
     expect(memory.state.access.get('ctm_01')?.status).toBe('active');
     expect(deps.github.revokeAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
@@ -218,15 +217,15 @@ describe('applyPaddleEvent', () => {
     });
   });
 
-  it('applies the same events in order: access granted, then revoked', async () => {
+  it('applies the same events in order: access granted, then ended', async () => {
     await applyPaddleEvent(delivered(earlierUpdate), deps);
     expect(deps.github.grantAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.liveLicences('ctm_01')).toHaveLength(1);
+    expect(memory.licences('ctm_01')).toHaveLength(1);
 
     await applyPaddleEvent(delivered(cancelled), deps);
     expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
-    expect(memory.liveLicences('ctm_01')).toEqual([]);
+    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
+    expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(emailSubjects()).toEqual([WELCOME, ENDED]);
   });
 
@@ -253,7 +252,7 @@ describe('applyPaddleEvent', () => {
 
     await applyPaddleEvent(delivered(cancelled), deps);
 
-    expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
+    expect(memory.state.subscriptions.get('sub_01')?.status).toBe('canceled');
     expect(memory.state.access.get('ctm_01')).toEqual({
       status: 'active',
       githubState: 'active',
@@ -261,7 +260,7 @@ describe('applyPaddleEvent', () => {
     });
     expect(deps.github.revokeAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
-    expect(memory.liveLicences('ctm_01')).toHaveLength(1);
+    expect(memory.licences('ctm_01')).toHaveLength(1);
 
     // Access ends with the last subscription.
     await applyPaddleEvent(
@@ -279,11 +278,11 @@ describe('applyPaddleEvent', () => {
 
     expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
     expect(memory.state.access.get('ctm_01')).toEqual({
-      status: 'revoked',
+      status: 'lapsed',
       githubState: 'none',
       githubInvitedAt: null,
     });
-    expect(memory.liveLicences('ctm_01')).toEqual([]);
+    expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(emailSubjects()).toEqual([ENDED]);
   });
 
@@ -291,7 +290,7 @@ describe('applyPaddleEvent', () => {
     memory.state.emails.delete('ctm_01');
 
     await expect(applyPaddleEvent(delivered(earlierUpdate), deps)).rejects.toMatchObject({ code: '23503' });
-    expect(memory.state.entitlements.size).toBe(0);
+    expect(memory.state.subscriptions.size).toBe(0);
     expect(deps.github.grantAccess).not.toHaveBeenCalled();
   });
 
@@ -323,15 +322,16 @@ describe('applyPaddleEvent', () => {
       await applyPaddleEvent(delivered(created), deps);
       await applyPaddleEvent(delivered(renewalFailed), deps);
 
-      expect(memory.state.entitlements.get('sub_01')).toMatchObject({
-        status: 'grace',
-        graceStartedAt: new Date('2026-10-01T00:05:00Z'),
+      expect(memory.state.subscriptions.get('sub_01')).toMatchObject({
+        status: 'past_due',
+        graceStartedAt: '2026-10-01T00:05:00Z',
       });
-      expect(memory.liveLicences('ctm_01')).toHaveLength(1);
+      expect(memory.state.access.get('ctm_01')?.status).toBe('grace');
+      expect(memory.licences('ctm_01')).toHaveLength(1);
 
       vi.setSystemTime(new Date('2026-10-08T00:10:00Z'));
       await applyPaddleEvent(delivered(retryFailed), deps);
-      expect(memory.state.entitlements.get('sub_01')?.graceStartedAt).toEqual(new Date('2026-10-01T00:05:00Z'));
+      expect(memory.state.subscriptions.get('sub_01')?.graceStartedAt).toBe('2026-10-01T00:05:00Z');
 
       await applyPaddleEvent(
         delivered(
@@ -344,7 +344,7 @@ describe('applyPaddleEvent', () => {
         ),
         deps,
       );
-      expect(memory.state.entitlements.get('sub_01')).toMatchObject({ status: 'active', graceStartedAt: null });
+      expect(memory.state.subscriptions.get('sub_01')).toMatchObject({ status: 'active', graceStartedAt: null });
       expect(memory.state.access.get('ctm_01')?.status).toBe('active');
       expect(deps.github.revokeAccess).not.toHaveBeenCalled();
     });
@@ -366,7 +366,7 @@ describe('applyPaddleEvent', () => {
         deps,
       );
 
-      expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
+      expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
       expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
     });
   });
@@ -451,6 +451,177 @@ describe('applyPaddleEvent', () => {
       await expect(adjusted({ eventId: 'evt_down', action: 'refund', status: 'approved' })).rejects.toThrow(
         'Paddle unavailable',
       );
+    });
+  });
+
+  describe('payments and perpetual entitlement', () => {
+    // Monthly renewals of sub_01 from January 2027, each delivered when its period starts.
+    const renewal = (month: number, extra: Partial<Parameters<typeof transactionEvent>[0]> = {}) => {
+      const startsAt = new Date(Date.UTC(2027, month, 1)).toISOString();
+      const endsAt = new Date(Date.UTC(2027, month + 1, 1)).toISOString();
+      return transactionEvent({
+        eventId: `evt_txn_${month}`,
+        transactionId: `txn_${month}`,
+        occurredAt: startsAt,
+        origin: month === 0 ? 'web' : 'subscription_recurring',
+        period: { startsAt, endsAt },
+        ...extra,
+      });
+    };
+    const year = Array.from({ length: 12 }, (_, month) => renewal(month));
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('records each completed Pro payment with its period, amounts and origin', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+
+      await applyPaddleEvent(delivered(year[0]), deps);
+
+      expect(memory.state.payments.get('txn_0')).toEqual({
+        transactionId: 'txn_0',
+        customerId: 'ctm_01',
+        subscriptionId: 'sub_01',
+        origin: 'web',
+        priceId: 'pri_01month',
+        billingInterval: 'month',
+        billingFrequency: 1,
+        periodStartsAt: '2027-01-01T00:00:00.000Z',
+        periodEndsAt: '2027-02-01T00:00:00.000Z',
+        subtotal: 3900,
+        discount: 0,
+        total: 3900,
+        currencyCode: 'GBP',
+        occurredAt: '2027-01-01T00:00:00.000Z',
+        status: 'paid',
+      });
+      // No access recorded yet (the subscription event follows), so no current run is shown, but the payment counts.
+      expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({ run: null, vestedThrough: null });
+    });
+
+    it('vests after 12 paid months, as the reconcile after the 12th month finds, however the events were delivered', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      await applyPaddleEvent(delivered(created), deps);
+      // Delivered in reverse, each twice: the ledger is the same.
+      for (const event of [...year].reverse()) {
+        await applyPaddleEvent(delivered(event), deps);
+        await applyPaddleEvent(delivered(event), deps);
+      }
+
+      vi.setSystemTime(new Date('2027-12-31T23:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+      expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({
+        vestedThrough: null,
+        run: { startedAt: new Date('2027-01-01T00:00:00Z'), monthsPaid: 12 },
+      });
+
+      vi.setSystemTime(new Date('2028-01-01T04:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toEqual(new Date('2028-01-01T00:00:00Z'));
+      expect(memory.state.payments.size).toBe(12);
+    });
+
+    it('ignores a transaction with no billing period, no subscription or another product', async () => {
+      for (const event of [
+        transactionEvent({ eventId: 'evt_once', period: null }),
+        transactionEvent({ eventId: 'evt_nosub', subscriptionId: null }),
+        transactionEvent({ eventId: 'evt_other', productId: 'pro_02' }),
+      ]) {
+        await applyPaddleEvent(delivered(event), deps);
+      }
+
+      expect(memory.state.payments.size).toBe(0);
+      expect(memory.state.entitlementStates.size).toBe(0);
+    });
+
+    it('fails a payment whose customer is not recorded yet, so the worker retries it', async () => {
+      memory.state.emails.clear();
+
+      await expect(applyPaddleEvent(delivered(year[0]), deps)).rejects.toMatchObject({ code: '23503' });
+    });
+
+    it('records an annual payment as a conditional grant to the end of its term', async () => {
+      vi.setSystemTime(new Date('2027-03-01T00:10:00Z'));
+
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_annual',
+            transactionId: 'txn_annual',
+            interval: 'year',
+            origin: 'web',
+            period: { startsAt: '2027-03-01T00:00:00Z', endsAt: '2028-03-01T00:00:00Z' },
+          }),
+        ),
+        deps,
+      );
+
+      expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({
+        conditionalThrough: new Date('2028-03-01T00:00:00Z'),
+        vestedThrough: null,
+      });
+    });
+
+    it('records refunds and chargebacks and recomputes: a refunded month no longer counts', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      for (const event of year) await applyPaddleEvent(delivered(event), deps);
+
+      // A full refund of March, created pending and approved later; delivered approved first.
+      const approved = adjustmentEvent({
+        eventId: 'evt_refund_approved',
+        action: 'refund',
+        status: 'approved',
+        transactionId: 'txn_2',
+        createdAt: '2027-03-05T00:00:00Z',
+        occurredAt: '2027-03-08T00:00:00Z',
+      });
+      const pending = adjustmentEvent({
+        eventId: 'evt_refund_pending',
+        eventType: 'adjustment.created',
+        action: 'refund',
+        status: 'pending_approval',
+        transactionId: 'txn_2',
+        occurredAt: '2027-03-05T00:00:00Z',
+      });
+      // Both events describe one adjustment.
+      (pending.data as { id: string }).id = (approved.data as { id: string }).id;
+      vi.setSystemTime(new Date('2027-03-10T00:00:00Z'));
+      await applyPaddleEvent(delivered(approved), deps);
+      await applyPaddleEvent(delivered(pending), deps);
+
+      const [adjustment] = memory.state.adjustments.values();
+      expect(adjustment).toMatchObject({ status: 'approved', approvedAt: '2027-03-08T00:00:00Z' });
+      expect(memory.state.payments.get('txn_2')?.status).toBe('refunded');
+
+      vi.setSystemTime(new Date('2028-01-02T00:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toBeNull();
+    });
+
+    it('records the time a cancelled subscription ended, which ends its last period', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      await applyPaddleEvent(delivered(created), deps);
+      await applyPaddleEvent(delivered(year[0]), deps);
+
+      await applyPaddleEvent(
+        delivered(
+          subscriptionEvent({
+            eventId: 'evt_cancelled_2027',
+            eventType: 'subscription.canceled',
+            occurredAt: '2027-01-10T00:00:00Z',
+            status: 'canceled',
+          }),
+        ),
+        deps,
+      );
+
+      expect(memory.state.subscriptions.get('sub_01')?.endedAt).toBe('2027-01-10T00:00:00Z');
+      expect(memory.state.entitlementStates.get('ctm_01')?.run).toBeNull();
     });
   });
 });

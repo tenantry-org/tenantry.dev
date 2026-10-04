@@ -17,10 +17,11 @@ purchase → entitlement → access pipeline for **Tenantry Pro**.
 ## Architecture
 
 ```
-Paddle (merchant of record) ──webhook──▶ /api/webhook ──▶ entitlements + licence + GitHub grant
+Paddle (merchant of record) ──webhook──▶ /api/webhook ──▶ subscriptions + payments ─▶ access, entitlement,
+                                                              licence + GitHub grant
                                                               (Supabase, service role)
 customer ─▶ /dashboard/pro ─▶ Connect GitHub ─▶ github_links + team membership ─▶ private package feed
-cron ─▶ /api/reconcile ─▶ reconcile access vs entitlements
+cron ─▶ /api/reconcile ─▶ recompute access and entitlement, retry what failed
 ```
 
 The package feed is GitHub Packages, reached through membership of a team in the customers' GitHub org. The
@@ -30,9 +31,10 @@ while they subscribed.
 
 Key code is in `src/server`, in layers whose imports point only down this list (ESLint enforces it):
 
-- `billing/` — the rules and services: who is entitled, and until when (`access-policy.ts`); keeping a customer's
-  access, GitHub membership, licence and emails in line with their entitlements (`customer-access.ts`); applying
-  Paddle's notifications (`apply-paddle-event.ts`); linking a GitHub account (`sync-github-link.ts`); the reconcile
+- `billing/` — the rules and services: what a customer may access now and owns for good, computed from their
+  subscriptions and payments (`entitlement-policy.ts`, with the Paddle behaviour it assumes in
+  `paddle-assumptions.ts`); storing that and keeping their GitHub membership, licence and emails in line with it
+  (`customer-access.ts`); applying Paddle's notifications (`apply-paddle-event.ts`); linking a GitHub account (`sync-github-link.ts`); the reconcile
   run; and the Pro pages' read models, one per page, each reading only what its page shows (`pro-pages.ts`).
 - `jobs/` — the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order, and
   the per-customer leases.
@@ -50,7 +52,7 @@ their last argument (`billing/deps.ts`), defaulting to the real modules, so thei
 and fakes instead of replacing modules; the read models are tested against a fake Supabase client. `src/lib` holds
 helpers for both sides, and `src/test` the fakes the tests share.
 
-The database schema, with its RLS policies and functions, is one file,
+The database schema, with its RLS policies and functions, starts with
 `supabase/migrations/20261002120000_baseline.sql`; later changes are migrations after it. Their tests are in
 `supabase/tests/database/`.
 

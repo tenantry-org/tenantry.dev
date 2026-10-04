@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EntitlementRecord } from '@/server/db/billing-store';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
 import { memory } from '@/test/memory-billing-store';
 import { testServerConfig } from '@/test/server-config';
-import { grantAndRecord, syncCustomerAccess } from './customer-access';
+import { grantAndRecord, syncCustomer } from './customer-access';
 
 let deps: FakeBillingDeps;
 
@@ -18,26 +17,23 @@ const OCTOBER = new Date('2026-10-01T00:00:00Z');
 const NOVEMBER = new Date('2026-11-01T00:00:00Z');
 const DECEMBER = new Date('2026-12-01T00:00:00Z');
 
-function entitlement(overrides: Partial<EntitlementRecord> = {}): EntitlementRecord {
-  return {
-    customerId: 'ctm_1',
-    subscriptionId: 'sub_1',
-    status: 'active',
-    currentPeriodEndsAt: OCTOBER,
-    graceStartedAt: null,
-    ...overrides,
-  };
+/** A subscription of ctm_1 as Paddle's newest event left it (status is Paddle's); its period does not matter here. */
+interface SubscriptionChange {
+  subscriptionId?: string;
+  status?: string;
+  graceStartedAt?: Date;
+  currentPeriodEndsAt?: Date;
 }
 
-/** Records an entitlement change and syncs the customer, as applying a Paddle event does; returns the change. */
-async function entitle(overrides: Partial<EntitlementRecord> = {}) {
-  await memory.store.upsertEntitlement(entitlement(overrides));
-  return (await syncCustomerAccess('ctm_1', deps)).change;
+/** Records a subscription change and syncs the customer, as applying a Paddle event does; returns the change. */
+async function entitle({ subscriptionId, status, graceStartedAt }: SubscriptionChange = {}) {
+  memory.subscribe('ctm_1', { subscriptionId, status, graceStartedAt });
+  return (await syncCustomer('ctm_1', deps)).change;
 }
 
 /** Syncs the customer with no new event, as reconcile does; returns what happened to the licence. */
 async function reconcileLicence() {
-  return (await syncCustomerAccess('ctm_1', deps)).licence;
+  return (await syncCustomer('ctm_1', deps)).licence;
 }
 
 function emailSubjects(): string[] {
@@ -51,7 +47,7 @@ function emailLinks(): string[] {
   );
 }
 
-describe('syncCustomerAccess', () => {
+describe('syncCustomer', () => {
   it('grants access, issues a licence and welcomes the customer when access starts', async () => {
     await expect(entitle()).resolves.toBe('started');
 
@@ -61,7 +57,7 @@ describe('syncCustomerAccess', () => {
       githubState: 'active',
       githubInvitedAt: null,
     });
-    expect(memory.liveLicences('ctm_1')).toHaveLength(1);
+    expect(memory.licences('ctm_1')).toHaveLength(1);
     expect(emailSubjects()).toEqual(['Welcome to Tenantry Pro: connect GitHub to get access']);
     expect(emailLinks()).toEqual(['https://sandbox.example.com/dashboard/pro']);
   });
@@ -70,7 +66,7 @@ describe('syncCustomerAccess', () => {
     await entitle();
     memory.state.githubUsers.set(1, 'octocat-renamed'); // renamed on GitHub; github_links still says octocat
 
-    await expect(entitle({ status: 'revoked' })).resolves.toBe('ended');
+    await expect(entitle({ status: 'canceled' })).resolves.toBe('ended');
 
     expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat-renamed');
     expect(memory.state.githubAccounts.get('ctm_1')).toEqual({ id: 1, login: 'octocat-renamed' });
@@ -86,7 +82,7 @@ describe('syncCustomerAccess', () => {
 
   it('keeps the one licence through repeated events, renewals and other subscriptions: it does not expire', async () => {
     await entitle();
-    const [licence] = memory.liveLicences('ctm_1');
+    const [licence] = memory.licences('ctm_1');
     vi.clearAllMocks();
 
     await expect(entitle()).resolves.toBe('unchanged');
@@ -94,9 +90,9 @@ describe('syncCustomerAccess', () => {
     await entitle({ currentPeriodEndsAt: NOVEMBER });
     await entitle({ subscriptionId: 'sub_2', currentPeriodEndsAt: OCTOBER });
     await entitle({ subscriptionId: 'sub_3', currentPeriodEndsAt: DECEMBER });
-    await expect(entitle({ subscriptionId: 'sub_3', status: 'revoked' })).resolves.toBe('unchanged');
+    await expect(entitle({ subscriptionId: 'sub_3', status: 'canceled' })).resolves.toBe('unchanged');
 
-    expect(memory.liveLicences('ctm_1')).toEqual([licence]);
+    expect(memory.licences('ctm_1')).toEqual([licence]);
     expect(deps.issueLicence).not.toHaveBeenCalled();
     expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'active' });
     expect(deps.github.grantAccess).not.toHaveBeenCalled();
@@ -109,8 +105,8 @@ describe('syncCustomerAccess', () => {
     await entitle({ subscriptionId: 'sub_2' });
     vi.clearAllMocks();
 
-    await expect(entitle({ status: 'grace', graceStartedAt: new Date() })).resolves.toBe('unchanged');
-    await expect(entitle({ subscriptionId: 'sub_2', status: 'revoked' })).resolves.toBe('unchanged');
+    await expect(entitle({ status: 'past_due', graceStartedAt: new Date() })).resolves.toBe('unchanged');
+    await expect(entitle({ subscriptionId: 'sub_2', status: 'canceled' })).resolves.toBe('unchanged');
     expect(memory.state.access.get('ctm_1')).toMatchObject({
       status: 'grace',
       githubState: 'active',
@@ -118,16 +114,17 @@ describe('syncCustomerAccess', () => {
     });
     expect(deps.github.revokeAccess).not.toHaveBeenCalled();
 
-    await expect(entitle({ status: 'revoked' })).resolves.toBe('ended');
+    await expect(entitle({ status: 'canceled' })).resolves.toBe('ended');
     expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', githubState: 'none', githubInvitedAt: null });
-    expect(memory.liveLicences('ctm_1')).toEqual([]);
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'lapsed', githubState: 'none', githubInvitedAt: null });
+    // The key is kept: it does not decide which releases they may use, and they may keep using the vested ones.
+    expect(memory.licences('ctm_1')).toHaveLength(1);
     expect(emailSubjects()).toEqual(['Your Tenantry Pro subscription has ended']);
     expect(emailLinks()).toEqual(['https://sandbox.example.com/#pricing']);
   });
 
   it('does nothing for a customer whose only subscription never entitled them', async () => {
-    await expect(entitle({ status: 'revoked' })).resolves.toBe('unchanged');
+    await expect(entitle({ status: 'canceled' })).resolves.toBe('unchanged');
 
     expect(deps.github.revokeAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
@@ -139,10 +136,10 @@ describe('syncCustomerAccess', () => {
     await expect(entitle()).resolves.toBe('started');
     expect(memory.state.access.get('ctm_1')).toEqual({ status: 'active', githubState: 'none', githubInvitedAt: null });
     expect(deps.github.grantAccess).not.toHaveBeenCalled();
-    expect(memory.liveLicences('ctm_1')).toEqual([]);
+    expect(memory.licences('ctm_1')).toEqual([]);
     expect(deps.sendEmail).not.toHaveBeenCalled();
 
-    await expect(entitle({ status: 'revoked' })).resolves.toBe('ended');
+    await expect(entitle({ status: 'canceled' })).resolves.toBe('ended');
     expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
     expect(emailSubjects()).toEqual(['Your Tenantry Pro subscription has ended']);
   });
@@ -154,7 +151,7 @@ describe('syncCustomerAccess', () => {
 
     expect(deps.github.grantAccess).not.toHaveBeenCalled();
     expect(memory.state.access.get('ctm_1')?.githubState).toBe('none');
-    expect(memory.liveLicences('ctm_1')).toHaveLength(1);
+    expect(memory.licences('ctm_1')).toHaveLength(1);
     expect(deps.sendEmail).toHaveBeenCalledOnce();
   });
 
@@ -164,7 +161,7 @@ describe('syncCustomerAccess', () => {
     await expect(entitle()).resolves.toBe('started');
 
     expect(memory.state.access.get('ctm_1')).toMatchObject({ status: 'active', githubState: 'failed' });
-    expect(memory.liveLicences('ctm_1')).toHaveLength(1);
+    expect(memory.licences('ctm_1')).toHaveLength(1);
     expect(deps.sendEmail).toHaveBeenCalledOnce();
   });
 
@@ -188,13 +185,13 @@ describe('syncCustomerAccess', () => {
     expect(alerts()).toHaveLength(2);
   });
 
-  it('records nothing when reading the entitlements fails, so the event is retried whole', async () => {
-    vi.spyOn(deps.store, 'listEntitlements').mockRejectedValueOnce(new Error('database unavailable'));
+  it('records nothing when reading the subscriptions fails, so the event is retried whole', async () => {
+    vi.spyOn(deps.store, 'listSubscriptions').mockRejectedValueOnce(new Error('database unavailable'));
 
     await expect(entitle()).rejects.toThrow('database unavailable');
     expect(memory.state.access.size).toBe(0);
 
-    await expect(syncCustomerAccess('ctm_1', deps)).resolves.toMatchObject({ change: 'started' });
+    await expect(syncCustomer('ctm_1', deps)).resolves.toMatchObject({ change: 'started' });
     expect(deps.github.grantAccess).toHaveBeenCalledOnce();
   });
 });
@@ -215,7 +212,7 @@ describe('licence issuance failures', () => {
     await expect(entitle()).resolves.toBe('started');
     expect(memory.state.access.get('ctm_1')?.status).toBe('active');
     expect(deps.github.grantAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.liveLicences('ctm_1')).toEqual([]);
+    expect(memory.licences('ctm_1')).toEqual([]);
     expect(memory.state.licenceFailures.get('ctm_1')).toEqual({
       attempts: 1,
       lastError: 'error:1E08010C:DECODER routines::unsupported',
@@ -230,11 +227,11 @@ describe('licence issuance failures', () => {
     // The key is repaired; the next reconcile issues the licence, with no new purchase or event.
     repairSigning();
     await expect(reconcileLicence()).resolves.toBe('issued');
-    expect(memory.liveLicences('ctm_1')).toHaveLength(1);
+    expect(memory.licences('ctm_1')).toHaveLength(1);
     expect(memory.state.licenceFailures.has('ctm_1')).toBe(false);
 
     await expect(reconcileLicence()).resolves.toBe('current');
-    expect(memory.liveLicences('ctm_1')).toHaveLength(1);
+    expect(memory.licences('ctm_1')).toHaveLength(1);
     expect(alerts()).toHaveLength(1);
   });
 
@@ -254,7 +251,7 @@ describe('licence issuance failures', () => {
     expect(memory.state.licenceFailures.size).toBe(0);
   });
 
-  it('alerts again for a new run of failures after a licence was issued', async () => {
+  it('signs nothing for a returning customer, who keeps the licence issued after the first failures', async () => {
     failSigning('signing failed');
     await entitle();
     await reconcileLicence();
@@ -262,13 +259,16 @@ describe('licence issuance failures', () => {
 
     repairSigning();
     await expect(reconcileLicence()).resolves.toBe('issued');
+    const [licence] = memory.licences('ctm_1');
 
-    // The customer leaves and subscribes again; their new licence cannot be issued either.
-    await entitle({ status: 'revoked' });
+    // The customer leaves and subscribes again while signing is broken: they keep their key, so nothing fails.
+    await entitle({ status: 'canceled' });
     failSigning('signing failed');
     await entitle();
 
-    expect(alerts()).toHaveLength(2);
+    expect(memory.licences('ctm_1')).toEqual([licence]);
+    expect(memory.state.licenceFailures.has('ctm_1')).toBe(false);
+    expect(alerts()).toHaveLength(1);
   });
 
   it('alerts even when the failure cannot be recorded', async () => {
@@ -285,7 +285,7 @@ describe('licence issuance failures', () => {
     failSigning('signing failed');
     await entitle();
 
-    await entitle({ status: 'revoked' });
+    await entitle({ status: 'canceled' });
 
     expect(memory.state.licenceFailures.size).toBe(0);
     await expect(reconcileLicence()).resolves.toBeNull();
@@ -305,24 +305,24 @@ describe('grace period', () => {
   });
 
   // The renewal on 1 October fails: Paddle moves the subscription into its next billing period, unpaid.
-  const pastDue = { status: 'grace' as const, graceStartedAt: PAST_DUE, currentPeriodEndsAt: NOVEMBER };
+  const pastDue = { status: 'past_due', graceStartedAt: PAST_DUE, currentPeriodEndsAt: NOVEMBER };
 
   it('keeps access and the licence within grace', async () => {
     await entitle();
-    const [licence] = memory.liveLicences('ctm_1');
+    const [licence] = memory.licences('ctm_1');
     vi.clearAllMocks();
     vi.setSystemTime(PAST_DUE);
 
     await expect(entitle(pastDue)).resolves.toBe('unchanged');
 
     expect(memory.state.access.get('ctm_1')).toEqual({ status: 'grace', githubState: 'active', githubInvitedAt: null });
-    expect(memory.liveLicences('ctm_1')).toEqual([licence]);
+    expect(memory.licences('ctm_1')).toEqual([licence]);
     expect(deps.github.revokeAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
 
     // Reconcile during grace changes nothing.
     vi.setSystemTime(new Date('2026-10-20T00:00:00Z'));
-    await expect(syncCustomerAccess('ctm_1', deps)).resolves.toEqual({ change: 'unchanged', licence: 'current' });
+    await expect(syncCustomer('ctm_1', deps)).resolves.toMatchObject({ change: 'unchanged', licence: 'current' });
   });
 
   it('ends access when grace is over, with no event from Paddle', async () => {
@@ -333,17 +333,17 @@ describe('grace period', () => {
 
     // The daily reconcile after grace has ended.
     vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
-    await expect(syncCustomerAccess('ctm_1', deps)).resolves.toEqual({ change: 'ended', licence: null });
+    await expect(syncCustomer('ctm_1', deps)).resolves.toMatchObject({ change: 'ended', licence: null });
 
     expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'revoked', githubState: 'none', githubInvitedAt: null });
-    expect(memory.liveLicences('ctm_1')).toEqual([]);
+    expect(memory.state.access.get('ctm_1')).toEqual({ status: 'lapsed', githubState: 'none', githubInvitedAt: null });
+    expect(memory.licences('ctm_1')).toHaveLength(1);
     expect(emailSubjects()).toEqual(['Your Tenantry Pro subscription has ended']);
   });
 
   it('restores active access, with the same licence, when the payment is recovered within grace', async () => {
     await entitle();
-    const [licence] = memory.liveLicences('ctm_1');
+    const [licence] = memory.licences('ctm_1');
     vi.setSystemTime(PAST_DUE);
     await entitle(pastDue);
     vi.clearAllMocks();
@@ -352,13 +352,13 @@ describe('grace period', () => {
     await expect(entitle({ status: 'active', currentPeriodEndsAt: NOVEMBER })).resolves.toBe('unchanged');
 
     expect(memory.state.access.get('ctm_1')?.status).toBe('active');
-    expect(memory.liveLicences('ctm_1')).toEqual([licence]);
+    expect(memory.licences('ctm_1')).toEqual([licence]);
     expect(deps.github.revokeAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
 
     // Grace no longer applies: the recovered subscription stays entitled after the old grace end.
     vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
-    await expect(syncCustomerAccess('ctm_1', deps)).resolves.toMatchObject({ change: 'unchanged' });
+    await expect(syncCustomer('ctm_1', deps)).resolves.toMatchObject({ change: 'unchanged' });
   });
 
   it("keeps access through another subscription when one subscription's grace ends", async () => {
@@ -369,19 +369,20 @@ describe('grace period', () => {
     vi.clearAllMocks();
 
     vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
-    await expect(syncCustomerAccess('ctm_1', deps)).resolves.toMatchObject({ change: 'unchanged' });
+    await expect(syncCustomer('ctm_1', deps)).resolves.toMatchObject({ change: 'unchanged' });
 
     expect(memory.state.access.get('ctm_1')?.status).toBe('active');
     expect(deps.github.revokeAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
-  it('starts access again when a payment is recovered after grace ended', async () => {
+  it('starts access again, with the same licence, when a payment is recovered after grace ended', async () => {
     await entitle();
+    const [licence] = memory.licences('ctm_1');
     vi.setSystemTime(PAST_DUE);
     await entitle(pastDue);
     vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
-    await syncCustomerAccess('ctm_1', deps);
+    await syncCustomer('ctm_1', deps);
     vi.clearAllMocks();
 
     vi.setSystemTime(new Date('2026-11-02T00:00:00Z'));
@@ -389,6 +390,7 @@ describe('grace period', () => {
       'started',
     );
     expect(deps.github.grantAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.liveLicences('ctm_1')).toHaveLength(1);
+    expect(memory.licences('ctm_1')).toEqual([licence]);
+    expect(deps.issueLicence).not.toHaveBeenCalled();
   });
 });
