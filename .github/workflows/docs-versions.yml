@@ -3,8 +3,8 @@ name: docs-versions
 # Publishes each release on the site without anyone editing it: works out the docs versions from Core's and Pro's
 # release tags (scripts/docs-versions-update.mjs), and what the site says about the newest release: the .NET versions,
 # the samples and the Pro access page's install snippets. When either differs from docs-versions.json or
-# newest-release.json, it commits both to master and staging, which redeploys the site. A new line appears once both
-# Core and Pro have released in it; a later release in a line updates it. A release whose docs lack their folder or
+# newest-release.json, it commits both to master and staging, which redeploys the site. A new minor appears once both
+# Core and Pro have released in it; a later patch in a minor updates it. A release whose docs lack their folder or
 # changelog section is left out, with a warning. Hourly, so a release is live within the hour; on demand as well.
 # Production deploys the commit once the test and audit workflows pass on it (README.md, Docs pipeline).
 on:

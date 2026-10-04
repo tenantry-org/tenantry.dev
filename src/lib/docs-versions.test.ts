@@ -55,14 +55,16 @@ describe('docs versions', () => {
   });
 
   it('sends a version the site does not publish to the newest docs', () => {
-    // An older line no longer published, and the newest, which has no prefix of its own.
+    // A minor no longer published or not published yet, and the newest, which has no prefix of its own.
     expect(slugsOutsidePublishedVersions(['v0.3', 'pro', 'licensing'])).toEqual(['pro', 'licensing']);
+    expect(slugsOutsidePublishedVersions(['v1.0'])).toEqual([]);
     expect(slugsOutsidePublishedVersions(['v0.5', 'core'])).toEqual(['core']);
-    expect(slugsOutsidePublishedVersions(['v1'])).toEqual([]);
     // A published older version, a page of the newest and the docs home are served as they are.
     expect(slugsOutsidePublishedVersions(['v0.4', 'pro', 'licensing'])).toBeNull();
     expect(slugsOutsidePublishedVersions(['core', 'installation'])).toBeNull();
     expect(slugsOutsidePublishedVersions([])).toBeNull();
+    // A docs version is always MAJOR.MINOR, so `v1` is not one.
+    expect(slugsOutsidePublishedVersions(['v1', 'core'])).toBeNull();
   });
 
   it('says whether the newest docs are of a release or a later one', () => {

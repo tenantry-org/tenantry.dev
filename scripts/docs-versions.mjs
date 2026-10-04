@@ -1,14 +1,15 @@
 /**
- * The docs versions the site publishes (docs-versions.json), newest first. Each is a release line with the Core and
- * Pro release tags its docs come from: Core's repository and the public tenantry-pro-docs repository, which each Pro
- * release publishes to and tags. The newest is served at /docs, each older one at /docs/v<version>.
+ * The docs versions the site publishes (docs-versions.json), newest first. Each is a minor version (`0.7`, `1.0`,
+ * `1.2`) with the Core and Pro release tags its docs come from: Core's repository and the public tenantry-pro-docs
+ * repository, which each Pro release publishes to and tags. The newest is served at /docs, each older one at
+ * /docs/v<version>.
  *
- * A release line is the releases that keep one API, so only its newest release's docs are needed: before 1.0 a minor
- * release can break the API, so each minor is a line (`0.4`, `0.5`); from 1.0 only a major release can, so each
- * major is one (`1`, `2`). Core and Pro release separately within a line, so its Core and Pro tags can differ.
+ * Each minor has its own docs, after 1.0 as before: a customer whose rights to new releases end at a minor still
+ * needs the docs of the release they can restore. Patches keep the API, so only the newest patch's docs are needed.
+ * Core and Pro release patches separately, so a minor's Core and Pro tags can differ.
  *
- * The list is derived from the release tags (resolveVersions), not written by hand: a line is published once both
- * Core and Pro have a stable release in it, with the newest release of each. The docs-versions workflow updates the
+ * The list is derived from the release tags (resolveVersions), not written by hand: a minor is published once both
+ * Core and Pro have a stable release in it, with the newest patch of each. The docs-versions workflow updates the
  * file when a release changes it.
  */
 import { readFileSync, writeFileSync } from 'fs';
@@ -23,9 +24,9 @@ export const CONFIG_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..'
 
 /**
  * The first release that was on sale, such as `v0.6.1`, or null while Tenantry Pro is not on sale. The site shows
- * nothing older: no docs of an earlier release line, and no changelog entry of an earlier release. While it is null
- * no release has been sold, so the site shows only the newest release line and, in its changelog, only that line's
- * newest release. Set it once, to the release that is current when checkout opens.
+ * nothing older: no docs of an earlier minor, and no changelog entry of an earlier release. While it is null no
+ * release has been sold, so the site shows only the newest minor and, in its changelog, only that minor's newest
+ * release. Set it once, to the release that is current when checkout opens.
  *
  * @type {string | null}
  */
@@ -42,7 +43,7 @@ export function checkFirstSold(firstSold) {
 
 /**
  * The oldest release a docs version's changelog shows, given the release its docs are of (`tag`): the first release
- * sold, or the docs' own release when that is older or none has been sold. A line whose product released only
+ * sold, or the docs' own release when that is older or none has been sold. A minor whose product released only
  * before the first sale still shows the release its docs describe.
  */
 export function oldestReleaseShown(tag, firstSold = FIRST_SOLD_RELEASE) {
@@ -50,11 +51,10 @@ export function oldestReleaseShown(tag, firstSold = FIRST_SOLD_RELEASE) {
   return firstSold !== null && compareReleases(firstSold, tag) < 0 ? firstSold : tag;
 }
 
-/** The release line a tag belongs to: v0.4.1 → 0.4, v1.2.3 → 1. */
-export function lineOf(tag) {
+/** The minor version a tag belongs to: v0.4.1 → 0.4, v1.12.3 → 1.12. */
+export function minorOf(tag) {
   const match = RELEASE_TAG.exec(tag ?? '');
-  if (!match) return null;
-  return match[1] === '0' ? `0.${match[2]}` : match[1];
+  return match ? `${match[1]}.${match[2]}` : null;
 }
 
 /** The problems with a versions list, as messages; empty when it is valid and complete. */
@@ -66,28 +66,29 @@ export function versionProblems(versions) {
   let previous = null;
   for (const entry of versions) {
     const { version } = entry;
-    if (!/^(0\.\d+|[1-9]\d*)$/.test(version ?? '')) {
-      problems.push(`"${version}" is not a release line (0.MINOR, or MAJOR from 1).`);
+    if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version ?? '')) {
+      problems.push(`"${version}" is not a minor version (MAJOR.MINOR).`);
       continue;
     }
     if (seen.has(version)) problems.push(`${version} is listed twice.`);
     seen.add(version);
-    if (previous && compareLines(version, previous) >= 0) problems.push(`${version} is out of order (newest first).`);
+    if (previous && compareMinors(version, previous) >= 0) problems.push(`${version} is out of order (newest first).`);
     previous = version;
 
     for (const group of GROUPS) {
       const tag = entry[group];
       if (!tag) problems.push(`${version} has no ${group} tag.`);
       else if (!STABLE_TAG.test(tag)) problems.push(`${version}'s ${group} tag ${tag} is not a release tag (vX.Y.Z).`);
-      else if (lineOf(tag) !== version) problems.push(`${version}'s ${group} tag ${tag} is not a ${version} release.`);
+      else if (minorOf(tag) !== version) problems.push(`${version}'s ${group} tag ${tag} is not a ${version} release.`);
     }
   }
   return problems;
 }
 
-export function compareLines(a, b) {
-  const [aMajor, aMinor = 0] = a.split('.').map(Number);
-  const [bMajor, bMinor = 0] = b.split('.').map(Number);
+/** Two minor versions: 1.10 is after 1.9. */
+export function compareMinors(a, b) {
+  const [aMajor, aMinor] = a.split('.').map(Number);
+  const [bMajor, bMinor] = b.split('.').map(Number);
   return aMajor - bMajor || aMinor - bMinor;
 }
 
@@ -122,8 +123,8 @@ export function publishedTags(tags, publishedVersions) {
 }
 
 /**
- * The versions to publish, given each group's tags: every line both groups released, the newest patch of each, from
- * the line of the first release sold (`firstSold`) on. With none sold yet (null), only the newest line.
+ * The versions to publish, given each group's tags: every minor both groups released, the newest patch of each, from
+ * the minor of the first release sold (`firstSold`) on. With none sold yet (null), only the newest minor.
  *
  * @param {Record<string, string[]>} tagsByGroup
  * @param {string | null} [firstSold]
@@ -135,26 +136,26 @@ export function resolveVersions(tagsByGroup, firstSold = FIRST_SOLD_RELEASE) {
     newest[group] = new Map();
     for (const tag of tagsByGroup[group] ?? []) {
       if (!STABLE_TAG.test(tag)) continue;
-      const line = lineOf(tag);
-      const current = newest[group].get(line);
-      if (!current || compareReleases(tag, current) > 0) newest[group].set(line, tag);
+      const minor = minorOf(tag);
+      const current = newest[group].get(minor);
+      if (!current || compareReleases(tag, current) > 0) newest[group].set(minor, tag);
     }
   }
 
   const versions = [...newest.core.keys()]
-    .filter((line) => newest.pro.has(line))
-    .sort((a, b) => compareLines(b, a))
-    .map((line) => ({ version: line, core: newest.core.get(line), pro: newest.pro.get(line) }));
+    .filter((minor) => newest.pro.has(minor))
+    .sort((a, b) => compareMinors(b, a))
+    .map((minor) => ({ version: minor, core: newest.core.get(minor), pro: newest.pro.get(minor) }));
 
   return firstSold === null
     ? versions.slice(0, 1)
-    : versions.filter((entry) => compareLines(entry.version, lineOf(firstSold)) >= 0);
+    : versions.filter((entry) => compareMinors(entry.version, minorOf(firstSold)) >= 0);
 }
 
 /**
  * resolveVersions, leaving out each release whose docs cannot be published: `problem(group, tag, newest)` gives the
- * reason, or null; `newest` is true for the releases of the newest line, from which the site also takes what it says
- * about the newest release. The line of a release left out keeps the release before it, or waits for the next one.
+ * reason, or null; `newest` is true for the releases of the newest minor, from which the site also takes what it says
+ * about the newest release. The minor of a release left out keeps the release before it, or waits for the next one.
  * `onLeftOut` is called with each release left out and its reason.
  *
  * @param {Record<string, string[]>} tagsByGroup

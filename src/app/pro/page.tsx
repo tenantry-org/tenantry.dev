@@ -106,9 +106,9 @@ const PROOF = [
   { text: 'Core is Apache-2.0, on GitHub', href: 'https://github.com/tenantry-org/tenantry-core' },
 ];
 
-// The release line after the newest, for the example of a minor release: 0.6 → 0.7 (from 1.0, 1 → 2).
+// The minor after the newest, for the example of a minor release: 0.6 → 0.7.
 const [major, minor] = latestDocsVersion.version.split('.').map(Number);
-const nextMinor = minor === undefined ? `${major + 1}` : `${major}.${minor + 1}`;
+const nextMinor = `${major}.${minor + 1}`;
 
 const QUESTIONS = [
   {

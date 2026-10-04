@@ -1,4 +1,4 @@
-import { compareReleases, lineOf } from './docs-versions.mjs';
+import { compareReleases, minorOf } from './docs-versions.mjs';
 
 // The version of a release's section heading: `## [0.5.0] - 2026-10-03` → 0.5.0.
 const SECTION_VERSION = /^## \[?v?(\d+\.\d+\.\d+[0-9A-Za-z.-]*)/;
@@ -9,8 +9,8 @@ export function hasReleaseSection(markdown, tag) {
 }
 
 /**
- * A repository's CHANGELOG.md as the Changelog page of one docs version: that release line's sections (0.5.0 and
- * its patches, with the steps to update from 0.4) without the Keep a Changelog preamble, under a title and a
+ * A repository's CHANGELOG.md as the Changelog page of one docs version: that minor's sections (0.5.0 and its
+ * patches, with the steps to update from 0.4) without the Keep a Changelog preamble, under a title and a
  * one-line introduction, and a link to the full changelog for earlier releases. Ready for sync-docs' frontmatter and
  * link rewriting.
  *   - With `from`, a release before it, or a pre-release of it, is left out, and so is the link when every earlier
@@ -24,11 +24,11 @@ export function hasReleaseSection(markdown, tag) {
  *     becomes `foo.md`, and anything else goes up a folder, to the repository on GitHub.
  *
  * @param {string} markdown the changelog, as the release tag has it
- * @param {{ product: string, line: string, fullChangelog: string, from?: string }} page the product's name
- *   ('Tenantry Core'), the docs version's release line ('0.5'), the URL of the whole changelog at the tag, and the
+ * @param {{ product: string, minor: string, fullChangelog: string, from?: string }} page the product's name
+ *   ('Tenantry Core'), the docs version's minor ('0.5'), the URL of the whole changelog at the tag, and the
  *   tag of the oldest release to show ('v0.5.1'), if any is hidden
  */
-export function changelogPage(markdown, { product, line, fullChangelog, from }) {
+export function changelogPage(markdown, { product, minor, fullChangelog, from }) {
   const lines = markdown.replaceAll('\r\n', '\n').split('\n');
   const first = lines.findIndex((text) => text.startsWith('## '));
   const sections = [];
@@ -38,9 +38,9 @@ export function changelogPage(markdown, { product, line, fullChangelog, from }) 
   }
 
   const versionOfSection = ([heading]) => SECTION_VERSION.exec(heading)?.[1];
-  const lineOfSection = (section) => {
+  const minorOfSection = (section) => {
     const version = versionOfSection(section);
-    return version === undefined ? null : lineOf(`v${version}`);
+    return version === undefined ? null : minorOf(`v${version}`);
   };
   // A pre-release comes before its release, so `from` and later releases are shown, and only the pre-releases of
   // releases after `from`.
@@ -54,19 +54,19 @@ export function changelogPage(markdown, { product, line, fullChangelog, from }) 
     /^## \[?unreleased\]?\s*$/i.test(heading) && rest.some((text) => text.trim());
 
   const body = sections
-    .filter((section) => unreleased(section) || (lineOfSection(section) === line && shown(section)))
+    .filter((section) => unreleased(section) || (minorOfSection(section) === minor && shown(section)))
     .map(([heading, ...rest]) => [heading.replace(/^## \[([^\]]+)\]/, '## $1'), ...rest].join('\n'))
     .join('\n')
     .replace(/\]\((?![a-z][\w+.-]*:|\/|#)([^)\s]+)\)/gi, (_, target) =>
       target.startsWith('docs/') ? `](${target.slice(5)})` : `](../${target})`,
     )
     .trim();
-  const earlier = sections.some((section) => ![null, line].includes(lineOfSection(section)) && shown(section))
+  const earlier = sections.some((section) => ![null, minor].includes(minorOfSection(section)) && shown(section))
     ? `Earlier releases are in the [full changelog](${fullChangelog}).`
     : '';
 
   return (
-    ['# Changelog', `The changes in each release of ${product} ${line}, newest first.`, body, earlier]
+    ['# Changelog', `The changes in each release of ${product} ${minor}, newest first.`, body, earlier]
       .filter(Boolean)
       .join('\n\n') + '\n'
   );
