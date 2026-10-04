@@ -16,9 +16,9 @@ import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 export const GROUPS = ['core', 'pro'];
-export const RELEASE_TAG = /^v(\d+)\.(\d+)\.\d+(-[0-9A-Za-z.-]+)?$/;
+export const RELEASE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(?:0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$/;
 // A release without a pre-release suffix: the only kind whose docs the site publishes.
-const STABLE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
+const STABLE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 export const CONFIG_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs-versions.json');
 
 /**
@@ -152,25 +152,48 @@ export function resolveVersions(tagsByGroup, firstSold = FIRST_SOLD_RELEASE) {
 }
 
 /**
- * resolveVersions, leaving out each release whose docs cannot be published: `problem(group, tag)` gives the reason, or
- * null. The line of a release left out keeps the release before it, or waits for the next one. `onLeftOut` is called
- * with each release left out and its reason.
+ * resolveVersions, leaving out each release whose docs cannot be published: `problem(group, tag, newest)` gives the
+ * reason, or null; `newest` is true for the releases of the newest line, from which the site also takes what it says
+ * about the newest release. The line of a release left out keeps the release before it, or waits for the next one.
+ * `onLeftOut` is called with each release left out and its reason.
  *
  * @param {Record<string, string[]>} tagsByGroup
- * @param {(group: string, tag: string) => string | null} problem
+ * @param {(group: string, tag: string, newest: boolean) => Promise<string | null> | string | null} problem
  * @param {(release: { group: string, tag: string, reason: string }) => void} [onLeftOut]
  * @param {string | null} [firstSold]
  */
-export function resolvePublishable(tagsByGroup, problem, onLeftOut = () => {}, firstSold = FIRST_SOLD_RELEASE) {
+export async function resolvePublishable(tagsByGroup, problem, onLeftOut = () => {}, firstSold = FIRST_SOLD_RELEASE) {
   const tags = { ...tagsByGroup };
   for (;;) {
     const versions = resolveVersions(tags, firstSold);
-    const left = versions
-      .flatMap((entry) => GROUPS.map((group) => ({ group, tag: entry[group] })))
-      .map((release) => ({ ...release, reason: problem(release.group, release.tag) }))
-      .find((release) => release.reason);
+    let left = null;
+    for (const [index, entry] of versions.entries()) {
+      for (const group of GROUPS) {
+        const reason = left ? null : await problem(group, entry[group], index === 0);
+        if (reason) left = { group, tag: entry[group], reason };
+      }
+    }
     if (!left) return versions;
     onLeftOut(left);
     tags[left.group] = tags[left.group].filter((tag) => tag !== left.tag);
   }
+}
+
+/**
+ * The versions NuGet lists for a package, from its registration index (the registration API, which marks a version
+ * that was unlisted): `fetchJson` reads a URL. A page of the index that is not inlined is fetched.
+ *
+ * @param {{ items: { '@id': string, items?: { catalogEntry: { version: string, listed?: boolean } }[] }[] }} index
+ * @param {(url: string) => Promise<any>} fetchJson
+ */
+export async function listedVersions(index, fetchJson) {
+  if (!Array.isArray(index?.items)) throw new Error('the registration index has no items.');
+  const versions = [];
+  for (const page of index.items) {
+    const leaves = page.items ?? (await fetchJson(page['@id'])).items ?? [];
+    for (const { catalogEntry } of leaves) {
+      if (catalogEntry.listed !== false) versions.push(catalogEntry.version.split('+')[0]);
+    }
+  }
+  return versions;
 }

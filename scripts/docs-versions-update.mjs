@@ -4,8 +4,9 @@
  * repository and of the public tenantry-pro-docs repository (tagged by each Pro release's publish-docs job, after its
  * packages are published) and writes the versions they give (resolveVersions in docs-versions.mjs), and what the site
  * says about the newest of them (newest-release.mjs). A Core tag counts only once NuGet lists its version: Core is
- * tagged before its release runs, which can wait for approval, fail or be refused. A release whose docs the site cannot
- * publish (docsProblem in docs-sources.mjs) is left out, with a warning, and its line keeps the release before it. The
+ * tagged before its release runs, which can wait for approval, fail or be refused, and one taken back is unlisted. A
+ * release whose docs the site cannot publish (docsProblem in docs-sources.mjs), or, in the newest line, whose facts it
+ * cannot read (factsOf), is left out with a warning, and its line keeps the release before it. The
  * docs-versions workflow runs it on a schedule and commits any change, which redeploys the site; nobody edits either
  * file by hand.
  *
@@ -19,12 +20,14 @@ import {
   FIRST_SOLD_RELEASE,
   GROUPS,
   lineOf,
+  listedVersions,
   publishedTags,
   readVersions,
   resolvePublishable,
   writeVersions,
 } from './docs-versions.mjs';
-import { dotnetVersions, installSnippets, readNewestRelease, writeNewestRelease } from './newest-release.mjs';
+import { installSnippets } from './install-snippets.mjs';
+import { dotnetVersions, readNewestRelease, sampleCount, writeNewestRelease } from './newest-release.mjs';
 
 function tags(group) {
   const options = { encoding: 'utf8' };
@@ -35,22 +38,35 @@ function tags(group) {
     .filter(Boolean);
 }
 
-const NUGET = 'https://api.nuget.org/v3-flatcontainer/tenantry.core';
-
-// Where a group's published versions are listed, for a group whose tags come before its release.
-const PUBLISHED = { core: `${NUGET}/index.json` };
-
-async function fetchOk(url) {
+// A URL's body, failing with the URL when it cannot be read or, for JSON, parsed.
+async function fetchText(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`docs-versions: ${url} answered ${response.status}.`);
-  return response;
+  return response.text();
 }
 
-// The group's tags whose release is published. Throws when the list cannot be read, so nothing unconfirmed is published.
+async function fetchJson(url) {
+  const text = await fetchText(url);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`docs-versions: ${url} did not answer JSON.`);
+  }
+}
+
+// Tenantry.Core's registration index, which marks unlisted versions, and its package folder, which serves each nuspec.
+const REGISTRATION = 'https://api.nuget.org/v3/registration5-gz-semver2/tenantry.core/index.json';
+const PACKAGE = 'https://api.nuget.org/v3-flatcontainer/tenantry.core';
+
+// The group's tags whose release is published: for Core, those NuGet lists (a Core tag is pushed before its release
+// runs, and a release taken back is unlisted). Throws when the list cannot be read, so nothing unconfirmed is published.
 async function releasedTags(group) {
-  if (!PUBLISHED[group]) return tags(group);
-  const { versions } = await (await fetchOk(PUBLISHED[group])).json();
-  return publishedTags(tags(group), versions);
+  if (group !== 'core') return tags(group);
+  try {
+    return publishedTags(tags(group), await listedVersions(await fetchJson(REGISTRATION), fetchJson));
+  } catch (error) {
+    throw new Error(`docs-versions: ${REGISTRATION}: ${error.message}`);
+  }
 }
 
 const command = process.argv[2];
@@ -68,40 +84,58 @@ const clones = Object.fromEntries(
     group,
     partialClone(
       group,
-      released[group].filter((tag) => /^v\d+\.\d+\.\d+$/.test(tag)),
+      released[group].filter((tag) => lineOf(tag) && !tag.includes('-')),
     ),
   ]),
 );
 
-function problem(group, tag) {
+// What the site says about a release of the newest line (newest-release.mjs): Core's .NET versions and samples, and
+// Pro's samples and install snippets. Throws, with the reason, when the release does not give it.
+async function factsOf(group, tag) {
+  const samples = sampleCount(group, foldersAt(clones[group], tag, 'samples'));
+  if (group === 'core') {
+    return { dotnet: dotnetVersions(await fetchText(`${PACKAGE}/${tag.slice(1)}/tenantry.core.nuspec`)), samples };
+  }
+  const guide = fileAt(clones.pro, tag, 'docs/installation.md');
+  if (guide === null) throw new Error('it has no docs/installation.md');
+  return { samples, proInstallation: installSnippets(guide) };
+}
+
+const facts = {};
+async function problem(group, tag, newest) {
   if (!clones[group] || !hasTag(clones[group], tag)) {
     throw new Error(`docs-versions: ${tag} of ${REPOSITORIES[group]} cannot be read.`);
   }
-  return docsProblem(clones[group], group, tag);
+  const reason = docsProblem(clones[group], group, tag);
+  if (reason || !newest) return reason;
+  try {
+    facts[group] = await factsOf(group, tag);
+    return null;
+  } catch (error) {
+    if (error.message.startsWith('docs-versions:')) throw error; // NuGet could not be read: stop, publish nothing
+    return `${tag}: ${error.message.replace(/\.$/, '')}`;
+  }
 }
 
-const expected = resolvePublishable(released, problem, ({ group, tag, reason }) =>
+const expected = await resolvePublishable(released, problem, ({ group, tag, reason }) =>
   console.warn(`::warning::docs-versions: leaving out ${group} ${tag}: ${reason}.`),
 );
 
 if (expected.length === 0) {
   console.error(
     FIRST_SOLD_RELEASE === null
-      ? 'docs-versions: no release line has both a Core and a Pro release.'
+      ? 'docs-versions: no release line has both a Core and a Pro release the site can publish.'
       : `docs-versions: no release line from ${lineOf(FIRST_SOLD_RELEASE)} on (FIRST_SOLD_RELEASE is ${FIRST_SOLD_RELEASE}) ` +
-          'has both a Core and a Pro release yet.',
+          'has both a Core and a Pro release the site can publish yet.',
   );
   process.exit(1);
 }
 
 const newest = expected[0];
 const expectedNewest = {
-  dotnet: dotnetVersions(await (await fetchOk(`${NUGET}/${newest.core.slice(1)}/tenantry.core.nuspec`)).text()),
-  samples: {
-    core: foldersAt(clones.core, newest.core, 'samples').length,
-    pro: foldersAt(clones.pro, newest.pro, 'samples').length,
-  },
-  proInstallation: installSnippets(fileAt(clones.pro, newest.pro, 'docs/installation.md') ?? ''),
+  dotnet: facts.core.dotnet,
+  samples: { core: facts.core.samples, pro: facts.pro.samples },
+  proInstallation: facts.pro.proInstallation,
 };
 
 const current = { versions: readVersions(), newest: readNewestRelease() };

@@ -2,7 +2,7 @@
  * What the site says about the newest release it publishes (newest-release.json), read from that release so that no
  * page needs editing when a release changes it: the .NET versions Tenantry Core's packages target (from the nuspec
  * NuGet serves), the number of samples in Core's repository and in tenantry-pro-docs at the release tags, and the
- * setup snippets of Pro's installation guide (docs/installation.md), which the Pro access page shows. The
+ * setup snippets of Pro's installation guide (install-snippets.mjs), which the Pro access page shows. The
  * docs-versions workflow writes it with docs-versions.json (docs-versions-update.mjs).
  */
 import { existsSync, readFileSync, writeFileSync } from 'fs';
@@ -18,30 +18,14 @@ export function dotnetVersions(nuspec) {
   return [...new Set(majors)].sort((a, b) => Number(a) - Number(b));
 }
 
-function codeBlocks(markdown, language) {
-  return [...markdown.matchAll(new RegExp('```' + language + '\\n([\\s\\S]*?)```', 'g'))].map((match) => match[1]);
-}
+/** A sample's folder in each repository's samples/ (Tenantry.Samples.Quickstart, Tenantry.Pro.Samples.AuditLogging). */
+export const SAMPLE_PREFIX = { core: 'Tenantry.Samples.', pro: 'Tenantry.Pro.Samples.' };
 
-/**
- * The setup snippets of Pro's installation guide, as the Pro access page shows them: the nuget.config, setting the
- * feed credentials on macOS or Linux (without its comment line), setting the licence key with user secrets, and the
- * GitHub Actions job. Throws when the guide has no such block, so the page never shows a part of it.
- */
-export function installSnippets(guide) {
-  const find = (language, text) => {
-    const block = codeBlocks(guide, language).find((code) => code.includes(text));
-    if (block === undefined) throw new Error(`the installation guide has no \`\`\`${language} block with "${text}".`);
-    return block;
-  };
-  return {
-    nugetConfig: find('xml', '<packageSources>'),
-    feedCredentials: find('bash', 'export ')
-      .split('\n')
-      .filter((line) => line.trim() && !line.startsWith('#'))
-      .join('\n'),
-    licenceUserSecret: find('bash', 'dotnet user-secrets set').trimEnd(),
-    ciWorkflow: find('yaml', 'runs-on:').trimEnd(),
-  };
+/** The number of samples among a group's samples/ folders. Throws when there is none, so the site never says 0. */
+export function sampleCount(group, folders) {
+  const count = folders.filter((folder) => folder.startsWith(SAMPLE_PREFIX[group])).length;
+  if (count === 0) throw new Error(`samples/ has no ${SAMPLE_PREFIX[group]}* folder.`);
+  return count;
 }
 
 /** newest-release.json, or null before it is first written. */

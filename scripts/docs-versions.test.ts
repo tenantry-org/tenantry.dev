@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checkFirstSold,
   lineOf,
+  listedVersions,
   oldestReleaseShown,
   publishedTags,
   resolvePublishable,
@@ -131,11 +132,11 @@ describe('docs versions', () => {
     expect(oldestReleaseShown('v0.7.3', 'v0.6.1')).toBe('v0.6.1');
   });
 
-  it('leaves out a release whose docs cannot be published, and keeps the one before it', () => {
+  it('leaves out a release whose docs cannot be published, and keeps the one before it', async () => {
     const tags = { core: ['v0.6.0', 'v0.6.1', 'v0.7.0'], pro: ['v0.6.0', 'v0.6.1', 'v0.7.0'] };
     const broken: Record<string, string> = { 'pro v0.6.1': 'no docs folder', 'core v0.7.0': 'no changelog section' };
     const leftOut: string[] = [];
-    const versions = resolvePublishable(
+    const versions = await resolvePublishable(
       tags,
       (group, tag) => broken[`${group} ${tag}`] ?? null,
       ({ group, tag, reason }) => leftOut.push(`${group} ${tag}: ${reason}`),
@@ -145,5 +146,48 @@ describe('docs versions', () => {
     expect(versions).toEqual([{ version: '0.6', core: 'v0.6.1', pro: 'v0.6.0' }]);
     expect(leftOut).toEqual(['core v0.7.0: no changelog section', 'pro v0.6.1: no docs folder']);
     expect(tags.core).toContain('v0.7.0');
+  });
+
+  it('checks the facts of the newest line only, and leaves out its release when they cannot be read', async () => {
+    const tags = { core: ['v0.6.0', 'v0.7.0'], pro: ['v0.6.0', 'v0.7.0', 'v0.7.1'] };
+    const asked: string[] = [];
+    const versions = await resolvePublishable(
+      tags,
+      async (group, tag, newest) => {
+        if (newest) asked.push(`${group} ${tag}`);
+        return newest && tag === 'v0.7.1' ? 'no docs/installation.md' : null;
+      },
+      undefined,
+      ALL,
+    );
+
+    expect(versions).toEqual([
+      { version: '0.7', core: 'v0.7.0', pro: 'v0.7.0' },
+      { version: '0.6', core: 'v0.6.0', pro: 'v0.6.0' },
+    ]);
+    expect(asked).toEqual(['core v0.7.0', 'pro v0.7.1', 'core v0.7.0', 'pro v0.7.0']);
+  });
+
+  it('counts only the versions NuGet lists, reading a page of the index that is not inlined', async () => {
+    const entry = (version: string, listed?: boolean) => ({ catalogEntry: { version, listed } });
+    const index = {
+      items: [
+        { '@id': 'page/0', items: [entry('0.5.0'), entry('0.6.0', false), entry('0.6.1+build.7', true)] },
+        { '@id': 'page/1' },
+      ],
+    };
+    const pages: Record<string, unknown> = { 'page/1': { items: [entry('0.7.0-rc.1'), entry('0.7.0')] } };
+
+    expect(await listedVersions(index, async (url) => pages[url])).toEqual(['0.5.0', '0.6.1', '0.7.0-rc.1', '0.7.0']);
+    await expect(listedVersions({} as never, async () => ({}))).rejects.toThrow('the registration index has no items.');
+  });
+
+  it('reads a release tag only without leading zeros', () => {
+    expect(lineOf('v01.2.3')).toBeNull();
+    expect(() => checkFirstSold('v01.2.3')).toThrow(/FIRST_SOLD_RELEASE/);
+    expect(() => checkFirstSold('v0.6.01')).toThrow(/FIRST_SOLD_RELEASE/);
+    expect(resolveVersions({ core: ['v0.06.0', 'v0.6.0'], pro: ['v0.6.0'] }, ALL)).toEqual([
+      { version: '0.6', core: 'v0.6.0', pro: 'v0.6.0' },
+    ]);
   });
 });
