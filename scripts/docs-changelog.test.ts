@@ -50,6 +50,21 @@ describe('changelogPage', () => {
     );
   });
 
+  it('leaves out the releases before the oldest one shown, and the link when every earlier release is hidden', () => {
+    const changelog =
+      `${preamble}\n## [0.6.1] - 2026-10-10\n\n- A fix.\n\n## [0.6.0] - 2026-10-03\n\n- New.\n` +
+      '\n## [0.6.0-rc.1] - 2026-10-01\n\n- Nearly.\n\n## [0.5.0] - 2026-09-29\n\n- Old.\n';
+    const core06 = { ...core05, line: '0.6' };
+
+    expect(changelogPage(changelog, { ...core06, from: 'v0.6.1' })).toBe(
+      '# Changelog\n\nThe changes in each release of Tenantry Core 0.6, newest first.\n\n## 0.6.1 - 2026-10-10\n\n- A fix.\n',
+    );
+
+    const fromAnEarlierLine = changelogPage(changelog, { ...core06, from: 'v0.5.0' });
+    expect(fromAnEarlierLine).toContain('## 0.6.0-rc.1 - 2026-10-01');
+    expect(fromAnEarlierLine).toContain('Earlier releases');
+  });
+
   it('is only the title and introduction when the line has no releases', () => {
     expect(changelogPage(preamble, core05)).toBe(
       '# Changelog\n\nThe changes in each release of Tenantry Core 0.5, newest first.\n',
