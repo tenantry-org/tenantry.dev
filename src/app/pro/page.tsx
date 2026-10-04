@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 const WORKFLOWS = [
   {
     title: 'Run background work as the tenant',
-    text: 'Hangfire and Quartz.NET jobs and MassTransit and Rebus messages run as the tenant they were created for, with the DbContext isolated as in a request. Recurring jobs and background services can run once for each tenant. By default, work whose tenant no longer exists, or is suspended, fails rather than running without a tenant. An adapter API carries the tenant through other libraries the same way.',
+    text: 'Hangfire and Quartz.NET jobs and MassTransit and Rebus messages run as the tenant they were created for, with the DbContext isolated as in a request. Recurring jobs and background services can run once for each tenant. By default, work whose tenant no longer exists, or is suspended, fails without running. An adapter API carries the tenant through other libraries the same way.',
     caption: 'Program.cs',
     code: `tenant.UsePro(pro => pro.AddHangfirePropagation());
 
@@ -164,8 +164,7 @@ export default function ProPage() {
           <div className={'mx-auto max-w-6xl px-4 pb-16 pt-16 md:px-8 md:pt-24'}>
             <p className={'text-sm font-medium text-link'}>Tenantry Pro</p>
             <h1 className={'mt-3 max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl'}>
-              Run jobs and messages as their tenant, audit each tenant’s changes, and onboard, offboard and migrate
-              tenants
+              Keep the tenant in background work, and manage each tenant’s data from onboarding to offboarding
             </h1>
             <p className={'mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground'}>
               Pro is for two kinds of application. With a shared database, it adds Hangfire, Quartz.NET, MassTransit and
