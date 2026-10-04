@@ -20,7 +20,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
     cells: [
       'Whatever your SaveChanges override checks',
       'Throws by default; TenantMismatchMode can ignore or overwrite it instead',
-      'A changed TenantId moves the entity to that tenant',
+      'Not documented; its docs advise setting TenantId only in the entity’s constructor',
       'Throws, and the stored TenantId is in every UPDATE and DELETE, so a forged key matches no row',
     ],
   },
@@ -31,7 +31,12 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
   },
   {
     label: 'Create and migrate tenant databases',
-    cells: ['You write it', 'No', 'Yes, in the commercial SaaS module', 'Yes, in Pro'],
+    cells: [
+      'You write it',
+      'No',
+      'A framework event handler, if the application configures it, migrates a new tenant’s database; managing tenants’ connection strings needs the commercial SaaS module',
+      'Yes, in Pro',
+    ],
   },
   {
     label: 'Per-tenant options and authentication',
@@ -61,7 +66,8 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
         >
           README
         </a>{' '}
-        says that using its releases to generate revenue requires paying the Open Source Maintenance Fee.
+        says that from 10 November, use of its official releases in revenue-generating work falls under an Open Source
+        Maintenance Fee.
       </>,
       'A commercial ABP licence for the SaaS module',
       'Core Apache-2.0; Pro a subscription',

@@ -19,7 +19,7 @@ const NOTES = [
   },
   {
     title: 'A database per tenant',
-    text: 'Tenantry Core connects each tenant’s context to its own database, pooled contexts included (AddDbContextPerTenantDatabase with pooled: true): a pooled context reads the tenant each time it is used. Finbuckle’s docs recommend setting a context’s tenant when it is created and not changing it. ABP’s SaaS module and Tenantry Pro create and migrate tenant databases.',
+    text: 'Tenantry Core connects each tenant’s context to its own database, pooled contexts included (AddDbContextPerTenantDatabase with pooled: true): a pooled context reads the tenant each time it is used. Finbuckle’s docs recommend setting a context’s tenant when it is created and not changing it. ABP migrates a new tenant’s database with a framework event handler the application configures, and its commercial SaaS module manages tenants’ connection strings. Tenantry Pro creates and migrates tenant databases.',
   },
   {
     title: 'Options and authentication',
@@ -27,11 +27,11 @@ const NOTES = [
   },
   {
     title: 'What Tenantry does not do',
-    text: 'Tenantry is a library, not an application framework: there is no tenant management UI, as ABP’s Tenant Management module has. It builds in one tenant store, which holds tenants in memory. It adds TenantId to no key or index, where Finbuckle’s AdjustUniqueIndexes() does, so declare per-tenant unique indexes yourself. When a resolver’s identifier names no tenant, Tenantry does not try the next resolver, as Finbuckle does. The isolation is in EF Core, not the database: raw SQL and IgnoreQueryFilters() are not isolated.',
+    text: 'Tenantry is a library, not an application framework: there is no tenant management UI, as ABP’s Tenant Management module has. It builds in one tenant store, which holds tenants in memory. It adds TenantId to no key or index, where Finbuckle can, with AdjustUniqueIndexes(), so declare per-tenant unique indexes yourself. When a resolver’s identifier names no tenant, Tenantry does not try the next resolver, as Finbuckle does. The isolation is in EF Core, not the database: raw SQL and IgnoreQueryFilters() are not isolated.',
   },
   {
     title: '.NET versions',
-    text: 'Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only. Tenantry supports .NET 10, and .NET 8 and 9 until November 2027.',
+    text: 'From version 10, Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only. Tenantry supports .NET 10, and .NET 8 and 9 until November 2027.',
   },
 ];
 
