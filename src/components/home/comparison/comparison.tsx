@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
-// Checked in October 2026 against the documents in SOURCES (Finbuckle.MultiTenant 10, ABP's latest docs) and against
-// Tenantry Core 0.6 and Pro 0.6. Check them again when any of them releases a major version. A row whose Finbuckle or
-// ABP cell the sources do not support is left out, not filled in.
+// Checked in October 2026 against Finbuckle.MultiTenant 10.1.4 and ABP 10.6.1 (the documents in SOURCES, and their
+// source) and against Tenantry Core 0.6 and Pro 0.6. Check them again when any of them releases a major version. A row
+// whose Finbuckle or ABP cell the sources do not support is left out, not filled in.
 const PROJECTS = ['Your own query filters', 'Finbuckle.MultiTenant', 'ABP', 'Tenantry'] as const;
 
 const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]; fullOnly?: boolean }[] = [
@@ -10,8 +10,8 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
     label: 'What your DbContext needs',
     cells: [
       'A filter on each entity, and a SaveChanges override',
-      'Derive from MultiTenantDbContext, or implement IMultiTenantDbContext and call EnforceMultiTenant() in SaveChanges',
-      'Derive from AbpDbContext, in an ABP application',
+      'Derive from MultiTenantDbContext, or implement IMultiTenantDbContext, configure entities in OnModelCreating and call EnforceMultiTenant() in SaveChanges',
+      'Derive from AbpDbContext and register it with AddAbpDbContext, in an ABP application',
       'One call, options.UseTenantry()',
     ],
   },
@@ -20,8 +20,8 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
     cells: [
       'Whatever your SaveChanges override checks',
       'Throws by default; TenantMismatchMode can ignore or overwrite it instead',
-      'Saved with that TenantId: its docs say changing it moves the entity to that tenant, and advise setting it only in the entity’s constructor',
-      'Throws, and the stored TenantId is in every UPDATE and DELETE, so a forged key matches no row',
+      'Saved with that TenantId. ABP sets TenantId from the current tenant when the entity object is created, and does not check it on save; its docs say changing it moves the entity to that tenant, and advise setting it only in the entity’s constructor',
+      'Throws, and the stored TenantId is in the WHERE clause of every UPDATE and DELETE that SaveChanges sends, so a forged key matches no row',
     ],
   },
   {
@@ -34,7 +34,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
     cells: [
       'You write it',
       'No',
-      'A framework event handler, if the application configures it, migrates a new tenant’s database; managing tenants’ connection strings from a UI needs the commercial SaaS module',
+      'ABP provides a base class for a handler you write that migrates a tenant’s database when the tenant is created; managing tenants’ connection strings from a UI needs the commercial SaaS module',
       'Yes, in Pro',
     ],
   },
@@ -59,7 +59,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
       <>
         Apache-2.0. Its{' '}
         <a
-          href={'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/main/README.md#open-source-maintenance-fee'}
+          href={'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/README.md#open-source-maintenance-fee'}
           target={'_blank'}
           rel={'noopener noreferrer'}
           className={'text-link hover:underline'}
@@ -69,7 +69,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
         says that from 10 November, use of its official releases in revenue-generating work falls under an Open Source
         Maintenance Fee.
       </>,
-      'A commercial ABP licence for the SaaS module',
+      'LGPL-3.0; the SaaS module needs a commercial ABP licence (Team or higher)',
       'Core Apache-2.0; Pro a subscription',
     ],
   },
@@ -80,19 +80,23 @@ const SOURCES: { project: string; links: { label: string; href: string }[] }[] =
   {
     project: 'Finbuckle.MultiTenant',
     links: [
-      { label: 'EF Core', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/main/docs/EFCore.md' },
-      { label: 'Stores', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/main/docs/Stores.md' },
-      { label: 'Strategies', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/main/docs/Strategies.md' },
-      { label: 'Options', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/main/docs/Options.md' },
+      { label: 'EF Core', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/docs/EFCore.md' },
+      { label: 'Stores', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/docs/Stores.md' },
+      {
+        label: 'Strategies',
+        href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/docs/Strategies.md',
+      },
+      { label: 'Options', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/docs/Options.md' },
       {
         label: 'Authentication',
-        href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/main/docs/Authentication.md',
+        href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/docs/Authentication.md',
       },
       {
         label: 'TenantInfo',
-        href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/main/src/Finbuckle.MultiTenant.Abstractions/TenantInfo.cs',
+        href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/src/Finbuckle.MultiTenant.Abstractions/TenantInfo.cs',
       },
-      { label: 'README', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/main/README.md' },
+      { label: 'README', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/README.md' },
+      { label: 'Issue #375', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/issues/375' },
       { label: 'NuGet', href: 'https://www.nuget.org/packages/Finbuckle.MultiTenant.EntityFrameworkCore' },
     ],
   },
@@ -110,8 +114,8 @@ const SOURCES: { project: string; links: { label: string; href: string }[] }[] =
 ];
 
 /**
- * Tenantry beside the alternatives a .NET team weighs, in the facts each project documents, with links to those
- * documents. The home page shows the main rows; /compare passes `full` for every row.
+ * Tenantry beside its alternatives, in the facts each project documents, with links to those documents. The home page
+ * shows the main rows; /compare passes `full` for every row.
  */
 export function ComparisonTable({ full = false }: Readonly<{ full?: boolean }>) {
   const rows = full ? ROWS : ROWS.filter((row) => !row.fullOnly);
