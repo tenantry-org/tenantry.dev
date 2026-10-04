@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { docsVersionOf, docsVersionOfPath, docsVersions, slugsInVersion, slugsWithinVersion } from './docs-versions';
+import {
+  docsVersionOf,
+  docsVersionOfPath,
+  docsVersions,
+  slugsInVersion,
+  slugsOutsidePublishedVersions,
+  slugsWithinVersion,
+} from './docs-versions';
 
 // vi.mock is hoisted above the import: two versions, the newest first.
 vi.mock('../../docs-versions.json', () => ({
@@ -44,5 +51,16 @@ describe('docs versions', () => {
     expect(slugsInVersion(['v0.4', 'pro', 'licensing'], latest)).toEqual(['pro', 'licensing']);
     expect(slugsInVersion(['pro', 'licensing'], older)).toEqual(['v0.4', 'pro', 'licensing']);
     expect(slugsInVersion([], older)).toEqual(['v0.4']);
+  });
+
+  it('sends a version the site does not publish to the newest docs', () => {
+    // An older line no longer published, and the newest, which has no prefix of its own.
+    expect(slugsOutsidePublishedVersions(['v0.3', 'pro', 'licensing'])).toEqual(['pro', 'licensing']);
+    expect(slugsOutsidePublishedVersions(['v0.5', 'core'])).toEqual(['core']);
+    expect(slugsOutsidePublishedVersions(['v1'])).toEqual([]);
+    // A published older version, a page of the newest and the docs home are served as they are.
+    expect(slugsOutsidePublishedVersions(['v0.4', 'pro', 'licensing'])).toBeNull();
+    expect(slugsOutsidePublishedVersions(['core', 'installation'])).toBeNull();
+    expect(slugsOutsidePublishedVersions([])).toBeNull();
   });
 });

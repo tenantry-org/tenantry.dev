@@ -2,20 +2,29 @@ import { source } from '@/lib/source';
 import { DocsBody, DocsPage, DocsTitle } from 'fumadocs-ui/page';
 import { Callout } from 'fumadocs-ui/components/callout';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getMDXComponents } from '@/mdx-components';
-import { docsVersionOf, latestDocsVersion, slugsInVersion } from '@/lib/docs-versions';
+import { docsVersionOf, latestDocsVersion, slugsInVersion, slugsOutsidePublishedVersions } from '@/lib/docs-versions';
 
 // The same page in the latest docs, or the latest docs' home when the page is gone.
 function latestUrl(slugs: string[]): string {
   return source.getPage(slugsInVersion(slugs, latestDocsVersion))?.url ?? latestDocsVersion.base;
 }
 
+// The page at these slugs. A path under a docs version the site does not publish redirects to the same page in the
+// latest docs, or to the latest docs' home when the page is not there; any other missing page is not found.
+function pageAt(slugs: string[] = []) {
+  const page = source.getPage(slugs);
+  if (page) return page;
+
+  const latestSlugs = slugsOutsidePublishedVersions(slugs);
+  if (latestSlugs) redirect(latestUrl(latestSlugs));
+  notFound();
+}
+
 export default async function Page(props: { params: Promise<{ slug?: string[] }> }) {
   const params = await props.params;
-  const page = source.getPage(params.slug);
-
-  if (!page) notFound();
+  const page = pageAt(params.slug);
 
   const MDX = page.data.body;
   const version = docsVersionOf(page.slugs);
@@ -42,9 +51,7 @@ export function generateStaticParams() {
 
 export async function generateMetadata(props: { params: Promise<{ slug?: string[] }> }) {
   const params = await props.params;
-  const page = source.getPage(params.slug);
-
-  if (!page) notFound();
+  const page = pageAt(params.slug);
 
   const version = docsVersionOf(page.slugs);
 

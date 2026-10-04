@@ -27,6 +27,15 @@ export function docsVersionOf(slugs: string[]): DocsVersion {
   return docsVersions.find((entry) => !entry.latest && slugs[0] === `v${entry.version}`) ?? latestDocsVersion;
 }
 
+/**
+ * When a page's slugs start with a version the site does not serve under its own path (an older release line it no
+ * longer publishes, or the newest, which is served at /docs), the same page's slugs in the newest docs; otherwise
+ * null.
+ */
+export function slugsOutsidePublishedVersions(slugs: string[]): string[] | null {
+  return /^v\d+(?:\.\d+)?$/.test(slugs[0] ?? '') && docsVersionOf(slugs).latest ? slugs.slice(1) : null;
+}
+
 /** The version of the docs page at a site path (the latest for any other path). */
 export function docsVersionOfPath(pathname: string): DocsVersion {
   const match = /^\/docs(?:\/|$)(.*)$/.exec(pathname);
