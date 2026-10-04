@@ -190,12 +190,13 @@ function amount(value: string): number {
  * Refunds, credits and chargebacks (Paddle adjustments). Each is recorded in the payment ledger, and the customer
  * brought in line (syncCustomer): what an adjustment does to a payment, and so to the qualifying run and any annual grant, is
  * decided there (entitlement-policy.ts). Paddle does not cancel a subscription whose payment is refunded, so an
- * approved full refund, or an approved chargeback, of the subscription's latest billing period cancels it at once: the
- * subscription.canceled event that follows ends access as any cancellation does. One of an earlier billing period
- * cancels nothing (the qualifying period continues, the period counting only for the money kept) and tells the
- * operator. A partial refund, and a chargeback warning (which can still be reversed),
- * change no access but tell the operator. Credits and reversals change no access. Throwing (Paddle unavailable)
- * makes the worker retry; recording the adjustment again changes nothing.
+ * approved chargeback of any payment, or an approved full refund of the subscription's latest paid billing period,
+ * cancels it at once: the subscription.canceled event that follows ends access as any cancellation does. A full refund
+ * of an earlier billing period (a goodwill refund) cancels nothing (the qualifying period continues, the period
+ * counting only for the money kept) and tells the operator. Every chargeback cancels, so charging back each month
+ * once the next has renewed cannot keep access going. A partial refund, and a chargeback warning (which can still be
+ * reversed), change no access but tell the operator. Credits and reversals change no access. Throwing (Paddle
+ * unavailable) makes the worker retry; recording the adjustment again changes nothing.
  */
 async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, deps: BillingDeps) {
   await recordAdjustment(data, occurredAt, deps);
@@ -235,7 +236,10 @@ async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, d
     return;
   }
 
-  if (!(await paysLatestPeriod(data.customerId, data.subscriptionId, data.transactionId, deps))) {
+  if (
+    data.action === 'refund' &&
+    !(await paysLatestPeriod(data.customerId, data.subscriptionId, data.transactionId, deps))
+  ) {
     await deps.alertOperator(
       `Paddle ${data.action} of an earlier billing period for customer ${data.customerId}`,
       `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId}, which is not the ` +
@@ -255,10 +259,14 @@ async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, d
   }
 }
 
-// Whether the transaction pays the subscription's latest recorded billing period: the one a full refund or chargeback
-// takes away now. An earlier one's does not end the subscription; nor does one of a transaction not recorded.
+// Whether the transaction pays the subscription's latest recorded billing period that charged something: the one a
+// full refund takes away now. A full refund of an earlier one (a goodwill refund) does not end the subscription; nor
+// does one of a transaction not recorded. A transaction that charged nothing (a trial, a free plan change) is no
+// such period.
 async function paysLatestPeriod(customerId: string, subscriptionId: string, transactionId: string, deps: BillingDeps) {
-  const periods = (await deps.store.listPayments(customerId)).filter((p) => p.subscriptionId === subscriptionId);
+  const periods = (await deps.store.listPayments(customerId)).filter(
+    (p) => p.subscriptionId === subscriptionId && p.charged > 0,
+  );
   const latest = periods.reduce<(typeof periods)[number] | null>(
     (found, payment) => (!found || payment.periodStartsAt > found.periodStartsAt ? payment : found),
     null,

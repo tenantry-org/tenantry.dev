@@ -123,8 +123,8 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
       releases then start to vest: those published up to your vested-through date, which is the start of your qualifying
       period plus the paid time served. If your subscription ends before then and no new one starts within an hour, the
       qualifying period starts again from zero. A refund, credit or chargeback of a payment takes away the time that
-      money paid for, so 12 paid months are reached later; a full refund or chargeback of your current billing period
-      also cancels your subscription.
+      money paid for, so 12 paid months are reached later; a full refund of your current billing period, or a chargeback
+      of any payment, also cancels your subscription.
     </p>
   );
 }

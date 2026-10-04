@@ -413,7 +413,7 @@ describe('applyPaddleEvent', () => {
       expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
-    it('does not cancel for a full refund or chargeback of an earlier billing period, and tells the operator', async () => {
+    it('does not cancel for a full refund of an earlier billing period, and tells the operator', async () => {
       await applyPaddleEvent(
         delivered(
           transactionEvent({
@@ -427,22 +427,59 @@ describe('applyPaddleEvent', () => {
       vi.clearAllMocks();
 
       await adjusted({ eventId: 'evt_goodwill', action: 'refund', status: 'approved', transactionId: 'txn_01' });
-      await adjusted({
-        eventId: 'evt_old_chargeback',
-        action: 'chargeback',
-        status: 'approved',
-        transactionId: 'txn_01',
-      });
 
       expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
       expect(deps.alertOperator).toHaveBeenCalledWith(
         'Paddle refund of an earlier billing period for customer ctm_01',
         expect.stringContaining('was not cancelled'),
       );
-      expect(deps.alertOperator).toHaveBeenCalledWith(
-        'Paddle chargeback of an earlier billing period for customer ctm_01',
-        expect.any(String),
+    });
+
+    it('cancels on the first chargeback of any payment, so charging back each month after the next renews fails', async () => {
+      // Monthly from September to December 2026; each month charged back once the next has renewed.
+      const months = ['2026-09-01', '2026-10-01', '2026-11-01', '2026-12-01', '2027-01-01'];
+      for (let n = 1; n < 4; n++) {
+        await applyPaddleEvent(
+          delivered(
+            transactionEvent({
+              eventId: `evt_month_${n}`,
+              transactionId: `txn_m${n}`,
+              period: { startsAt: `${months[n]}T00:00:00Z`, endsAt: `${months[n + 1]}T00:00:00Z` },
+            }),
+          ),
+          deps,
+        );
+        const previous = n === 1 ? 'txn_01' : `txn_m${n - 1}`;
+        await adjusted({ eventId: `evt_cb_${n}`, action: 'chargeback', status: 'approved', transactionId: previous });
+        if (n === 1) {
+          expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
+          expect(deps.alertOperator).toHaveBeenCalledWith(
+            'Subscription sub_01 cancelled after a chargeback',
+            expect.any(String),
+          );
+        }
+      }
+    });
+
+    it('cancels for a full refund of the only paid period, though a later transaction charged nothing', async () => {
+      // A subscription change Paddle billed at nothing, after the paid month.
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_free_change',
+            transactionId: 'txn_free',
+            origin: 'subscription_update',
+            total: '0',
+            period: { startsAt: '2026-09-15T00:00:00Z', endsAt: '2026-10-01T00:00:00Z' },
+          }),
+        ),
+        deps,
       );
+      vi.clearAllMocks();
+
+      await adjusted({ eventId: 'evt_refund_paid', action: 'refund', status: 'approved', transactionId: 'txn_01' });
+
+      expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
     });
 
     it('does not cancel for a refund of a payment not recorded, and tells the operator', async () => {

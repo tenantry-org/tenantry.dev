@@ -58,11 +58,12 @@ export default function EulaPage() {
         the period did reaches only to when the subscription ended, though its paid period still counts in full. A gap
         of more than one hour breaks a qualifying period, for example when your subscription ends and no billing period
         follows within the hour, or a renewal is not paid; the next billing period then starts a new qualifying period
-        from zero. Money returned for an earlier billing period does not break a qualifying period: that billing period
-        continues it, and adds only its paid period, if any, as does a billing period for which nothing was charged. A
-        full refund or a chargeback of your subscription&apos;s current billing period cancels the subscription at once
-        (refund policy, section 4); that is the subscription ending, so a new subscription more than one hour later
-        starts a new qualifying period. A qualifying period starts at the start of its first billing period for which
+        from zero. Money returned does not by itself break a qualifying period: a billing period of which part or all of
+        the payment was returned, or for which nothing was charged, continues it, and adds only its paid period, if any.
+        But a full refund of your subscription&apos;s current billing period, or a chargeback of any of its payments,
+        cancels the subscription at once (refund policy, section 4); that is the subscription ending, so a new
+        subscription more than one hour later starts a new qualifying period. If a chargeback is reversed, the
+        subscription stays cancelled. A qualifying period starts at the start of its first billing period for which
         something was charged.
       </p>
       <p>

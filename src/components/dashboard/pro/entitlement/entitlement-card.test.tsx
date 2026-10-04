@@ -18,7 +18,9 @@ describe('EntitlementCard', () => {
     );
     expect(html).not.toContain('starts again after it');
     expect(html).toContain('and no new one starts within an hour, the qualifying period starts again from zero');
-    expect(html).toContain('a full refund or chargeback of your current billing period also cancels your subscription');
+    expect(html).toContain(
+      'a full refund of your current billing period, or a chargeback of any payment, also cancels your subscription',
+    );
     expect(html).not.toContain('vested-through date is');
   });
 

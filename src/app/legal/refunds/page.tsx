@@ -40,12 +40,12 @@ export default function RefundsPage() {
         annual term withdraws the term&apos;s grant.
       </p>
       <p>
-        When a full refund of your subscription&apos;s current billing period is approved, or that period&apos;s payment
-        is charged back, your subscription is cancelled immediately, and it ends as the EULA, section 8, sets out; if
-        you subscribe again more than one hour later, a new qualifying period starts. A full refund or a chargeback of
-        an earlier billing period, a partial refund, or a credit does not cancel your subscription or change your access
-        while it continues, and your qualifying period continues, counting only the money you keep. If a chargeback is
-        later reversed, the money counts as kept again, but a subscription it cancelled stays cancelled.
+        When a full refund of your subscription&apos;s current billing period is approved, or any of its payments is
+        charged back, your subscription is cancelled immediately, and it ends as the EULA, section 8, sets out; if you
+        subscribe again more than one hour later, a new qualifying period starts. A full refund of an earlier billing
+        period, a partial refund, or a credit does not cancel your subscription or change your access while it
+        continues, and your qualifying period continues, counting only the money you keep. If a chargeback is later
+        reversed, the money counts as kept again, but your subscription stays cancelled.
       </p>
       <p>
         If the purchase you are refunded in full within the 14-day window was an annual term, its grant is withdrawn and
