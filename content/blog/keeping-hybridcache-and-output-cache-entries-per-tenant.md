@@ -11,11 +11,11 @@ next:
 draft: true
 ---
 
-A `HybridCache` entry under `"orders:recent"`, or a cached response for `/catalogue`, belongs to whichever tenant
-filled it, and the next tenant to ask gets the same bytes. Putting the tenant id into every key by hand works until
-one call leaves it out. This post turns on [Tenantry Core](/docs/core)'s cache isolation in an ASP.NET Core
-application with two tenants, Acme and Globex, and shows what each cache returned. I ran it on .NET 10 with Tenantry
-0.6.0, through ASP.NET Core's test server.
+A `HybridCache` entry under `"orders:recent"`, or a cached response for `/catalogue`, belongs to whichever tenant filled
+it, and the next tenant to ask gets the same bytes. Putting the tenant id into every key by hand protects only the calls
+that do it. This post turns on [Tenantry Core](/docs/core)'s cache isolation in an ASP.NET Core application with two
+tenants, Acme and Globex, and shows what each cache returned. I ran it on .NET 10 with Tenantry 0.6.0, through ASP.NET
+Core's test server.
 
 ```bash
 dotnet add package Tenantry.AspNetCore
@@ -146,12 +146,12 @@ Acme's draft was stored as `t:acme:draft:7`, and Globex read nothing under the s
 `InvalidateAsync("acme")`, Acme still read `draft text`: these entries cannot be removed by tag, and stay until they
 expire.
 
-Invalidation also clears only the instance that runs it. I started a second instance of the application, B, sharing
-the first one's second-level cache, as two servers would share Redis. B read Acme's recent orders from that cache
-(`built 1`; its factory, which shares the counter, did not run). After instance A invalidated Acme, B still returned `built 1` from its own
-memory. Microsoft's `HybridCache` records the invalidation in the second level, but an instance keeps the copies it
-already holds until they expire. Where a stale copy matters, keep `Expiration` and `LocalCacheExpiration` short. The
-output cache's default store is in memory and per instance in the same way.
+Invalidation also clears only the instance that runs it. I started a second instance of the application, B, sharing the
+first one's second-level cache, as two servers would share Redis. B read Acme's recent orders from that cache
+(`built 1`; its factory, which shares the counter, did not run). After instance A invalidated Acme, B still returned
+`built 1` from its own memory. Microsoft's `HybridCache` records the invalidation in the second level, but an instance
+keeps the copies it already holds until they expire. Where a stale copy matters, keep `Expiration` and
+`LocalCacheExpiration` short. The output cache's default store is in memory and per instance in the same way.
 
 Each key also gets longer by the tenant's id and a prefix, which counts against `HybridCache`'s maximum key length,
 1,024 characters by default.

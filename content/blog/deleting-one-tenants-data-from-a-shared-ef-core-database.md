@@ -13,15 +13,15 @@ draft: true
 
 When a customer leaves, or asks for its data to be erased, its rows in a shared database are spread over every
 tenant-owned table, with foreign keys between them. Deleting them by hand means a `DELETE` per table, in an order the
-foreign keys accept, in one transaction, and remembering the table someone adds next year. This post offboards one
-tenant with Tenantry Pro and shows what happened to its rows and to the other tenant's.
+foreign keys accept, in one transaction, and a change to that code for each tenant-owned table added later. This post
+offboards one tenant with Tenantry Pro and shows what happened to its rows and to the other tenant's.
 
 The database is SQLite, with two tenants, Acme and Globex. Each has one customer, three orders and six order lines.
 `Order` references `Customer`, and `OrderLine` references `Order`, both with `DeleteBehavior.Restrict`, so the database
 refuses to delete a row that another still references. All three implement `ITenantEntity<string>`.
 
-Without Pro, this deletion is code you write and maintain. [Tenantry Core](/docs/core) gives you the tenant's scope
-and filtered contexts, and leaves the order of the deletes, the transaction and the list of tables to you.
+Tenantry Core does not delete a tenant's rows. It gives you the tenant's scope and filtered contexts, and leaves the
+order of the deletes, the transaction and the list of tables to your code.
 
 ## Registration
 
