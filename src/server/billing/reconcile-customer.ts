@@ -10,6 +10,8 @@ import {
 import { isEntitled } from '@/server/billing/entitlement-policy';
 import { recordCompletedTransaction } from '@/server/billing/apply-paddle-event';
 import { PAYMENT_RECOVERY_DAYS } from '@/server/billing/paddle-assumptions';
+import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
+import { errorMessage } from '@/lib/errors';
 import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
 
 /**
@@ -28,8 +30,11 @@ export interface CustomerReconciliation {
   access: AccessChange;
   licence: LicenceOutcome | null;
   github: GithubReconciliation;
-  /** Completed Pro payments Paddle lists that the ledger was missing (a lost notification), now recorded. */
-  paymentsRecovered: number;
+  /**
+   * Completed Pro payments Paddle lists that the ledger was missing (a lost notification), now recorded; null when
+   * Paddle could not be asked, which does not stop the rest of the reconcile.
+   */
+  paymentsRecovered: number | null;
 }
 
 /**
@@ -45,7 +50,8 @@ export interface CustomerReconciliation {
  *     after 7 days unaccepted, or a member removed from the team while still entitled (invited again),
  *   - a removal that failed part-way, such as an invitation left pending after leaving the team,
  *   - a completed Pro payment whose transaction.completed notification never arrived or failed for good: Paddle's
- *     completed transactions of the customer's Pro subscriptions are listed, and any missing is recorded,
+ *     completed transactions of the customer's Pro subscriptions are listed, and any missing is recorded. Paddle being
+ *     unreachable (or its API key wrong) is alerted on and skipped, so the rest of the reconcile still runs,
  *   - perpetual entitlement that changes with time alone: a run that reaches 12 months or serves another period,
  *     and an annual grant whose term ends (syncCustomer recomputes it).
  *
@@ -114,10 +120,20 @@ async function reconcileRemoval(githubLogin: string, deps: BillingDeps): Promise
   return 'removed';
 }
 
+/** How often a reconcile process alerts that Paddle cannot be asked: once per outage, not once per customer. */
+const RECOVERY_ALERT_INTERVAL_MS = 6 * 60 * 60 * 1000;
+let lastRecoveryAlertAt: number | null = null;
+
+/** Forgets when the last "cannot list payments" alert was sent, for tests. */
+export function resetRecoveryAlerts() {
+  lastRecoveryAlertAt = null;
+}
+
 // Records the completed Pro payments of the customer's Pro subscriptions that Paddle lists and the ledger is missing,
-// through the webhook's own path, and returns how many. The operator is told: a lost notification is worth knowing
-// about. Paddle unreachable throws, and the reconcile job is retried.
-async function recoverPayments(customerId: string, deps: BillingDeps): Promise<number> {
+// through the webhook's own path, and returns how many. The operator
+// is told: a lost notification is worth knowing about. Paddle unreachable is logged and alerted on (at most once in
+// RECOVERY_ALERT_INTERVAL_MS per process) and returns null, so it never stops the reconcile; the next run tries again.
+async function recoverPayments(customerId: string, deps: BillingDeps): Promise<number | null> {
   const { store } = deps;
   const subscriptionIds = (await store.listSubscriptions(customerId))
     .filter((subscription) => subscription.productId === deps.config.paddle.proProductId)
@@ -125,12 +141,16 @@ async function recoverPayments(customerId: string, deps: BillingDeps): Promise<n
   if (subscriptionIds.length === 0) return 0;
 
   const since = new Date(Date.now() - PAYMENT_RECOVERY_DAYS * 24 * 60 * 60 * 1000);
-  const [listed, recorded] = await Promise.all([
-    deps.listCompletedTransactions(subscriptionIds, since),
-    store.listPayments(customerId),
-  ]);
-  const known = new Set(recorded.map((payment) => payment.transactionId));
+  let listed: PaddleTransaction[];
+  try {
+    listed = await deps.listCompletedTransactions(subscriptionIds, since);
+  } catch (error) {
+    console.error(`Reconcile: could not list Paddle transactions for customer ${customerId}:`, error);
+    await alertPaddleUnreachable(error, deps);
+    return null;
+  }
 
+  const known = new Set((await store.listPayments(customerId)).map((payment) => payment.transactionId));
   const recovered: string[] = [];
   for (const transaction of listed) {
     if (known.has(transaction.id) || transaction.customerId !== customerId) continue;
@@ -147,4 +167,17 @@ async function recoverPayments(customerId: string, deps: BillingDeps): Promise<n
   }
 
   return recovered.length;
+}
+
+async function alertPaddleUnreachable(error: unknown, deps: BillingDeps) {
+  const now = Date.now();
+  if (lastRecoveryAlertAt !== null && now - lastRecoveryAlertAt < RECOVERY_ALERT_INTERVAL_MS) return;
+  lastRecoveryAlertAt = now;
+
+  await deps.alertOperator(
+    'Reconcile cannot list payments from Paddle',
+    `Listing completed transactions failed: ${errorMessage(error)}. Reconcile carries on without it (access, grace, ` +
+      'vesting and GitHub are still reconciled), but a payment whose notification was lost is not recorded until it ' +
+      "works again. Check PADDLE_API_KEY and Paddle's status. No further alert is sent from this process for six hours.",
+  );
 }

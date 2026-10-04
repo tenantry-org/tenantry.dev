@@ -6,7 +6,7 @@ import { Webhooks } from '@paddle/paddle-node-sdk';
 import { transactionEvent } from '@/test/paddle-events';
 import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import { syncCustomer } from './customer-access';
-import { reconcileCustomer } from './reconcile-customer';
+import { reconcileCustomer, resetRecoveryAlerts } from './reconcile-customer';
 
 let deps: FakeBillingDeps;
 
@@ -35,6 +35,7 @@ describe('reconcileCustomer', () => {
     memory.reset();
     memory.state.emails.set('ctm_1', 'buyer@example.com');
     memory.linkGithub('ctm_1', 'octocat');
+    resetRecoveryAlerts();
   });
 
   afterEach(() => {
@@ -139,11 +140,43 @@ describe('reconcileCustomer', () => {
       expect(deps.listCompletedTransactions).not.toHaveBeenCalled();
     });
 
-    it('fails the reconcile when Paddle cannot be reached, so the job is retried', async () => {
+    it('carries on without Paddle: grace still ends, and the operator is alerted once, not for every customer', async () => {
+      await startAccess();
+      await record({ status: 'past_due', graceStartedAt: new Date('2026-10-01T00:00:00Z') });
+      await syncCustomer('ctm_1', deps);
+      memory.state.emails.set('ctm_2', 'second@example.com');
+      memory.subscribe('ctm_2', { subscriptionId: 'sub_2' });
+      vi.clearAllMocks();
+      deps.listCompletedTransactions.mockRejectedValue(new Error('Paddle unavailable'));
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      vi.setSystemTime(new Date('2026-10-31T04:00:00Z'));
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({
+        access: 'ended',
+        paymentsRecovered: null,
+      });
+      await expect(reconcileCustomer('ctm_2', deps)).resolves.toMatchObject({ paymentsRecovered: null });
+
+      expect(memory.state.access.get('ctm_1')?.status).toBe('lapsed');
+      expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
+      expect(deps.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Reconcile cannot list payments from Paddle',
+        expect.stringContaining('Paddle unavailable'),
+      );
+    });
+
+    it('alerts again about Paddle once a few hours have passed', async () => {
       await startAccess();
       deps.listCompletedTransactions.mockRejectedValue(new Error('Paddle unavailable'));
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-      await expect(reconcileCustomer('ctm_1', deps)).rejects.toThrow('Paddle unavailable');
+      await reconcileCustomer('ctm_1', deps);
+      vi.setSystemTime(new Date('2026-10-01T03:00:00Z'));
+      await reconcileCustomer('ctm_1', deps);
+      vi.setSystemTime(new Date('2026-10-01T07:00:00Z'));
+      await reconcileCustomer('ctm_1', deps);
+
+      expect(deps.alertOperator).toHaveBeenCalledTimes(2);
     });
   });
 
