@@ -34,6 +34,27 @@ export function welcomeProEmail(to: string, siteUrl: string): EmailMessage {
   };
 }
 
+/**
+ * Sent when a feed token is created on the Pro access page, so a token the customer did not create is noticed. It
+ * names the token and its first characters, never the token itself.
+ */
+export function feedTokenCreatedEmail(
+  to: string,
+  token: { name: string; prefix: string },
+  siteUrl: string,
+): EmailMessage {
+  return {
+    to,
+    subject: 'A Tenantry Pro feed token was created',
+    html: layout(
+      `<h1 style="font-size:20px">A feed token was created</h1>
+<p>A feed token named <strong>${escapeHtml(token.name)}</strong>, starting <code>${escapeHtml(token.prefix)}</code>, was created on your Pro access page. It can restore Tenantry Pro from the package feed until it is revoked.</p>
+<p>If you did not create it, revoke it now and email support@tenantry.dev.</p>
+<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">Review your feed tokens</a></p>`,
+    ),
+  };
+}
+
 /** Sent when a customer's access ends: none of their subscriptions entitles them any more. */
 export function accessRevokedEmail(to: string, siteUrl: string): EmailMessage {
   return {
@@ -46,4 +67,9 @@ export function accessRevokedEmail(to: string, siteUrl: string): EmailMessage {
 <p><a href="${siteUrl}/#pricing" style="${BUTTON}">View pricing</a></p>`,
     ),
   };
+}
+
+// Text from a customer, such as a token's name, goes into the HTML only escaped.
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (character) => `&#${character.codePointAt(0)};`);
 }

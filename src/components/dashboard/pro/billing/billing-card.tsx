@@ -11,7 +11,7 @@ import { keepSubscription, openBillingPortal, type BillingPortalTarget } from '@
 import type { BillingView } from '@/server/billing/pro-pages';
 import { ProOffer } from '@/constants/pro-offer';
 
-type Props = Pick<BillingView, 'access' | 'subscriptions'>;
+type Props = Pick<BillingView, 'entitlement' | 'subscriptions'>;
 
 type Pending = { kind: 'cancel' | 'keep'; subscriptionId: string } | null;
 
@@ -21,7 +21,7 @@ type Pending = { kind: 'cancel' | 'keep'; subscriptionId: string } | null;
  * cancellation can be undone here (Keep subscription) or in the portal (Don't cancel). Shown to former customers
  * too: one whose grace period ended updates the failed payment method here, and invoices stay available.
  */
-export function BillingCard({ access, subscriptions }: Readonly<Props>) {
+export function BillingCard({ entitlement, subscriptions }: Readonly<Props>) {
   const { toast } = useToast();
   const [busy, startTransition] = useTransition();
   const [confirming, setConfirming] = useState<Pending>(null);
@@ -34,7 +34,7 @@ export function BillingCard({ access, subscriptions }: Readonly<Props>) {
       : subscription,
   );
   // When every Pro subscription is set to end, access ends with the last of them.
-  const status = access?.status ?? 'lapsed';
+  const status = entitlement.access;
   const endsAt =
     status === 'active' && shown.length > 0 && shown.every((subscription) => subscription.endsAt)
       ? shown
@@ -99,7 +99,6 @@ export function BillingCard({ access, subscriptions }: Readonly<Props>) {
         </CardTitle>
       </CardHeader>
       <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
-        {status === 'grace' && <GraceNotice grace={access?.grace ?? null} />}
         {status === 'lapsed' && (
           <EndedNotice paymentFailed={shown.some((subscription) => subscription.status === 'past_due')} />
         )}
@@ -213,33 +212,14 @@ function StatusBadge({ status, endsAt }: Readonly<{ status: string; endsAt: stri
   return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${tone}`}>{status}</span>;
 }
 
-function GraceNotice({ grace }: Readonly<{ grace: { endsAt: string; ended: boolean } | null }>) {
-  const ends = grace ? formatDate(grace.endsAt) : null;
-
-  if (grace?.ended) {
-    return (
-      <p className={'rounded-md bg-warning-surface px-3 py-2 text-sm text-warning'}>
-        Your last payment failed, and the 30-day grace period ended on {ends}. Update your payment method to restore
-        access.
-      </p>
-    );
-  }
-
-  return (
-    <p className={'rounded-md bg-warning-surface px-3 py-2 text-sm text-warning'}>
-      Your last payment failed. Your access to the package feed continues{ends ? ` until ${ends}` : ''} while Paddle
-      retries it. Update your payment method to keep it.
-    </p>
-  );
-}
-
 // Access has ended: the grace period of a failed payment ran out, or every subscription ended.
 function EndedNotice({ paymentFailed }: Readonly<{ paymentFailed: boolean }>) {
   if (paymentFailed) {
     return (
       <p className={'rounded-md bg-warning-surface px-3 py-2 text-sm text-warning'}>
-        Your last payment failed and the 30-day grace period is over, so your access to the package feed has ended.
-        Update your payment method so Paddle can collect it: access returns when it does.
+        Your last payment failed and the 30-day grace period is over, so the package feed now serves you only the vested
+        releases, or nothing. Update your payment method so Paddle can collect it: access to every release returns when
+        it does.
       </p>
     );
   }

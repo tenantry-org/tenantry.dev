@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { testServerConfig } from '@/test/server-config';
 import { alertOperator } from './alerts';
 import { resendRequest, sendEmail } from './send';
-import { accessRevokedEmail, welcomeProEmail } from './templates';
+import { accessRevokedEmail, feedTokenCreatedEmail, welcomeProEmail } from './templates';
 
 const SITE = 'https://sandbox.example.com';
 const email = { resendApiKey: 're_test', from: 'Tenantry <noreply@tenantry.dev>', replyTo: 'support@tenantry.dev' };
@@ -50,6 +50,20 @@ describe('email templates', () => {
 
   it('welcomeProEmail says which account to log in with: purchases are matched to accounts by email address', () => {
     expect(welcomeProEmail('cust@example.com', SITE).html).toContain('Log in to Tenantry with this email address');
+  });
+
+  it('feedTokenCreatedEmail names the token, escaping its name, and links the access page to revoke it', () => {
+    const { to, html } = feedTokenCreatedEmail(
+      'cust@example.com',
+      { name: '<img src=x onerror=alert(1)> & co', prefix: 'tpf_ab12' },
+      SITE,
+    );
+
+    expect(to).toBe('cust@example.com');
+    expect(html).toContain('&#60;img src=x onerror=alert(1)&#62; &#38; co');
+    expect(html).not.toContain('<img src=x');
+    expect(html).toContain('<code>tpf_ab12</code>');
+    expect(html).toContain(`href="${SITE}/dashboard/pro"`);
   });
 
   it("accessRevokedEmail targets the customer, mentions ending, and links this environment's pricing", () => {
