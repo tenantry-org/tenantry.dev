@@ -1,9 +1,6 @@
 import type {
   AccessStatus,
-  CustomerAccessRecord,
   Entitlement,
-  GithubAccount,
-  GithubState,
   PaymentAdjustmentEvent,
   PaymentEvent,
   PaymentStatus,
@@ -15,8 +12,8 @@ import { chargedBeforeTax } from '@/server/db/payment-amounts';
 /**
  * In-memory stand-in for billing-store.ts, for tests that follow a customer's access through several
  * events. `recordCustomerEvent`, `recordSubscriptionEvent`, `recordLicenceFailure`, `recordPayment`,
- * `recordPaymentAdjustment`, `saveCustomerState` and `customersToReconcile` behave as the database functions they call do (tested in supabase/tests/database), and `linkGithubAccount` as github_links' unique github_id
- * does.
+ * `recordPaymentAdjustment`, `saveCustomerState` and `customersToReconcile` behave as the database functions they
+ * call do (tested in supabase/tests/database).
  */
 interface Licence {
   customerId: string;
@@ -36,12 +33,8 @@ const state = {
   customerEventAt: new Map<string, string>(),
   /** Each subscription as its last applied event described it, with the grace start the database keeps. */
   subscriptions: new Map<string, SubscriptionEvent & { graceStartedAt: string | null }>(),
-  /** Each customer's linked GitHub account, as github_links records it. */
-  githubAccounts: new Map<string, GithubAccount>(),
-  /** GitHub itself: each account's current login, by id. Renaming an account changes only this. */
-  githubUsers: new Map<number, string>(),
-  /** Each customer's access and GitHub state (active_subscriptions). */
-  access: new Map<string, CustomerAccessRecord>(),
+  /** Each customer's access (active_subscriptions.access_status). */
+  access: new Map<string, AccessStatus>(),
   licences: [] as Licence[],
   licenceFailures: new Map<string, { attempts: number; lastError: string }>(),
   /** The payment ledger, by transaction id, with each payment's status as the last recompute stored it. */
@@ -64,8 +57,6 @@ export const memory = {
     state.emails.clear();
     state.customerEventAt.clear();
     state.subscriptions.clear();
-    state.githubAccounts.clear();
-    state.githubUsers.clear();
     state.access.clear();
     state.licences.length = 0;
     state.licenceFailures.clear();
@@ -98,24 +89,9 @@ export const memory = {
     });
   },
 
-  /** Links a GitHub account to the customer, as connecting it on the dashboard does. */
-  linkGithub(customerId: string, login: string, id = 1) {
-    state.githubAccounts.set(customerId, { id, login });
-    state.githubUsers.set(id, login);
-  },
-
-  /** Stands in for provisioning.ts's currentLogin: the account's login on GitHub now. */
-  async currentLogin(githubId: number) {
-    return state.githubUsers.get(githubId) ?? null;
-  },
-
   store: {
     async getCustomerEmail(customerId: string) {
       return state.emails.get(customerId) ?? null;
-    },
-
-    async findCustomerIdByEmail(email: string) {
-      return [...state.emails].find(([, customerEmail]) => customerEmail === email)?.[0] ?? null;
     },
 
     async recordCustomerEvent(event: { customerId: string; email: string; occurredAt: string }) {
@@ -133,46 +109,6 @@ export const memory = {
       const graceStartedAt = event.status === 'past_due' ? (existing?.graceStartedAt ?? event.occurredAt) : null;
       state.subscriptions.set(event.subscriptionId, { ...event, graceStartedAt });
       return true;
-    },
-
-    async getGithubAccount(customerId: string) {
-      const account = state.githubAccounts.get(customerId);
-      return account ? { ...account } : null;
-    },
-
-    async getGithubAccountHolder(githubId: number) {
-      return [...state.githubAccounts].find(([, account]) => account.id === githubId)?.[0] ?? null;
-    },
-
-    async linkGithubAccount(customerId: string, account: GithubAccount) {
-      const holder = await memory.store.getGithubAccountHolder(account.id);
-      if (holder !== null && holder !== customerId) return false;
-      state.githubAccounts.set(customerId, { ...account });
-      return true;
-    },
-
-    async setGithubLogin(customerId: string, login: string) {
-      const account = state.githubAccounts.get(customerId);
-      if (account) account.login = login;
-    },
-
-    async getCustomerAccess(customerId: string) {
-      const access = state.access.get(customerId);
-      return access ? { ...access } : null;
-    },
-
-    async resetGithubState(customerId: string) {
-      const access = state.access.get(customerId);
-      if (!access) return;
-      access.githubState = 'none';
-      access.githubInvitedAt = null;
-    },
-
-    async setGithubState(customerId: string, githubState: Exclude<GithubState, 'none'>) {
-      const access = state.access.get(customerId);
-      if (!access || access.status === 'lapsed') return;
-      access.githubState = githubState;
-      access.githubInvitedAt = githubState === 'invited' ? new Date() : null;
     },
 
     async hasLicence(customerId: string) {
@@ -196,11 +132,10 @@ export const memory = {
     async customersToReconcile() {
       const entitled = (status: AccessStatus) => status === 'active' || status === 'grace';
       const customers = new Set([
-        ...[...state.access].filter(([, access]) => entitled(access.status)).map(([customerId]) => customerId),
+        ...[...state.access].filter(([, status]) => entitled(status)).map(([customerId]) => customerId),
         ...[...state.subscriptions.values()]
           .filter((subscription) => ['active', 'trialing', 'past_due'].includes(subscription.status))
           .map((subscription) => subscription.customerId),
-        ...state.githubAccounts.keys(),
         ...state.licenceFailures.keys(),
         ...[...state.entitlementStates]
           .filter(([, entitlement]) => entitlement.run || entitlement.grants.some((g) => g.status === 'conditional'))
@@ -282,22 +217,20 @@ export const memory = {
         }));
     },
 
-    // As set_customer_entitlement does: returns the access it replaced, and ending access resets the GitHub state.
+    async listGrants(customerId: string) {
+      return (state.entitlementStates.get(customerId)?.grants ?? []).map((grant) => ({ ...grant }));
+    },
+
+    // As set_customer_entitlement does: returns the access it replaced.
     async saveCustomerState(customerId: string, entitlement: Entitlement) {
       const previous = state.access.get(customerId);
-      const status = entitlement.access.status;
-      const ended = status === 'lapsed';
-      state.access.set(customerId, {
-        status,
-        githubState: ended ? 'none' : (previous?.githubState ?? 'none'),
-        githubInvitedAt: ended ? null : (previous?.githubInvitedAt ?? null),
-      });
+      state.access.set(customerId, entitlement.access.status);
       state.entitlementStates.set(customerId, entitlement);
       for (const [transactionId, paymentStatus] of Object.entries(entitlement.paymentStatuses)) {
         const payment = state.payments.get(transactionId);
         if (payment?.customerId === customerId) payment.status = paymentStatus;
       }
-      return previous?.status ?? 'lapsed';
+      return previous ?? 'lapsed';
     },
   } satisfies BillingStore,
 };

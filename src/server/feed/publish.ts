@@ -9,8 +9,10 @@ import { parseNuspec, readRootFiles } from '@/server/feed/nupkg';
  * workflow holds the key; the server knows only its hash (FEED_PUBLISH_KEY_SHA256).
  *
  * A package is accepted if its id is Tenantry.Pro or Tenantry.Pro.*, in the casing it was first published with, its
- * version is major.minor.patch, and that id and version are not published yet (409 otherwise, which
- * `--skip-duplicate` treats as done). Its release is recorded with
+ * version is major.minor.patch, and that id and version are not published yet. Publishing the same package again (the
+ * same bytes, by SHA-512) answers 409, which `dotnet nuget push --skip-duplicate` and scripts/feed-publish.sh treat as
+ * done, so a release can be pushed again safely. A different package under an id and version already published
+ * answers 400, which no client treats as done: a published version never changes. Its release is recorded with
  * the first of its packages (pro_releases). The release date is when that first package is published, unless the
  * package carries a `tenantry-release.json` at its root, which may give:
  *   releasedAt  the release's date (ISO 8601), such as the signed tag's date, for a release published later. It may
@@ -38,11 +40,7 @@ const PACKAGE_ID = /^Tenantry\.Pro(\.[A-Za-z0-9]+)*$/;
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 export async function handlePublish(request: Request, deps: FeedDeps = defaultFeedDeps): Promise<Response> {
-  const expected = deps.feedPublishKeySha256();
-  const key = request.headers.get('x-nuget-apikey');
-  if (!expected || !key || !sameHash(createHash('sha256').update(key, 'utf8').digest('hex'), expected)) {
-    return reply(403, 'A valid publish key is required.');
-  }
+  if (!isPublisher(request, deps)) return reply(403, 'A valid publish key is required.');
 
   let bytes: Uint8Array;
   try {
@@ -82,11 +80,11 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
   // NuGet ids are case-insensitive: one package, one casing, as it was first published.
   const recordedId = await deps.store.recordedPackageId(lowerId);
   if (recordedId !== null && recordedId !== nuspec.id) {
-    return reply(409, `${nuspec.id} is published as ${recordedId}; use that casing.`);
+    return reply(400, `${nuspec.id} is published as ${recordedId}; use that casing.`);
   }
-  if (await deps.store.packageExists(lowerId, nuspec.version)) {
-    return reply(409, `${nuspec.id} ${nuspec.version} is already published.`);
-  }
+  const sha512 = createHash('sha512').update(bytes).digest();
+  const duplicate = await duplicateReply(nuspec.id, nuspec.version, sha512.toString('base64'), deps);
+  if (duplicate) return duplicate;
 
   const [major, minor, patch] = [Number(version[1]), Number(version[2]), Number(version[3])];
   const releases = await deps.store.listReleases();
@@ -132,7 +130,7 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
     });
     if (release.security !== security) {
       return reply(
-        409,
+        400,
         `Release ${nuspec.version} is recorded ${release.security ? 'as' : 'as not'} a security patch.`,
       );
     }
@@ -147,7 +145,6 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
   // Stored at a path named by the package's own hash, never replacing a file: two concurrent publishes of one version
   // with different bytes store at two paths, the record's unique key picks one, and the recorded path always holds the
   // recorded bytes. The loser's file is left unreferenced.
-  const sha512 = createHash('sha512').update(bytes).digest();
   const storagePath = `${lowerId}/${nuspec.version}/sha512-${sha512.toString('hex')}/${lowerId}.${nuspec.version}.nupkg`;
   await deps.storage.storePackageFile(storagePath, bytes);
 
@@ -162,9 +159,54 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
     authors: nuspec.authors,
     dependencyGroups: nuspec.dependencyGroups,
   });
-  if (!recorded) return reply(409, `${nuspec.id} ${nuspec.version} is already published.`);
+  // A concurrent push of the same version recorded first.
+  if (!recorded) return (await duplicateReply(nuspec.id, nuspec.version, sha512.toString('base64'), deps))!;
 
   return reply(201, `Published ${nuspec.id} ${nuspec.version}.`);
+}
+
+/**
+ * What the feed holds, for an operator (`GET /feed/v3/package` with the publish key in X-NuGet-ApiKey, as
+ * scripts/feed-publish.sh list sends it): every release, oldest first, with its dates and its packages' sizes and
+ * hashes. Customers' feed tokens cannot read it.
+ */
+export async function handlePublishedList(request: Request, deps: FeedDeps = defaultFeedDeps): Promise<Response> {
+  if (!isPublisher(request, deps)) return reply(403, 'A valid publish key is required.');
+
+  const releases = await deps.store.listPublishedReleases();
+  return Response.json(
+    {
+      releases: releases.map((release) => ({
+        version: release.version,
+        publishedAt: release.publishedAt.toISOString(),
+        security: release.security,
+        entitlementAt: release.entitlementAt.toISOString(),
+        packages: release.packages,
+      })),
+    },
+    { headers: { 'Cache-Control': 'private, no-store' } },
+  );
+}
+
+// Whether the request carries the publish key whose SHA-256 is configured (FEED_PUBLISH_KEY_SHA256). Nothing is
+// published or listed while none is configured.
+function isPublisher(request: Request, deps: FeedDeps): boolean {
+  const expected = deps.feedPublishKeySha256();
+  const key = request.headers.get('x-nuget-apikey');
+  return Boolean(expected && key && sameHash(createHash('sha256').update(key, 'utf8').digest('hex'), expected!));
+}
+
+// 409 when this package and version is published with these bytes, 400 when it is published with others, and null when
+// it is not published.
+async function duplicateReply(id: string, version: string, sha512: string, deps: FeedDeps): Promise<Response | null> {
+  const recorded = await deps.store.recordedPackageHash(id.toLowerCase(), version);
+  if (recorded === null) return null;
+  if (recorded === sha512) return reply(409, `${id} ${version} is already published with the same content.`);
+  return reply(
+    400,
+    `${id} ${version} is already published with different content. A published version never changes: publish a new ` +
+      'version.',
+  );
 }
 
 function sameHash(actual: string, expected: string): boolean {

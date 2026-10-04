@@ -12,7 +12,7 @@ export function NoSubscription({ view }: Readonly<{ view: NoSubscriptionView }>)
       </CardHeader>
       <CardContent className={'p-0 pt-4 flex flex-col gap-4'}>
         <p className={'text-muted-foreground'}>
-          Subscribe to Tenantry Pro to get the private package feed and your licence key.
+          Subscribe to Tenantry Pro to restore it from the package feed and get your licence key.
         </p>
         {!view.customer && view.accountEmail && (
           <p className={'text-muted-foreground'}>

@@ -25,11 +25,6 @@ function environment(paddleEnvironment: 'sandbox' | 'production', overrides: Rec
     NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: 'test_client_token',
     PADDLE_NOTIFICATION_WEBHOOK_SECRET: 'webhook',
     CRON_SECRET: 'cron',
-    GITHUB_ORG: paddleEnvironment === 'production' ? 'tenantry-org' : 'tenantry-sandbox',
-    GITHUB_TEAM: 'pro-customers',
-    GITHUB_APP_ID: '1',
-    GITHUB_APP_PRIVATE_KEY: 'app-key',
-    GITHUB_APP_INSTALLATION_ID: '2',
     PADDLE_PRO_PRODUCT_ID: 'pro_01',
     NEXT_PUBLIC_PADDLE_PRICE_MONTHLY: 'pri_01month',
     NEXT_PUBLIC_PADDLE_PRICE_YEARLY: 'pri_01year',
@@ -69,11 +64,6 @@ describe('validateServerConfig', () => {
         proProductId: 'pro_01',
       },
       checkoutEnabled: false,
-      github: {
-        org: 'tenantry-org',
-        team: 'pro-customers',
-        app: { appId: '1', privateKey: 'app-key', installationId: '2' },
-      },
       licenceSigningKey: expect.any(KeyObject),
       provisioning: 'manual',
       email: { resendApiKey: 'resend', from: 'Tenantry <hello@tenantry.dev>', replyTo: 'support@tenantry.dev' },
@@ -82,9 +72,7 @@ describe('validateServerConfig', () => {
       feedPublishKeySha256: null,
     });
     expect(config.licenceSigningKey.export({ type: 'pkcs8', format: 'pem' })).toBe(productionKey.pem);
-    expect([config, config.paddle, config.paddle.prices, config.github.app, config.email].every(Object.isFrozen)).toBe(
-      true,
-    );
+    expect([config, config.paddle, config.paddle.prices, config.email].every(Object.isFrozen)).toBe(true);
     expect(validateServerConfig(environment('sandbox'), productionKey.spki).paddle.environment).toBe('sandbox');
   });
 
@@ -103,8 +91,7 @@ describe('validateServerConfig', () => {
   it('throws for a misconfigured production environment, listing every problem', () => {
     const env = environment('production', {
       NEXT_PUBLIC_PADDLE_CLIENT_TOKEN: undefined,
-      GITHUB_ORG: undefined,
-      GITHUB_TEAM: ' ',
+      CRON_SECRET: ' ',
       PADDLE_PRO_PRODUCT_ID: undefined,
       LICENCE_SIGNING_PRIVATE_KEY: sandboxKey.pem,
       RESEND_API_KEY: undefined,
@@ -115,8 +102,7 @@ describe('validateServerConfig', () => {
     expect(problems(env)).toEqual([
       expect.stringContaining('NEXT_PUBLIC_PADDLE_CLIENT_TOKEN is not set'),
       expect.stringContaining('PADDLE_PRO_PRODUCT_ID is not set'),
-      expect.stringContaining('GITHUB_ORG is not set'),
-      expect.stringContaining('GITHUB_TEAM is not set'),
+      expect.stringContaining('CRON_SECRET is not set'),
       expect.stringContaining('is not the production key'),
       expect.stringContaining('RESEND_API_KEY is not set'),
     ]);
@@ -201,10 +187,7 @@ describe('validateServerConfig', () => {
     expect(siteUrl('http://localhost:3000')).toBe('http://localhost:3000');
   });
 
-  it("keeps a sandbox server off production's GitHub org and database", () => {
-    expect(problems(environment('sandbox', { GITHUB_ORG: 'Tenantry-Org' }))).toEqual([
-      expect.stringContaining("GITHUB_ORG is production's org"),
-    ]);
+  it("keeps a sandbox server off production's database", () => {
     expect(
       problems(environment('sandbox', { NEXT_PUBLIC_SUPABASE_URL: 'https://xoqqgenzhqefyeyzahim.supabase.co/' })),
     ).toEqual([expect.stringContaining("NEXT_PUBLIC_SUPABASE_URL is production's database")]);
@@ -272,8 +255,8 @@ describe('serverConfig', () => {
     const { serverConfig } = await import('./server-config');
 
     const config = serverConfig();
-    expect(config.github.org).toBe('tenantry-sandbox');
-    vi.stubEnv('GITHUB_ORG', undefined);
+    expect(config.paddle.proProductId).toBe('pro_01');
+    vi.stubEnv('PADDLE_PRO_PRODUCT_ID', undefined);
     expect(serverConfig()).toBe(config);
   });
 

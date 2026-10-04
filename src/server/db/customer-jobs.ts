@@ -6,8 +6,7 @@ import { errorMessage } from '@/lib/errors';
 /**
  * The customer jobs (`customer_jobs`, supabase/migrations/20261002120000_baseline.sql): the work that changes a
  * customer's access, which the worker (jobs/worker.ts) runs one customer at a time, in order. A job is a verified
- * Paddle notification, a reconcile of one customer, or a lease: a turn held by work outside the worker
- * (jobs/customer-lease.ts), so that none of the customer's other jobs runs meanwhile.
+ * Paddle notification or a reconcile of one customer.
  */
 
 /**
@@ -25,7 +24,6 @@ export type PaddleEventJson = {
 export type Job = { id: string; attempts: number } & (
   | { kind: 'paddle_event'; customerId: string | null; event: PaddleEventJson }
   | { kind: 'reconcile'; customerId: string }
-  | { kind: 'lease'; customerId: string }
 );
 
 /** Attempts before a job is marked failed. With the backoff below they span about 8 hours. */
@@ -102,7 +100,7 @@ export async function claimJobs(limit: number, lockSeconds: number): Promise<Job
   return (data ?? []).map(toJob);
 }
 
-// customer_jobs_shape_check guarantees what each kind has: a Paddle event its body, the others a customer.
+// customer_jobs_shape_check guarantees what each kind has: a Paddle event its body, a reconcile job a customer.
 function toJob(row: Tables<'customer_jobs'>): Job {
   const { id, attempts } = row;
 
@@ -110,8 +108,7 @@ function toJob(row: Tables<'customer_jobs'>): Job {
     case 'paddle_event':
       return { id, attempts, kind: 'paddle_event', customerId: row.customer_id, event: row.payload as PaddleEventJson };
     case 'reconcile':
-    case 'lease':
-      return { id, attempts, kind: row.kind, customerId: row.customer_id as string };
+      return { id, attempts, kind: 'reconcile', customerId: row.customer_id as string };
     default:
       throw new Error(`Job ${id} is of an unknown kind: ${row.kind}`);
   }
@@ -161,31 +158,6 @@ export async function releaseWaitingJobs(customerId: string): Promise<void> {
     .eq('customer_id', customerId)
     .eq('status', 'pending')
     .gt('next_attempt_at', now);
-
-  if (error) throw error;
-}
-
-/**
- * Takes the customer's lease for `seconds` (`acquire_customer_lease`): a locked job that keeps the worker from
- * starting their other jobs. Returns its id, or null while one of their jobs is running or another lease is held.
- */
-export async function acquireCustomerLease(customerId: string, seconds: number): Promise<string | null> {
-  const supabase = createServiceRoleClient();
-  const { data, error } = await supabase.rpc('acquire_customer_lease', {
-    p_customer_id: customerId,
-    p_seconds: seconds,
-  });
-
-  if (error) throw error;
-
-  // The function returns null when the customer is busy; generated return types are never nullable.
-  return (data as string | null) ?? null;
-}
-
-/** Releases a lease taken by acquireCustomerLease (`release_customer_lease`). */
-export async function releaseCustomerLease(leaseId: string): Promise<void> {
-  const supabase = createServiceRoleClient();
-  const { error } = await supabase.rpc('release_customer_lease', { p_lease_id: leaseId });
 
   if (error) throw error;
 }

@@ -48,7 +48,20 @@ export function fakeSupabase(
         return writeError ? { data: null, error: writeError } : { data: tables[table]?.list ?? [], error: null };
       });
       const chain = settled as Promise<Result> & Record<string, unknown>;
-      for (const method of ['select', 'eq', 'gt', 'in', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
+      for (const method of [
+        'select',
+        'eq',
+        'neq',
+        'is',
+        'gt',
+        'in',
+        'order',
+        'limit',
+        'update',
+        'upsert',
+        'insert',
+        'delete',
+      ]) {
         chain[method] = (...args: unknown[]) => {
           calls?.push({ table, method, args });
           if (method === 'eq') filters[args[0] as string] = args[1];

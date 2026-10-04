@@ -5,55 +5,77 @@ import type { BillingInterval, OfferPrices } from '@/lib/public-config';
 import { getCurrentUser } from '@/server/db/current-user';
 import {
   getCustomerId,
-  readCustomerAccess,
-  readGithubLogin,
+  readCustomerState,
+  readFeedTokens,
   readLicenceKey,
   readSubscriptions,
+  readVestedThrough,
 } from '@/server/db/customer-dashboard';
-import { graceEndFor, isEntitled } from '@/server/billing/entitlement-policy';
-import type { AccessStatus, GithubState } from '@/server/db/billing-store';
+import { canRestore, currentAccess } from '@/server/billing/entitlement-policy';
+import type { AccessStatus } from '@/server/db/billing-store';
 import { type ServerConfig, serverConfig } from '@/server/config/server-config';
 
 /**
  * Read models for the customer's Pro pages (Access, Install and Billing). Each reads only what its page shows, with
  * the signed-in user's session (customer-dashboard.ts), so RLS guarantees a customer only ever sees their own rows.
+ * What a customer may access is decided by entitlement-policy.ts from what is stored, as the package feed decides it,
+ * so the pages and the feed agree.
  */
 
-/** GitHub drops an org invitation that is not accepted within 7 days; reconcile then sends a new one. */
-const INVITATION_DAYS = 7;
+/** The most feed tokens a customer holds at once (create_feed_token refuses an eleventh). */
+export const FEED_TOKEN_LIMIT = 10;
 
-/** Shown instead of a page that is not for the login: it has no Pro (or, for Billing, no billing account). */
+/** Shown instead of a page that is not for the login: it has no billing account, or, on Install, nothing to restore. */
 export interface NoSubscriptionView {
   noSubscription: true;
   /** Whether the login has a billing account: a purchase was made with its confirmed email. */
   customer: boolean;
   /** The login's email, which a purchase must have been made with to show here. */
   accountEmail: string | null;
-  /**
-   * On Access, a former customer's licence key: it does not expire, and they keep it after their subscription ends.
-   * Null otherwise.
-   */
-  licenceKey: string | null;
 }
 
-/** Access (/dashboard/pro), for a customer with Pro: their GitHub connection and licence key. */
+/**
+ * What the customer may access now and owns for good, as the Access and Billing pages both show it. Dates are ISO
+ * strings, since the view reaches client components.
+ */
+export interface EntitlementView {
+  /** Access now (entitlement-policy.ts: currentAccess): a grace period that has ended is lapsed. */
+  access: AccessStatus;
+  /** While in grace: when access ends unless a payment recovers. */
+  graceEndsAt: string | null;
+  /** Whether the package feed serves them anything: access, or vested releases (entitlement-policy.ts: canRestore). */
+  canRestore: boolean;
+  /** The vested-through date: every release published on or before it is vested. Null when nothing is vested. */
+  vestedThrough: string | null;
+  /** The current qualifying period, while they have access: whole paid months so far, and when it reaches 12. */
+  qualifying: { monthsPaid: number; vestsAt: string } | null;
+  /** The end of an annual term whose grant is confirmed when the term is completed. */
+  conditionalThrough: string | null;
+}
+
+/** One of the customer's feed tokens, as the Access page lists it. */
+export interface FeedTokenView {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+/** Access (/dashboard/pro), for any customer: their entitlement, feed tokens and licence key. */
 export interface AccessView {
   noSubscription: false;
-  github: {
-    /** The account they connected, if any. */
-    login: string | null;
-    state: GithubState;
-    /** While `state` is 'invited': when the invitation lapses if not accepted. */
-    invitationExpiresAt: string | null;
-  };
-  /** Their licence key, which does not expire; null until it is issued. */
+  entitlement: EntitlementView;
+  /** Their feed tokens that are not revoked, newest first. */
+  tokens: FeedTokenView[];
+  /** Their licence key, which does not expire and which they keep after a lapse; null until it is issued. */
   licenceKey: string | null;
 }
 
-/** Install (/dashboard/pro/install), for a customer with Pro: setting up the feed, with their GitHub account. */
+/** Install (/dashboard/pro/install), for a customer the package feed serves: restoring from it. */
 export interface InstallView {
   noSubscription: false;
-  githubLogin: string | null;
+  entitlement: EntitlementView;
 }
 
 /**
@@ -62,12 +84,7 @@ export interface InstallView {
  */
 export interface BillingView {
   noSubscription: false;
-  /**
-   * The customer's access across all their subscriptions (`active_subscriptions`), or null if they never had any. While
-   * every subscription that entitles them is past due, `grace` says when access ends if no payment recovers, and
-   * whether that has passed (access is then removed by the next reconcile).
-   */
-  access: { status: AccessStatus; grace: { endsAt: string; ended: boolean } | null } | null;
+  entitlement: EntitlementView;
   /** The customer's Pro subscriptions that have not ended, from our own records. */
   subscriptions: BillingSubscription[];
 }
@@ -83,29 +100,47 @@ export interface BillingSubscription {
   endsAt: string | null;
 }
 
+/**
+ * The customer's entitlement as of `now`, from what is stored: the one read that the Access and Billing pages, and the
+ * feed token actions, take it from.
+ */
+export async function readEntitlement(customerId: string, now: Date = new Date()): Promise<EntitlementView> {
+  const [state, vestedThrough] = await Promise.all([readCustomerState(customerId), readVestedThrough(customerId)]);
+  const access = currentAccess(state?.access ?? null, now);
+  const entitled = access.status !== 'lapsed';
+
+  return {
+    access: access.status,
+    graceEndsAt: iso(access.graceEndsAt),
+    canRestore: canRestore({ accessStatus: access.status, vestedThrough }),
+    vestedThrough: iso(vestedThrough),
+    // Progress counts only while the customer has access; a lapse resets it.
+    qualifying:
+      entitled && state?.run ? { monthsPaid: state.run.monthsPaid, vestsAt: state.run.vestsAt.toISOString() } : null,
+    conditionalThrough: entitled ? iso(state?.conditionalThrough ?? null) : null,
+  };
+}
+
 export async function getAccessView(): Promise<AccessView | NoSubscriptionView> {
   const customerId = await getCustomerId();
   if (!customerId) return noSubscription(false);
 
-  // Read with the access, not after it, saving a round trip: a former customer is shown their key too.
-  const [access, licenceKey, githubLogin] = await Promise.all([
-    readCustomerAccess(customerId),
+  const [entitlement, tokens, licenceKey] = await Promise.all([
+    readEntitlement(customerId),
+    readFeedTokens(customerId),
     readLicenceKey(customerId),
-    readGithubLogin(customerId),
   ]);
-  if (!access || !isEntitled(access.status)) return noSubscription(true, licenceKey);
-
-  const invitedAt = access.githubState === 'invited' ? access.githubInvitedAt : null;
 
   return {
     noSubscription: false,
-    github: {
-      login: githubLogin,
-      state: access.githubState,
-      invitationExpiresAt: invitedAt
-        ? new Date(invitedAt.getTime() + INVITATION_DAYS * 24 * 60 * 60 * 1000).toISOString()
-        : null,
-    },
+    entitlement,
+    tokens: tokens.map((token) => ({
+      id: token.id,
+      name: token.name,
+      prefix: token.prefix,
+      createdAt: token.createdAt.toISOString(),
+      lastUsedAt: iso(token.lastUsedAt),
+    })),
     licenceKey,
   };
 }
@@ -114,10 +149,10 @@ export async function getInstallView(): Promise<InstallView | NoSubscriptionView
   const customerId = await getCustomerId();
   if (!customerId) return noSubscription(false);
 
-  const [access, githubLogin] = await Promise.all([readCustomerAccess(customerId), readGithubLogin(customerId)]);
-  if (!access || !isEntitled(access.status)) return noSubscription(true);
+  const entitlement = await readEntitlement(customerId);
+  if (!entitlement.canRestore) return noSubscription(true);
 
-  return { noSubscription: false, githubLogin };
+  return { noSubscription: false, entitlement };
 }
 
 /**
@@ -129,31 +164,12 @@ export async function getBillingView(paddle?: ServerConfig['paddle']): Promise<B
   const customerId = await getCustomerId();
   if (!customerId) return noSubscription(false);
 
-  const [access, subscriptions] = await Promise.all([readCustomerAccess(customerId), readSubscriptions(customerId)]);
+  const [entitlement, subscriptions] = await Promise.all([readEntitlement(customerId), readSubscriptions(customerId)]);
   const { proProductId, prices } = paddle ?? serverConfig().paddle;
-
-  // The same rule as access itself (entitlement-policy.ts), so the page and the access it describes agree.
-  const graceEnd =
-    graceEndFor(
-      subscriptions.map((row) => ({
-        productId: row.product_id,
-        status: row.status,
-        graceStartedAt: row.grace_started_at ? new Date(row.grace_started_at) : null,
-      })),
-      proProductId,
-    )?.getTime() ?? null;
 
   return {
     noSubscription: false,
-    access: access
-      ? {
-          status: access.status,
-          grace:
-            access.status === 'grace' && graceEnd !== null
-              ? { endsAt: new Date(graceEnd).toISOString(), ended: graceEnd <= Date.now() }
-              : null,
-        }
-      : null,
+    entitlement,
     subscriptions: subscriptions
       .filter((row) => row.product_id === proProductId && row.status !== 'canceled')
       .map((row) => billingSubscription(row, prices)),
@@ -161,9 +177,13 @@ export async function getBillingView(paddle?: ServerConfig['paddle']): Promise<B
 }
 
 // The login's email is the request's cached user (current-user.ts), which getCustomerId has already read.
-async function noSubscription(customer: boolean, licenceKey: string | null = null): Promise<NoSubscriptionView> {
+async function noSubscription(customer: boolean): Promise<NoSubscriptionView> {
   const user = await getCurrentUser();
-  return { noSubscription: true, customer, accountEmail: user?.email ?? null, licenceKey };
+  return { noSubscription: true, customer, accountEmail: user?.email ?? null };
+}
+
+function iso(date: Date | null): string | null {
+  return date?.toISOString() ?? null;
 }
 
 type SubscriptionRow = Pick<

@@ -17,11 +17,6 @@ export function testServerConfig(overrides: Partial<ServerConfig> = {}): ServerC
       proProductId: 'pro_01',
     },
     checkoutEnabled: true,
-    github: {
-      org: 'tenantry-sandbox',
-      team: 'pro-customers',
-      app: { appId: '1', privateKey: 'app-key', installationId: '2' },
-    },
     licenceSigningKey: privateKey,
     provisioning: 'auto',
     email: { resendApiKey: 're_test', from: 'Tenantry <noreply@example.com>', replyTo: 'support@example.com' },

@@ -28,9 +28,9 @@ describe('the service-role client', () => {
   it('authorises writes with the service-role key, never a signed-in session, and reads no cookies', async () => {
     const client = createServiceRoleClient(testServerConfig().supabase);
 
-    await client.from('github_links').upsert({ customer_id: 'ctm_1', github_login: 'octocat', github_id: 42 });
+    await client.from('licences').insert({ customer_id: 'ctm_1', jwt: 'licence' });
 
-    const call = fetchMock.mock.calls.find(([input]) => String(input).includes('/rest/v1/github_links'));
+    const call = fetchMock.mock.calls.find(([input]) => String(input).includes('/rest/v1/licences'));
     expect(call).toBeDefined();
     const sent = new Headers(call?.[1]?.headers);
     expect(sent.get('Authorization')).toBe('Bearer service-role-key');

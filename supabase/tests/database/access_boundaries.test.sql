@@ -65,8 +65,6 @@ values ('tenantry.pro', '1.0.0', 'Tenantry.Pro', 'tenantry.pro/1.0.0/tenantry.pr
 insert into public.feed_tokens (customer_id, name, token_hash, prefix) values
   ('ctm_alice', 'CI', encode(sha256('tpf_alice'), 'hex'), 'tpf_alic'),
   ('ctm_bob', 'CI', encode(sha256('tpf_bob'), 'hex'), 'tpf_bob_');
-insert into public.github_links (customer_id, github_login, github_id) values
-  ('ctm_alice', 'alice-gh', 1001), ('ctm_bob', 'bob-gh', 1002);
 insert into public.licence_failures (customer_id, attempts, last_error) values ('ctm_bob', 1, 'signing failed');
 insert into public.customer_jobs (id, kind, customer_id, occurred_at, event_type, payload) values
   ('evt_bob', 'paddle_event', 'ctm_bob', now(), 'customer.updated', '{"data": {"email": "bob@example.com"}}');
@@ -85,8 +83,6 @@ select results_eq($$select transaction_id from public.payments$$, $$values ('txn
 select results_eq($$select customer_id from public.vested_entitlements$$, $$values ('ctm_alice'::text)$$,
   'only her vested entitlement');
 select results_eq($$select jwt from public.licences$$, $$values ('alice-licence'::text)$$, 'only her licence');
-select results_eq($$select github_login from public.github_links$$, $$values ('alice-gh'::text)$$,
-  'only her GitHub link');
 select is_empty($$select 1 from public.customers where customer_id = 'ctm_bob'$$,
   'asking for Bob''s customer by id returns nothing');
 select is_empty($$select 1 from public.licences where customer_id = 'ctm_bob'$$,
@@ -97,7 +93,18 @@ select is_empty($$select 1 from public.licence_failures$$, 'licence failures sho
 select is_empty($$select 1 from public.payment_adjustments$$, 'payment adjustments show no rows');
 select is_empty($$select 1 from public.pro_releases$$, 'releases show no rows');
 select is_empty($$select 1 from public.pro_packages$$, 'packages show no rows');
-select results_eq($$select prefix from public.feed_tokens$$, $$values ('tpf_alic'::text)$$, 'only her feed tokens');
+select results_eq($$select id is not null, name, prefix from public.feed_tokens$$, $$values (true, 'CI'::text, 'tpf_alic'::text)$$,
+  'only her feed tokens');
+select throws_ok($$select token_hash from public.feed_tokens$$, '42501', null, 'without their hashes');
+select throws_ok($$select * from public.feed_tokens$$, '42501', null, 'not even by asking for every column');
+select throws_ok($$select public.create_feed_token('ctm_alice', 'mine', repeat('b', 64), 'tpf_')$$, '42501', null,
+  'she cannot create a feed token herself');
+select throws_ok(
+  $$select public.revoke_feed_token('ctm_bob', (select id from public.feed_tokens limit 1))$$, '42501', null,
+  'nor revoke one');
+select throws_ok(
+  $$insert into public.feed_tokens (customer_id, name, token_hash, prefix) values ('ctm_alice', 'x', repeat('c', 64), 'tpf_')$$,
+  '42501', null, 'nor insert one');
 select throws_ok($$select * from public.feed_customer(encode(sha256('tpf_bob'), 'hex'))$$, '42501', null,
   'she cannot look up a feed token');
 select results_eq(
@@ -119,11 +126,8 @@ select throws_ok(
 select throws_ok(
   $$insert into public.licences (customer_id, jwt) values ('ctm_alice', 'forged')$$,
   '42501', null, 'she cannot add a licence');
-select throws_ok(
-  $$insert into public.github_links (customer_id, github_login, github_id) values ('ctm_bob', 'alice-gh', 1003)$$,
-  '42501', null, 'she cannot link a GitHub account to another customer');
 select results_eq(
-  $$with changed as (update public.active_subscriptions set access_status = 'active', github_state = 'active' returning 1)
+  $$with changed as (update public.active_subscriptions set access_status = 'active', months_paid = 12 returning 1)
     select count(*)::int from changed$$,
   $$values (0)$$, 'she cannot change her access');
 select results_eq(
@@ -133,10 +137,6 @@ select results_eq(
 select results_eq(
   $$with changed as (update public.customers set email = 'bob@example.com' returning 1) select count(*)::int from changed$$,
   $$values (0)$$, 'she cannot change her customer''s email to take over another account');
-select results_eq(
-  $$with changed as (update public.github_links set github_login = 'someone-else' returning 1)
-    select count(*)::int from changed$$,
-  $$values (0)$$, 'she cannot change her GitHub link');
 select results_eq(
   $$with removed as (delete from public.licences returning 1) select count(*)::int from removed$$,
   $$values (0)$$, 'she cannot delete licences');
@@ -154,8 +154,6 @@ set local request.jwt.claims to '{"sub": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
 
 select results_eq($$select jwt from public.licences order by jwt$$,
   $$values ('bob-licence'::text), ('bob-second-licence'::text)$$, 'Bob sees only his licences');
-select results_eq($$select github_login from public.github_links$$, $$values ('bob-gh'::text)$$,
-  'and only his GitHub link');
 
 -- Anonymous.
 set local role postgres;
@@ -168,7 +166,6 @@ select is((select count(*)::int from public.active_subscriptions), 0, 'anonymous
 select is((select count(*)::int from public.payments), 0, 'anonymous: no payments');
 select is((select count(*)::int from public.vested_entitlements), 0, 'anonymous: no vested entitlements');
 select is((select count(*)::int from public.licences), 0, 'anonymous: no licences');
-select is((select count(*)::int from public.github_links), 0, 'anonymous: no GitHub links');
 
 -- Nothing the users tried changed anything.
 set local role postgres;
@@ -177,9 +174,9 @@ select results_eq(
       (select count(*)::int from public.payments where customer_id in ('ctm_alice', 'ctm_bob')),
       (select count(*)::int from public.licences where customer_id in ('ctm_alice', 'ctm_bob')),
       (select email from public.customers where customer_id = 'ctm_alice'),
-      (select github_state from public.active_subscriptions where customer_id = 'ctm_alice'),
+      (select months_paid from public.active_subscriptions where customer_id = 'ctm_alice'),
       (select max(vested_through) from public.vested_entitlements where customer_id = 'ctm_alice')$$,
-  $$values (2, 2, 3, 'alice@example.com'::text, 'none'::text, '2027-01-01 00:00+00'::timestamptz)$$,
+  $$values (2, 2, 3, 'alice@example.com'::text, 0, '2027-01-01 00:00+00'::timestamptz)$$,
   'the rows are as the service role left them');
 
 select * from finish();

@@ -105,17 +105,6 @@ describe('drainJobs', () => {
     expect(queue.claimJobs).toHaveBeenCalledTimes(2);
   });
 
-  it('completes an expired customer lease without running anything', async () => {
-    const lease: Job = { id: 'lease_ctm_1_1', attempts: 1, kind: 'lease', customerId: 'ctm_1' };
-    queue.claimJobs.mockResolvedValueOnce([lease]).mockResolvedValueOnce([]);
-
-    await expect(drainJobs(handlers)).resolves.toEqual({ processed: 1, retrying: 0, failed: 0 });
-    expect(handlers.reconcileCustomer).not.toHaveBeenCalled();
-    expect(handlers.applyPaddleEvent).not.toHaveBeenCalled();
-    expect(queue.completeJob).toHaveBeenCalledWith(lease.id);
-    expect(queue.releaseWaitingJobs).not.toHaveBeenCalled();
-  });
-
   it('runs a reconcile job as a reconcile, not as a Paddle event', async () => {
     handlers.reconcileCustomer.mockResolvedValue({ access: 'ended' });
     const job: Job = {

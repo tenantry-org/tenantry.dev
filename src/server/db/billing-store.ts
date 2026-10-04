@@ -7,8 +7,8 @@ import type { Json } from '@/lib/supabase/database.types';
 /**
  * Service-role data access for the commercial tables: customers and subscriptions (as Paddle's events left them), the
  * payment ledger (payments, payment_adjustments), each customer's derived state (active_subscriptions,
- * vested_entitlements), github_links, licences and licence_failures. It runs server-side, from the
- * webhook, reconcile and account-linking paths (src/server/billing), and bypasses RLS with the service-role key. Only
+ * vested_entitlements), licences and licence_failures. It runs server-side, from the webhook and reconcile paths
+ * (src/server/billing), and bypasses RLS with the service-role key. Only
  * the modules in src/server/db query the database (eslint.config.mjs); this one maps these tables' rows to the types
  * below in one place.
  */
@@ -113,19 +113,6 @@ export interface Entitlement {
   paymentStatuses: Record<string, PaymentStatus>;
 }
 
-/**
- * Where the customer's GitHub access stands (`active_subscriptions.github_state`): no grant attempted, an org
- * invitation pending since `githubInvitedAt`, a member of the team, or the last grant attempt failed.
- */
-export type GithubState = 'none' | 'invited' | 'active' | 'failed';
-
-/** The customer's recorded access and GitHub state (`active_subscriptions`). */
-export interface CustomerAccessRecord {
-  status: AccessStatus;
-  githubState: GithubState;
-  githubInvitedAt: Date | null;
-}
-
 /** Returns the customer's email (populated by Paddle customer webhooks), or null if unknown. */
 export async function getCustomerEmail(customerId: string): Promise<string | null> {
   const supabase = createServiceRoleClient();
@@ -134,16 +121,6 @@ export async function getCustomerEmail(customerId: string): Promise<string | nul
   if (error) throw error;
 
   return data?.email ?? null;
-}
-
-/** The customer with this (normalised) email, or null: only purchasers have a customer row. */
-export async function findCustomerIdByEmail(email: string): Promise<string | null> {
-  const supabase = createServiceRoleClient();
-  const { data, error } = await supabase.from('customers').select('customer_id').eq('email', email).maybeSingle();
-
-  if (error) throw error;
-
-  return data?.customer_id ?? null;
 }
 
 /**
@@ -208,115 +185,6 @@ export async function recordSubscriptionEvent(event: SubscriptionEvent): Promise
   if (error) throw error;
 
   return data === true;
-}
-
-/** A linked GitHub account: its durable id, and its login when it was linked or last looked up. */
-export interface GithubAccount {
-  id: number;
-  login: string;
-}
-
-/** Returns the customer's linked GitHub account, or null if they have not connected GitHub yet. */
-export async function getGithubAccount(customerId: string): Promise<GithubAccount | null> {
-  const supabase = createServiceRoleClient();
-  const { data, error } = await supabase
-    .from('github_links')
-    .select('github_id,github_login')
-    .eq('customer_id', customerId)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  return data ? { id: data.github_id, login: data.github_login } : null;
-}
-
-/** The customer the GitHub account is linked to, or null if it is linked to none. */
-export async function getGithubAccountHolder(githubId: number): Promise<string | null> {
-  const supabase = createServiceRoleClient();
-  const { data, error } = await supabase
-    .from('github_links')
-    .select('customer_id')
-    .eq('github_id', githubId)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  return data?.customer_id ?? null;
-}
-
-/**
- * Links the GitHub account to the customer, in place of any account linked before. Returns false if the account
- * is linked to another customer: github_id is unique, so of two concurrent links of one account, one fails.
- */
-export async function linkGithubAccount(customerId: string, account: GithubAccount): Promise<boolean> {
-  const supabase = createServiceRoleClient();
-  const { error } = await supabase
-    .from('github_links')
-    .upsert(
-      { customer_id: customerId, github_login: account.login, github_id: account.id },
-      { onConflict: 'customer_id' },
-    );
-
-  if (error?.code === '23505') return false;
-  if (error) throw error;
-
-  return true;
-}
-
-/** Records the linked account's new login after it was renamed on GitHub. */
-export async function setGithubLogin(customerId: string, login: string): Promise<void> {
-  const supabase = createServiceRoleClient();
-  const { error } = await supabase.from('github_links').update({ github_login: login }).eq('customer_id', customerId);
-
-  if (error) throw error;
-}
-
-/** The customer's recorded access, or null for a customer never seen by syncCustomer. */
-export async function getCustomerAccess(customerId: string): Promise<CustomerAccessRecord | null> {
-  const supabase = createServiceRoleClient();
-  const { data, error } = await supabase
-    .from('active_subscriptions')
-    .select('access_status,github_state,github_invited_at')
-    .eq('customer_id', customerId)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  return data
-    ? {
-        // active_subscriptions' check constraints allow only these.
-        status: data.access_status as AccessStatus,
-        githubState: data.github_state as GithubState,
-        githubInvitedAt: data.github_invited_at ? new Date(data.github_invited_at) : null,
-      }
-    : null;
-}
-
-/** Forgets the customer's GitHub state, when their access moves to another GitHub account (relink). */
-export async function resetGithubState(customerId: string): Promise<void> {
-  const supabase = createServiceRoleClient();
-  const { error } = await supabase
-    .from('active_subscriptions')
-    .update({ github_state: 'none', github_invited_at: null, updated_at: new Date().toISOString() })
-    .eq('customer_id', customerId);
-
-  if (error) throw error;
-}
-
-/**
- * Records the outcome of a GitHub grant or membership check, unless the customer's access has since ended
- * (ending it resets the state, and the grant is then removed). 'invited' starts the invitation's clock.
- */
-export async function setGithubState(customerId: string, state: Exclude<GithubState, 'none'>): Promise<void> {
-  const supabase = createServiceRoleClient();
-  const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('active_subscriptions')
-    .update({ github_state: state, github_invited_at: state === 'invited' ? now : null, updated_at: now })
-    .eq('customer_id', customerId)
-    .in('access_status', ['active', 'grace']);
-
-  if (error) throw error;
 }
 
 /** Whether the customer has been issued a licence. Licences are kept for good, so one is enough. */
@@ -544,10 +412,33 @@ export async function listSubscriptions(customerId: string): Promise<Subscriptio
   }));
 }
 
+/** The customer's computed grants as last stored (vested_entitlements, without operator grants). */
+export async function listGrants(customerId: string): Promise<Grant[]> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('vested_entitlements')
+    .select('kind,started_at,vested_through,status,confirmed_at,transaction_id,withdrawn_reason')
+    .eq('customer_id', customerId)
+    .neq('kind', 'operator');
+
+  if (error) throw error;
+
+  // vested_entitlements' check constraints allow only these.
+  return (data ?? []).map((row) => ({
+    kind: row.kind as GrantKind,
+    startedAt: new Date(row.started_at),
+    vestedThrough: new Date(row.vested_through),
+    status: row.status as GrantStatus,
+    confirmedAt: row.confirmed_at ? new Date(row.confirmed_at) : null,
+    transactionId: row.transaction_id,
+    withdrawnReason: row.withdrawn_reason as WithdrawnReason | null,
+  }));
+}
+
 /**
  * Stores the customer's derived state in one transaction (`set_customer_entitlement`): their access and current run
  * (active_subscriptions), their computed grants (vested_entitlements) and each payment's status. Returns the access
- * status it replaced, 'lapsed' for a customer seen for the first time; ending access also resets the GitHub state.
+ * status it replaced, 'lapsed' for a customer seen for the first time.
  */
 export async function saveCustomerState(customerId: string, entitlement: Entitlement): Promise<AccessStatus> {
   const supabase = createServiceRoleClient();
@@ -558,6 +449,7 @@ export async function saveCustomerState(customerId: string, entitlement: Entitle
     p_customer_id: customerId,
     p_state: {
       access_status: entitlement.access.status,
+      grace_ends_at: time(entitlement.access.graceEndsAt),
       run_started_at: time(run?.startedAt),
       paid_through: time(run?.paidThrough),
       months_paid: run?.monthsPaid ?? 0,

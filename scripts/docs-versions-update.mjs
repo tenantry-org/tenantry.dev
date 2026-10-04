@@ -16,16 +16,7 @@
 import { execFileSync } from 'child_process';
 import { appendFileSync } from 'fs';
 import { isDeepStrictEqual } from 'util';
-import {
-  docsProblem,
-  fetchJson,
-  fetchText,
-  fileAt,
-  foldersAt,
-  hasTag,
-  partialClone,
-  REPOSITORIES,
-} from './docs-sources.mjs';
+import { docsProblem, fetchJson, fetchText, foldersAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
 import {
   FIRST_SOLD_RELEASE,
   GROUPS,
@@ -92,12 +83,9 @@ async function problem(group, tag, newest) {
   const reason = docsProblem(clones[group], group, tag);
   if (reason || !newest) return reason;
   const folders = foldersAt(clones[group], tag, 'samples');
-  const text =
-    group === 'core'
-      ? await fetchText(`${PACKAGE}/${tag.slice(1)}/tenantry.core.nuspec`)
-      : fileAt(clones.pro, tag, 'docs/installation.md');
+  const nuspec = group === 'core' ? await fetchText(`${PACKAGE}/${tag.slice(1)}/tenantry.core.nuspec`) : null;
   try {
-    facts[group] = releaseFacts(group, folders, text);
+    facts[group] = releaseFacts(group, folders, nuspec);
     return null;
   } catch (error) {
     return `${tag}: ${error.message.replace(/\.$/, '')}`;
@@ -135,7 +123,6 @@ const newest = expected[0];
 const expectedNewest = {
   dotnet: facts.core.dotnet,
   samples: { core: facts.core.samples, pro: facts.pro.samples },
-  proInstallation: facts.pro.proInstallation,
 };
 
 const current = { versions: readVersions(), newest: readNewestRelease() };

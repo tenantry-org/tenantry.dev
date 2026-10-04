@@ -8,8 +8,7 @@ export type Database = {
           access_status: string;
           conditional_through: string | null;
           customer_id: string;
-          github_invited_at: string | null;
-          github_state: string;
+          grace_ends_at: string | null;
           months_paid: number;
           paid_through: string | null;
           run_started_at: string | null;
@@ -20,8 +19,7 @@ export type Database = {
           access_status?: string;
           conditional_through?: string | null;
           customer_id: string;
-          github_invited_at?: string | null;
-          github_state?: string;
+          grace_ends_at?: string | null;
           months_paid?: number;
           paid_through?: string | null;
           run_started_at?: string | null;
@@ -32,8 +30,7 @@ export type Database = {
           access_status?: string;
           conditional_through?: string | null;
           customer_id?: string;
-          github_invited_at?: string | null;
-          github_state?: string;
+          grace_ends_at?: string | null;
           months_paid?: number;
           paid_through?: string | null;
           run_started_at?: string | null;
@@ -158,35 +155,6 @@ export type Database = {
             foreignKeyName: 'feed_tokens_customer_id_fkey';
             columns: ['customer_id'];
             isOneToOne: false;
-            referencedRelation: 'customers';
-            referencedColumns: ['customer_id'];
-          },
-        ];
-      };
-      github_links: {
-        Row: {
-          customer_id: string;
-          github_id: number;
-          github_login: string;
-          linked_at: string;
-        };
-        Insert: {
-          customer_id: string;
-          github_id: number;
-          github_login: string;
-          linked_at?: string;
-        };
-        Update: {
-          customer_id?: string;
-          github_id?: number;
-          github_login?: string;
-          linked_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'github_links_customer_id_fkey';
-            columns: ['customer_id'];
-            isOneToOne: true;
             referencedRelation: 'customers';
             referencedColumns: ['customer_id'];
           },
@@ -586,7 +554,6 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      acquire_customer_lease: { Args: { p_customer_id: string; p_seconds: number }; Returns: string };
       claim_customer_jobs: {
         Args: { p_limit: number; p_lock_seconds: number };
         Returns: {
@@ -621,6 +588,7 @@ export type Database = {
         Returns: {
           access_status: string;
           customer_id: string;
+          grace_ends_at: string;
           vested_through: string;
         }[];
       };
@@ -682,7 +650,6 @@ export type Database = {
         };
         Returns: boolean;
       };
-      release_customer_lease: { Args: { p_lease_id: string }; Returns: undefined };
       revoke_feed_token: { Args: { p_customer_id: string; p_token_id: string }; Returns: boolean };
       set_customer_entitlement: {
         Args: { p_customer_id: string; p_grants: Json; p_payment_statuses: Json; p_state: Json };

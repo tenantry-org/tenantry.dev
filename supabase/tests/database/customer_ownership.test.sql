@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(18);
+select plan(16);
 
 -- The buyer signed up with the address they bought with but has not confirmed it yet (as an impostor
 -- using a purchaser's address would be); another user is confirmed; a third bought with a mixed-case
@@ -30,8 +30,6 @@ insert into public.vested_entitlements (customer_id, kind, started_at, vested_th
 insert into public.licences (customer_id, jwt) values
   ('ctm_buyer', 'buyer-licence'),
   ('ctm_mixed', 'mixed-licence');
-insert into public.github_links (customer_id, github_login, github_id) values
-  ('ctm_buyer', 'octocat', 42);
 
 select is(
   (select email from public.customers where customer_id = 'ctm_mixed'),
@@ -52,7 +50,6 @@ select is((select count(*)::int from public.licences), 0, 'unconfirmed: no licen
 select is((select count(*)::int from public.vested_entitlements), 0, 'unconfirmed: no vested entitlement');
 select is((select count(*)::int from public.active_subscriptions), 0, 'unconfirmed: no access');
 select is((select count(*)::int from public.subscriptions), 0, 'unconfirmed: no subscription');
-select is((select count(*)::int from public.github_links), 0, 'unconfirmed: no GitHub link');
 
 -- The buyer confirms the address.
 set local role postgres;
@@ -64,7 +61,6 @@ select is((select jwt from public.licences), 'buyer-licence', 'confirmed: their 
 select is((select count(*)::int from public.vested_entitlements), 1, 'confirmed: their vested entitlement');
 select is((select access_status from public.active_subscriptions), 'active', 'confirmed: their access');
 select is((select count(*)::int from public.subscriptions), 1, 'confirmed: their subscription');
-select is((select count(*)::int from public.github_links), 1, 'confirmed: their GitHub link');
 
 -- The policies read the user's own confirmed address, not the JWT's email claim.
 set local request.jwt.claims to '{"sub": "22222222-2222-2222-2222-222222222222", "email": "buyer@example.com", "role": "authenticated"}';

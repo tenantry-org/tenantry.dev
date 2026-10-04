@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { FeedDeps } from './deps';
-import { createFeedToken, feedTokenFrom, hashFeedToken, revokeFeedToken } from './feed-tokens';
+import { createFeedToken, feedTokenFrom, hashFeedToken, isFeedTokenShape, revokeFeedToken } from './feed-tokens';
 import { parseNuspec, readRootFiles } from './nupkg';
 import { nuspec, zip } from '@/test/zip';
 
@@ -11,6 +11,23 @@ const basic = (credentials: string) =>
   });
 
 describe('feed tokens', () => {
+  it('recognises the shape of a token it created, and no other credential', async () => {
+    const deps = { store: { createFeedTokenRecord: vi.fn(async () => 'id') } } as unknown as FeedDeps;
+    const { token } = await createFeedToken('ctm_1', 'CI', deps);
+
+    expect(isFeedTokenShape(token)).toBe(true);
+    for (const other of [
+      '',
+      'tpf_',
+      `${token}a`,
+      token.slice(0, -1),
+      token.replace('tpf_', 'tpx_'),
+      'eyJhbGciOiJFUzI1NiJ9.x.y',
+    ]) {
+      expect(isFeedTokenShape(other)).toBe(false);
+    }
+  });
+
   it('creates a random token, stores only its SHA-256 and a short prefix, and returns the token once', async () => {
     const createFeedTokenRecord = vi.fn(async () => 'token-id');
     const deps = { store: { createFeedTokenRecord } } as unknown as FeedDeps;

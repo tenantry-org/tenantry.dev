@@ -1,5 +1,6 @@
 import 'server-only';
 import { EmailMessage } from '@/server/integrations/email/send';
+import { feedUrl } from '@/lib/install-snippets';
 
 // The public site, for the logo and the footer: the same in every environment, since mail clients cannot reach a
 // preview deployment behind Vercel Authentication. Links into the app go to the environment's own site (`siteUrl`).
@@ -19,16 +20,92 @@ ${body}
 </div>`;
 }
 
-/** Sent when a customer's access starts (their first entitled subscription). Points them at the Pro access page. */
+/** Sent when a customer's access starts (their first entitled subscription): how to restore the packages. */
 export function welcomeProEmail(to: string, siteUrl: string): EmailMessage {
   return {
     to,
-    subject: 'Welcome to Tenantry Pro: connect GitHub to get access',
+    subject: 'Welcome to Tenantry Pro: create a feed token to install it',
     html: layout(
       `<h1 style="font-size:20px">Welcome to Tenantry Pro</h1>
-<p>Thanks for subscribing. Log in to Tenantry with this email address and <strong>connect your GitHub account</strong> to get the private package feed.</p>
-<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">Connect GitHub</a></p>
-<p>The same page has your licence key and the <code>nuget.config</code> for restoring packages.</p>`,
+<p>Thanks for subscribing. Log in to Tenantry with this email address and create a feed token on your Pro access page. NuGet sends it to the package feed, which serves the Tenantry Pro packages at <code>${feedUrl(siteUrl)}</code>.</p>
+<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">Create a feed token</a></p>
+<p>The same page has your licence key. The <a href="${siteUrl}/dashboard/pro/install" style="color:#2563EB">Install page</a> has the <code>nuget.config</code> to commit next to your solution, and what to set in CI and Docker builds.</p>`,
+    ),
+  };
+}
+
+/**
+ * Sent when a feed token is created on the Pro access page, so a token the customer did not create is noticed. It
+ * names the token and its first characters, never the token itself.
+ */
+export function feedTokenCreatedEmail(
+  to: string,
+  token: { name: string; prefix: string },
+  siteUrl: string,
+): EmailMessage {
+  return {
+    to,
+    subject: 'A Tenantry Pro feed token was created',
+    html: layout(
+      `<h1 style="font-size:20px">A feed token was created</h1>
+<p>A feed token named <strong>${escapeHtml(token.name)}</strong>, starting <code>${escapeHtml(token.prefix)}</code>, was created on your Pro access page. It can restore Tenantry Pro from the package feed until it is revoked.</p>
+<p>If you did not create it, revoke it now and email support@tenantry.dev.</p>
+<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">Review your feed tokens</a></p>`,
+    ),
+  };
+}
+
+/**
+ * Sent when a grant is confirmed: a qualifying period reaches 12 paid months, or an annual term is completed. Not sent
+ * as the vested-through date moves forward month by month afterwards.
+ */
+export function vestingConfirmedEmail(to: string, vestedThrough: Date, siteUrl: string): EmailMessage {
+  return {
+    to,
+    subject: 'Your Tenantry Pro releases are vested',
+    html: layout(
+      `<h1 style="font-size:20px">Your releases are vested</h1>
+<p>Every Tenantry Pro release published on or before ${longDate(vestedThrough)}, your vested-through date, is now vested. Vested releases stay licensed to you after your subscription ends, and the package feed keeps serving them to you, with the security patches of their minor versions.</p>
+<p>While you stay subscribed, your vested-through date moves forward at the end of each paid month.</p>
+<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">See your vested releases</a></p>`,
+    ),
+  };
+}
+
+/** A withdrawn grant, as vested_entitlements records it (billing-store.ts: Grant). */
+interface WithdrawnGrant {
+  kind: 'qualifying_run' | 'annual_term';
+  vestedThrough: Date;
+  withdrawnReason: 'refund' | 'chargeback' | 'term_not_completed' | null;
+}
+
+const WITHDRAWN_BECAUSE: Record<NonNullable<WithdrawnGrant['withdrawnReason']>, string> = {
+  refund: 'its payment was refunded',
+  chargeback: 'a payment it relied on was charged back',
+  term_not_completed: 'the subscription ended before the annual term was completed',
+};
+
+/** Sent when a grant is withdrawn: by a refund, a chargeback, or an annual term the subscription did not complete. */
+export function grantWithdrawnEmail(
+  to: string,
+  grant: WithdrawnGrant,
+  vestedThrough: Date | null,
+  siteUrl: string,
+): EmailMessage {
+  const what = grant.kind === 'annual_term' ? 'Your annual term' : 'Your qualifying period';
+  const because = grant.withdrawnReason ? `, because ${WITHDRAWN_BECAUSE[grant.withdrawnReason]}` : '';
+  return {
+    to,
+    subject: 'Your Tenantry Pro vested releases have changed',
+    html: layout(
+      `<h1 style="font-size:20px">Your vested releases have changed</h1>
+<p>${what} no longer vests the releases published up to ${longDate(grant.vestedThrough)}${because}.</p>
+<p>${
+        vestedThrough
+          ? `Your vested-through date is now ${longDate(vestedThrough)}: the releases published on or before it stay vested.`
+          : 'No releases are vested now.'
+      } While your subscription is active, the package feed still serves you every release.</p>
+<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">See your vested releases</a></p>`,
     ),
   };
 }
@@ -45,4 +122,14 @@ export function accessRevokedEmail(to: string, siteUrl: string): EmailMessage {
 <p><a href="${siteUrl}/#pricing" style="${BUTTON}">View pricing</a></p>`,
     ),
   };
+}
+
+// Text from a customer, such as a token's name, goes into the HTML only escaped.
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (character) => `&#${character.codePointAt(0)};`);
+}
+
+// A date as the Pro pages show it, in UTC.
+function longDate(date: Date): string {
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 }

@@ -2,10 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall, FakeTable } from '@/test/fake-supabase';
 import {
   customersToReconcile,
-  findCustomerIdByEmail,
-  getGithubAccount,
-  getGithubAccountHolder,
-  linkGithubAccount,
+  listGrants,
   listPaymentAdjustments,
   listPayments,
   listSubscriptions,
@@ -13,9 +10,7 @@ import {
   recordPayment,
   recordPaymentAdjustment,
   recordSubscriptionEvent,
-  resetGithubState,
   saveCustomerState,
-  setGithubState,
 } from './billing-store';
 
 // The queries and function calls the store makes, against a fake client. The billing services are tested against the
@@ -154,15 +149,6 @@ describe('Paddle events', () => {
 });
 
 describe('customers', () => {
-  it('finds a customer by email, or none', async () => {
-    state.tables = { customers: { single: { customer_id: 'ctm_1' } } };
-    await expect(findCustomerIdByEmail('buyer@example.com')).resolves.toBe('ctm_1');
-    expect(state.calls).toContainEqual({ table: 'customers', method: 'eq', args: ['email', 'buyer@example.com'] });
-
-    state.tables = {};
-    await expect(findCustomerIdByEmail('nobody@example.com')).resolves.toBeNull();
-  });
-
   // One function call returns every customer to reconcile: separate table queries were each cut off at the API's
   // row limit (max_rows, 1000).
   it('reads every customer to reconcile in one call, beyond the API row limit', async () => {
@@ -170,78 +156,6 @@ describe('customers', () => {
 
     await expect(customersToReconcile()).resolves.toHaveLength(2500);
     expect(state.calls).toEqual([{ table: 'rpc:customers_to_reconcile', method: 'rpc', args: [{}] }]);
-  });
-});
-
-describe('GitHub links', () => {
-  it("reads the customer's linked account, and who holds an account", async () => {
-    state.tables = {
-      github_links: {
-        single: (filters: Record<string, unknown>) =>
-          'github_id' in filters ? { customer_id: 'ctm_2' } : { github_id: 42, github_login: 'octocat' },
-      },
-    };
-
-    await expect(getGithubAccount('ctm_1')).resolves.toEqual({ id: 42, login: 'octocat' });
-    await expect(getGithubAccountHolder(42)).resolves.toBe('ctm_2');
-  });
-
-  it("links an account in place of the customer's previous one", async () => {
-    await expect(linkGithubAccount('ctm_1', { id: 42, login: 'octocat' })).resolves.toBe(true);
-
-    expect(state.calls).toContainEqual({
-      table: 'github_links',
-      method: 'upsert',
-      args: [{ customer_id: 'ctm_1', github_login: 'octocat', github_id: 42 }, { onConflict: 'customer_id' }],
-    });
-  });
-
-  it('refuses an account linked to another customer (unique github_id), and throws on other errors', async () => {
-    state.tables = { github_links: { writeError: { code: '23505', message: 'duplicate key value' } } };
-    await expect(linkGithubAccount('ctm_1', { id: 42, login: 'octocat' })).resolves.toBe(false);
-
-    state.tables = { github_links: { writeError: { code: '08006', message: 'connection failure' } } };
-    await expect(linkGithubAccount('ctm_1', { id: 42, login: 'octocat' })).rejects.toMatchObject({ code: '08006' });
-  });
-});
-
-describe('GitHub state', () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-01T00:00:00Z'));
-    return () => vi.useRealTimers();
-  });
-
-  const updates = () => state.calls.filter((call) => call.table === 'active_subscriptions');
-
-  it('records an invitation with when it was sent, only while the customer has access', async () => {
-    await setGithubState('ctm_1', 'invited');
-
-    expect(updates()).toEqual([
-      {
-        table: 'active_subscriptions',
-        method: 'update',
-        args: [
-          {
-            github_state: 'invited',
-            github_invited_at: '2026-10-01T00:00:00.000Z',
-            updated_at: '2026-10-01T00:00:00.000Z',
-          },
-        ],
-      },
-      { table: 'active_subscriptions', method: 'eq', args: ['customer_id', 'ctm_1'] },
-      { table: 'active_subscriptions', method: 'in', args: ['access_status', ['active', 'grace']] },
-    ]);
-  });
-
-  it('records a member with no invitation, and forgets the state on a relink', async () => {
-    await setGithubState('ctm_1', 'active');
-    await resetGithubState('ctm_1');
-
-    expect(updates().filter((call) => call.method === 'update')).toEqual([
-      expect.objectContaining({ args: [expect.objectContaining({ github_state: 'active', github_invited_at: null })] }),
-      expect.objectContaining({ args: [expect.objectContaining({ github_state: 'none', github_invited_at: null })] }),
-    ]);
   });
 });
 
@@ -418,6 +332,37 @@ describe('the payment ledger', () => {
     ]);
   });
 
+  it('reads the computed grants as stored, leaving out operator grants', async () => {
+    state.tables = {
+      vested_entitlements: {
+        list: [
+          {
+            kind: 'qualifying_run',
+            started_at: '2026-01-01T00:00:00Z',
+            vested_through: '2027-02-01T00:00:00Z',
+            status: 'confirmed',
+            confirmed_at: '2027-01-01T00:00:00Z',
+            transaction_id: null,
+            withdrawn_reason: null,
+          },
+        ],
+      },
+    };
+
+    await expect(listGrants('ctm_1')).resolves.toEqual([
+      {
+        kind: 'qualifying_run',
+        startedAt: new Date('2026-01-01T00:00:00Z'),
+        vestedThrough: new Date('2027-02-01T00:00:00Z'),
+        status: 'confirmed',
+        confirmedAt: new Date('2027-01-01T00:00:00Z'),
+        transactionId: null,
+        withdrawnReason: null,
+      },
+    ]);
+    expect(state.calls).toContainEqual({ table: 'vested_entitlements', method: 'neq', args: ['kind', 'operator'] });
+  });
+
   it('stores the derived state in one call and returns the access it replaced', async () => {
     await expect(
       saveCustomerState('ctm_1', {
@@ -449,6 +394,7 @@ describe('the payment ledger', () => {
       p_customer_id: 'ctm_1',
       p_state: {
         access_status: 'active',
+        grace_ends_at: null,
         run_started_at: '2027-01-01T00:00:00.000Z',
         paid_through: '2027-03-01T00:00:00.000Z',
         months_paid: 2,

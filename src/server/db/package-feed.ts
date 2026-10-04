@@ -1,7 +1,7 @@
 import 'server-only';
 import { createServiceRoleClient } from '@/server/db/service-role-client';
 import type { Json } from '@/lib/supabase/database.types';
-import type { AccessStatus } from '@/server/db/billing-store';
+import type { Access, AccessStatus } from '@/server/db/billing-store';
 
 /**
  * Service-role data access for the package feed (supabase/migrations/20261004130000_package_feed.sql): feed tokens,
@@ -9,10 +9,13 @@ import type { AccessStatus } from '@/server/db/billing-store';
  * src/server/feed; this module only maps rows.
  */
 
-/** The customer a feed token belongs to, with what decides which releases they may restore. */
+/**
+ * The customer a feed token belongs to, with what decides which releases they may restore: their access as stored
+ * (entitlement-policy.ts: currentAccess says what it is now) and their vested-through date.
+ */
 export interface FeedCustomer {
   customerId: string;
-  accessStatus: AccessStatus;
+  access: Access;
   vestedThrough: Date | null;
 }
 
@@ -50,9 +53,13 @@ export async function findFeedCustomer(tokenHash: string): Promise<FeedCustomer 
   return row
     ? {
         customerId: row.customer_id,
-        // active_subscriptions' check constraint allows only these; feed_customer gives 'lapsed' for no row.
-        accessStatus: row.access_status as AccessStatus,
-        // The function returns null when nothing is vested; generated return types are never nullable.
+        access: {
+          // active_subscriptions' check constraint allows only these; feed_customer gives 'lapsed' for no row.
+          status: row.access_status as AccessStatus,
+          // The function returns null outside grace and when nothing is vested; generated return types are never
+          // nullable.
+          graceEndsAt: (row.grace_ends_at as string | null) ? new Date(row.grace_ends_at) : null,
+        },
         vestedThrough: (row.vested_through as string | null) ? new Date(row.vested_through) : null,
       }
     : null;
@@ -247,17 +254,49 @@ export async function recordedPackageId(lowerId: string): Promise<string | null>
   return data?.package_id ?? null;
 }
 
-/** Whether this package and version is recorded. */
-export async function packageExists(lowerId: string, version: string): Promise<boolean> {
+/** The base64 SHA-512 of this package and version as recorded, or null if it is not recorded. */
+export async function recordedPackageHash(lowerId: string, version: string): Promise<string | null> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('pro_packages')
-    .select('version')
+    .select('sha512')
     .eq('lower_id', lowerId)
     .eq('version', version)
     .maybeSingle();
 
   if (error) throw error;
 
-  return data !== null;
+  return data?.sha512 ?? null;
+}
+
+/** A release as an operator lists it, with its packages. */
+export interface PublishedRelease {
+  version: string;
+  publishedAt: Date;
+  security: boolean;
+  entitlementAt: Date;
+  packages: { id: string; size: number; sha512: string }[];
+}
+
+/** Every recorded release with its packages, oldest version first. */
+export async function listPublishedReleases(): Promise<PublishedRelease[]> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('pro_releases')
+    .select('version,major,minor,patch,published_at,security,entitlement_at,pro_packages(package_id,size,sha512)')
+    .order('major')
+    .order('minor')
+    .order('patch');
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    version: row.version,
+    publishedAt: new Date(row.published_at),
+    security: row.security,
+    entitlementAt: new Date(row.entitlement_at),
+    packages: row.pro_packages
+      .map((pkg) => ({ id: pkg.package_id, size: Number(pkg.size), sha512: pkg.sha512 }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  }));
 }

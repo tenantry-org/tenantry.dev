@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# End-to-end test of the package feed (src/server/feed) with a real NuGet client: packs a small probe package in three
-# releases, publishes them with `dotnet nuget push`, then restores as several customers and checks what NuGet
-# resolves, downloads and refuses.
+# End-to-end test of the package feed (src/server/feed) and the Pro access page's feed tokens, with a real NuGet client
+# and the site's own server code: packs a small probe package in three releases, publishes them with `dotnet nuget push`
+# and scripts/feed-publish.sh, signs customers in, creates their feed tokens with the Access page's server action, then
+# restores as each of them and checks what NuGet resolves, downloads and refuses.
 #
 #   Tenantry.Pro.FeedProbe<run> 1.<n>.0      released 20 seconds before the run started
 #   Tenantry.Pro.FeedProbe<run> 1.<n>.1      a security patch, released 10 seconds before, dated as 1.<n>.0
@@ -11,20 +12,24 @@
 # same database, later than every earlier run's (the feed refuses a release dated before an earlier version's, or more
 # than a few days before now).
 #
+#   computed  lapsed, with 12 paid months that scripts/rehearse.mjs backdates and /api/reconcile vests; then a
+#             chargeback withdraws the vesting and `undo` removes what the script wrote
 #   active    a subscriber: restores 1.<n+1>.0 for 1.*, with a lock file whose hash matches the package, and a
-#             locked-mode restore from an empty package folder downloads it again through the redirect
-#   vested    lapsed, vested through 15 seconds before the run: restores 1.<n>.1 for 1.*; 1.<n+1>.0 is not found, even
-#             from a lock file
-#   unvested  lapsed, never vested: refused with 403
-#   unknown   a token the feed does not know: refused with 401
+#             locked-mode restore from an empty package folder downloads it again through the redirect; a second token
+#             restores until it is revoked through the Access page's action, and then fails
+#   vested    lapsed, vested through 15 seconds before the run by an operator grant (scripts/rehearse.mjs): creates a
+#             token, restores 1.<n>.1 for 1.*; 1.<n+1>.0 is not found, even from a lock file
+#   unvested  created a token while subscribed, then lapsed with nothing vested: refused with 403, and refused a new token
+#   unknown   a well-formed token the feed does not know: refused with 401
 #
-# Needs dotnet, curl, jq, openssl, access to nuget.org (for NETStandard.Library) and a local Supabase stack with this
-# repository's migrations applied and Storage running (`supabase start`), given by:
+# Needs dotnet, curl, jq, openssl, unzip, access to nuget.org (for NETStandard.Library) and a local Supabase stack with
+# this repository's migrations applied and Storage and Auth running (`supabase start`), given by:
 #   FEED_E2E_SUPABASE_URL       its API URL, such as http://127.0.0.1:54321
 #   FEED_E2E_ANON_KEY           its anon key
 #   FEED_E2E_SERVICE_ROLE_KEY   its service-role key
 # It starts the site with `next dev` on FEED_E2E_PORT (default 3197) with stand-in settings for everything else, and
-# writes its customers, packages and tokens to that local database. It refuses any Supabase URL that is not local.
+# writes its users, customers, packages and tokens to that local database. It refuses any Supabase URL that is not
+# local. It never calls Paddle: its customers have no subscriptions, so reconcile has nothing to ask Paddle about.
 set -euo pipefail
 
 : "${FEED_E2E_SUPABASE_URL:?set FEED_E2E_SUPABASE_URL to the local Supabase API URL}"
@@ -86,6 +91,18 @@ rest() {
     -H 'Content-Type: application/json' -d "$2" >/dev/null
 }
 
+# Changes rows through the REST API with the service-role key: rest_patch TABLE FILTER JSON.
+rest_patch() {
+  curl -sS --fail-with-body -X PATCH "$FEED_E2E_SUPABASE_URL/rest/v1/$1?$2" \
+    -H "apikey: $FEED_E2E_SERVICE_ROLE_KEY" -H "Authorization: Bearer $FEED_E2E_SERVICE_ROLE_KEY" \
+    -H 'Content-Type: application/json' -d "$3" >/dev/null
+}
+# Reads rows: rest_get TABLE QUERY.
+rest_get() {
+  curl -sS --fail-with-body "$FEED_E2E_SUPABASE_URL/rest/v1/$1?$2" \
+    -H "apikey: $FEED_E2E_SERVICE_ROLE_KEY" -H "Authorization: Bearer $FEED_E2E_SERVICE_ROLE_KEY"
+}
+
 sha256_hex() { printf '%s' "$1" | openssl dgst -sha256 -r | cut -d' ' -f1; }
 file_hash() { openssl dgst -sha512 -binary "$1" | openssl base64 -A; }
 
@@ -107,8 +124,7 @@ echo "Starting the site on $site"
     NEXT_PUBLIC_PADDLE_PRICE_MONTHLY=pri_e2emonth \
     NEXT_PUBLIC_PADDLE_PRICE_YEARLY=pri_e2eyear \
     PADDLE_API_KEY=e2e PADDLE_NOTIFICATION_WEBHOOK_SECRET=e2e PADDLE_PRO_PRODUCT_ID=pro_e2e \
-    CRON_SECRET=e2e GITHUB_ORG=tenantry-e2e GITHUB_TEAM=e2e \
-    GITHUB_APP_ID=1 GITHUB_APP_PRIVATE_KEY=e2e GITHUB_APP_INSTALLATION_ID=1 \
+    CRON_SECRET=e2e \
     LICENCE_SIGNING_PRIVATE_KEY="$(cat "$work/licence.pem")" \
     FEED_PUBLISH_KEY_SHA256="$(sha256_hex "$publish_key")" \
     npx next dev --port "$port" --hostname 127.0.0.1 >"$work/site.log" 2>&1
@@ -203,21 +219,121 @@ else
   check 'a push with a wrong key is refused' '[[ "$output" == *403* ]]' "$output"
 fi
 
+# A second build of 1.<n>.0, with other content: the feed must refuse it, even with --skip-duplicate.
+mkdir -p "$work/other"
+cp "$work/nupkgs/$probe_id.$v_first.nupkg" "$work/other/"
+echo 'namespace Tenantry.Pro.FeedProbe { public static class Probe { public const int Value = 2; } }' >"$work/probe/Probe.cs"
+pack "$v_first" "$(iso_before 20)" false
+mv "$work/nupkgs/$probe_id.$v_first.nupkg" "$work/other/rebuilt.nupkg"
+mv "$work/other/$probe_id.$v_first.nupkg" "$work/nupkgs/"
+if output="$(dotnet nuget push "$work/other/rebuilt.nupkg" --source tenantry --api-key "$publish_key" \
+  --configfile "$work/nuget.config" --skip-duplicate 2>&1)"; then
+  fail 'a different package under a published version is refused, even with --skip-duplicate' "$output"
+else
+  check 'a different package under a published version is refused, even with --skip-duplicate' \
+    '[[ "$output" == *400* ]]' "$output"
+fi
+
+# The operator's script: pushing the release again changes nothing, and the listing shows what the feed holds.
+if output="$(FEED_PUBLISH_KEY="$publish_key" bash "$repo/scripts/feed-publish.sh" push "$site" "$work/nupkgs" 2>&1)"; then
+  check 'scripts/feed-publish.sh pushes a published release again as unchanged' \
+    '[[ "$output" == *"0 published, 3 already published."* ]]' "$output"
+else
+  fail 'scripts/feed-publish.sh pushes a published release again as unchanged' "$output"
+fi
+output="$(FEED_PUBLISH_KEY="$publish_key" bash "$repo/scripts/feed-publish.sh" list "$site" 2>&1 || true)"
+check 'scripts/feed-publish.sh lists the releases, with the security patch dated as its minor' \
+  '[[ "$output" == *"$v_patch  published"*"security patch"* && "$output" == *"$probe_id"* ]]' "$output"
+output="$(FEED_PUBLISH_KEY=wrong bash "$repo/scripts/feed-publish.sh" list "$site" 2>&1 || true)"
+check 'and refuses a wrong publish key' '[[ "$output" == *403* ]]' "$output"
+
 # --- The customers ------------------------------------------------------------------------------------------------
 
-# Each customer's token, in a file: macOS's bash 3.2 has no associative arrays.
-token() { cat "$work/token-$1"; }
-for name in active vested unvested unknown; do echo "tpf_e2e_${name}_$(openssl rand -hex 16)" >"$work/token-$name"; done
+password="e2e-$(openssl rand -hex 12)"
+customer_of() { echo "ctm_e2e_${1}_$run_id"; }
+email_of() { echo "$(customer_of "$1")@example.com"; }
 
-for name in active vested unvested; do
-  customer="ctm_e2e_${name}_$run_id"
-  access=lapsed
-  if [[ $name == active ]]; then access=active; fi
-  rest customers "{\"customer_id\":\"$customer\",\"email\":\"$customer@example.com\"}"
-  rest active_subscriptions "{\"customer_id\":\"$customer\",\"access_status\":\"$access\"}"
-  rest feed_tokens "{\"customer_id\":\"$customer\",\"name\":\"e2e\",\"token_hash\":\"$(sha256_hex "$(token "$name")")\",\"prefix\":\"tpf_e2e_\"}"
-done
-rest vested_entitlements "{\"customer_id\":\"ctm_e2e_vested_$run_id\",\"kind\":\"qualifying_run\",\"started_at\":\"2027-01-01T00:00:00Z\",\"vested_through\":\"$(iso_before 15)\",\"status\":\"confirmed\",\"confirmed_at\":\"$(iso_before 15)\"}"
+# signup NAME ACCESS: a confirmed login, its customer and their recorded access.
+signup() {
+  curl -sS --fail-with-body -X POST "$FEED_E2E_SUPABASE_URL/auth/v1/admin/users" \
+    -H "apikey: $FEED_E2E_SERVICE_ROLE_KEY" -H "Authorization: Bearer $FEED_E2E_SERVICE_ROLE_KEY" \
+    -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$(email_of "$1")\",\"password\":\"$password\",\"email_confirm\":true}" >/dev/null
+  rest customers "{\"customer_id\":\"$(customer_of "$1")\",\"email\":\"$(email_of "$1")\"}"
+  rest active_subscriptions "{\"customer_id\":\"$(customer_of "$1")\",\"access_status\":\"$2\"}"
+}
+
+# The customer's session cookies, as the site's sign-in sets them (@supabase/ssr), in a file per customer.
+session() {
+  if [[ ! -f "$work/cookie-$1" ]]; then
+    (cd "$repo" && URL="$FEED_E2E_SUPABASE_URL" ANON="$FEED_E2E_ANON_KEY" EMAIL="$(email_of "$1")" PASSWORD="$password" \
+      node --input-type=module -e '
+        import { createServerClient } from "@supabase/ssr";
+        const jar = new Map();
+        const client = createServerClient(process.env.URL, process.env.ANON, {
+          cookies: {
+            getAll: () => [...jar].map(([name, value]) => ({ name, value })),
+            setAll: (cookies) => cookies.forEach(({ name, value }) => jar.set(name, value)),
+          },
+        });
+        const { error } = await client.auth.signInWithPassword({ email: process.env.EMAIL, password: process.env.PASSWORD });
+        if (error) throw error;
+        process.stdout.write([...jar].map(([name, value]) => `${name}=${value}`).join("; "));
+      ') >"$work/cookie-$1"
+  fi
+  cat "$work/cookie-$1"
+}
+
+# action CUSTOMER NAME ARGUMENT: calls one of the Access page's server actions (src/app/dashboard/pro/actions.ts) as
+# the signed-in customer, the way the page's form does, and prints the answer.
+action_id() {
+  jq -r --arg name "$1" '.node | to_entries[]
+    | select(.value.exportedName == $name and .value.filename == "src/app/dashboard/pro/actions.ts") | .key' \
+    "$repo/.next/dev/server/server-reference-manifest.json"
+}
+action() {
+  curl -sS -X POST "$site/dashboard/pro" -H "Cookie: $(session "$1")" -H "Next-Action: $(action_id "$2")" \
+    -H 'Content-Type: text/plain;charset=UTF-8' -H 'Accept: text/x-component' -H "Origin: $site" \
+    --data "[$(jq -n --arg value "$3" '$value')]"
+}
+# new_token CUSTOMER FILE NAME: creates a feed token through the action and keeps it in the file.
+new_token() {
+  local answer
+  answer="$(action "$1" createFeedToken "$3")"
+  grep -o '"token":"tpf_[A-Za-z0-9_-]*"' <<<"$answer" | head -1 | cut -d'"' -f4 >"$work/token-$2"
+  if [[ -s "$work/token-$2" ]]; then pass "$1 creates the feed token $3 on the Access page"; else
+    fail "$1 creates the feed token $3 on the Access page" "$answer"
+  fi
+}
+token() { cat "$work/token-$1"; }
+
+# The Access page compiles its actions when it is first requested.
+signup active active
+curl -sf -o "$work/access.html" -H "Cookie: $(session active)" "$site/dashboard/pro" || true
+check 'the Access page shows a subscriber the token form and every release' \
+  'grep -q "id=\"feed-token-name\"" "$work/access.html" && grep -q "serves you every Tenantry Pro release" "$work/access.html"'
+
+new_token active active CI
+new_token active revocable laptop
+check 'a feed token is stored only as its hash, with its first characters' \
+  '[[ "$(rest_get feed_tokens "customer_id=eq.$(customer_of active)&select=token_hash,prefix&order=created_at" |
+      jq -r ".[0].token_hash + \" \" + .[0].prefix")" == "$(sha256_hex "$(token active)") $(token active | cut -c1-8)" ]]'
+
+signup vested lapsed
+(cd "$repo" && NEXT_PUBLIC_PADDLE_ENV=sandbox NEXT_PUBLIC_SUPABASE_URL="$FEED_E2E_SUPABASE_URL" \
+  SUPABASE_SERVICE_ROLE_KEY="$FEED_E2E_SERVICE_ROLE_KEY" \
+  node scripts/rehearse.mjs grant "$(email_of vested)" "$(iso_before 15)" e2e vested before the run) >"$work/grant.log" 2>&1 ||
+  fail 'scripts/rehearse.mjs grants a vested-through date' "$(cat "$work/grant.log")"
+new_token vested vested Laptop
+
+signup unvested active
+new_token unvested unvested CI
+rest_patch active_subscriptions "customer_id=eq.$(customer_of unvested)" '{"access_status":"lapsed"}'
+answer="$(action unvested createFeedToken 'after the lapse')"
+check 'a lapsed customer with nothing vested is refused a new token, and told why' \
+  '[[ "$answer" == *"no releases are vested, so the package feed serves you nothing"* ]]' "$answer"
+
+echo "tpf_$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n' | cut -c1-43)" >"$work/token-unknown"
 
 # consumer CUSTOMER VERSION: a project referencing the probe at VERSION with the customer's token, restoring into its own
 # package folder.
@@ -324,6 +440,60 @@ if output="$(restore "$dir")"; then
 else
   check 'an unknown token is refused with 401' '[[ "$output" == *401* ]]' "$output"
 fi
+
+# Revoking: the token restores until it is revoked on the Access page, then is refused; another customer cannot.
+dir="$(consumer revocable '1.*')"
+if output="$(restore "$dir")"; then pass 'a second token of the subscriber restores'; else
+  fail 'a second token of the subscriber restores' "$output"
+fi
+revocable_id="$(rest_get feed_tokens "customer_id=eq.$(customer_of active)&name=eq.laptop&select=id" | jq -r '.[0].id')"
+answer="$(action vested revokeFeedToken "$revocable_id")"
+check "another customer cannot revoke it" '[[ "$answer" == *"not found"* ]]' "$answer"
+answer="$(action active revokeFeedToken "$revocable_id")"
+check 'its customer revokes it on the Access page' '[[ "$answer" == *"\"revoked\":true"* ]]' "$answer"
+dir="$(consumer revocable '1.*')"
+rm -rf "$dir/packages" "$dir/http-cache" "$dir/obj"
+if output="$(restore "$dir")"; then
+  fail 'a revoked token is refused with 401' "$output"
+else
+  check 'a revoked token is refused with 401' '[[ "$output" == *401* ]]' "$output"
+fi
+dir="$(consumer active '1.*')"
+rm -rf "$dir/packages" "$dir/http-cache" "$dir/obj"
+if output="$(restore "$dir")"; then pass "the subscriber's other token keeps working"; else
+  fail "the subscriber's other token keeps working" "$output"
+fi
+
+# Vesting computed from the ledger: scripts/rehearse.mjs backdates 12 paid months, /api/reconcile vests them, a
+# chargeback withdraws the vesting, and undo removes what the script wrote. The customer has no subscription, so
+# reconcile asks Paddle nothing.
+signup computed lapsed
+anchor="$(iso_before 86400)"
+rest payments "{\"transaction_id\":\"txn_e2e_$run_id\",\"customer_id\":\"$(customer_of computed)\",
+  \"subscription_id\":\"sub_e2e_$run_id\",\"origin\":\"web\",\"price_id\":\"pri_e2emonth\",\"billing_interval\":\"month\",
+  \"billing_frequency\":1,\"period_starts_at\":\"$anchor\",\"period_ends_at\":\"$(iso_before -2500000)\",
+  \"subtotal\":3900,\"discount\":0,\"total\":3900,\"currency_code\":\"GBP\",\"completed_at\":\"$anchor\",
+  \"last_event_at\":\"$anchor\"}"
+rehearse() {
+  (cd "$repo" && NEXT_PUBLIC_PADDLE_ENV=sandbox NEXT_PUBLIC_SUPABASE_URL="$FEED_E2E_SUPABASE_URL" \
+    SUPABASE_SERVICE_ROLE_KEY="$FEED_E2E_SERVICE_ROLE_KEY" NEXT_PUBLIC_SITE_URL="$site" CRON_SECRET=e2e \
+    node scripts/rehearse.mjs "$1" "$(email_of computed)" 2>&1)
+}
+vested_of() {
+  rest_get vested_entitlements "customer_id=eq.$(customer_of computed)&kind=eq.qualifying_run&select=status,vested_through" |
+    jq -r '.[0] | if . == null then "none" else .status + " " + (.vested_through | sub("\\+00:00$"; "Z") | sub("\\.[0-9]+Z$"; "Z")) end'
+}
+output="$(rehearse vested)"
+check 'scripts/rehearse.mjs backdates 12 paid months, and reconcile vests them through the first real payment' \
+  '[[ "$(vested_of)" == "confirmed $anchor" ]]' "$output"
+output="$(rehearse chargeback)"
+check 'a chargeback of one of them withdraws the vesting' '[[ "$(vested_of)" == withdrawn* ]]' "$output"
+output="$(rehearse undo)"
+check 'undo removes what the script wrote, and the customer is vested in nothing' \
+  '[[ "$(vested_of)" == none && "$(rest_get payments "customer_id=eq.$(customer_of computed)&select=transaction_id" | jq length)" == 1 ]]' \
+  "$output"
+output="$(cd "$repo" && NEXT_PUBLIC_PADDLE_ENV=production node scripts/rehearse.mjs show x@example.com 2>&1 || true)"
+check 'scripts/rehearse.mjs refuses to run outside the sandbox' '[[ "$output" == *"not \"sandbox\""* ]]' "$output"
 
 echo
 echo "$passes passed, $failures failed"

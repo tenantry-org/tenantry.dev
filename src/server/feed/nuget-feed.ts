@@ -1,8 +1,9 @@
 import 'server-only';
-import { isEntitled, mayUseRelease } from '@/server/billing/entitlement-policy';
-import type { FeedCustomer, FeedPackage } from '@/server/db/package-feed';
+import { canRestore, currentAccess, mayUseRelease } from '@/server/billing/entitlement-policy';
+import type { FeedPackage } from '@/server/db/package-feed';
 import { type FeedDeps, defaultFeedDeps } from '@/server/feed/deps';
-import { feedTokenFrom, hashFeedToken } from '@/server/feed/feed-tokens';
+import { feedTokenFrom, hashFeedToken, isFeedTokenShape } from '@/server/feed/feed-tokens';
+import { FEED_PATH } from '@/lib/install-snippets';
 
 /**
  * Tenantry Pro's NuGet v3 feed (https://learn.microsoft.com/en-us/nuget/api/overview), served under /feed/v3/ by the
@@ -29,8 +30,6 @@ import { feedTokenFrom, hashFeedToken } from '@/server/feed/feed-tokens';
 /** How long a download's signed URL works. NuGet follows the redirect at once. */
 export const DOWNLOAD_URL_SECONDS = 300;
 
-const FEED_PATH = '/feed/v3';
-
 export function feedBaseUrl(deps: FeedDeps): string {
   return `${deps.siteUrl()}${FEED_PATH}`;
 }
@@ -47,11 +46,12 @@ export async function handleFeedRequest(
   if (path.length === 0 || (path.length === 1 && resource === 'index.json')) return json(serviceIndex(base));
 
   const token = feedTokenFrom(request);
-  const customer = token ? await deps.store.findFeedCustomer(hashFeedToken(token)) : null;
-  if (!customer) return unauthorized();
+  const found = token && isFeedTokenShape(token) ? await deps.store.findFeedCustomer(hashFeedToken(token)) : null;
+  if (!found) return unauthorized();
+  const customer = { accessStatus: currentAccess(found.access, deps.now()).status, vestedThrough: found.vestedThrough };
 
   // A lapsed customer who never vested may restore nothing: say so, rather than claim the packages do not exist.
-  if (!isEntitled(customer.accessStatus) && customer.vestedThrough === null) {
+  if (!canRestore(customer)) {
     return text(
       403,
       'This feed token belongs to a Tenantry Pro subscription that has ended, with no releases licensed after it.',
@@ -91,7 +91,7 @@ export function serviceIndex(base: string) {
 }
 
 // The packages the customer may use, oldest version first.
-function visible(customer: FeedCustomer, packages: FeedPackage[]): FeedPackage[] {
+function visible(customer: Parameters<typeof mayUseRelease>[0], packages: FeedPackage[]): FeedPackage[] {
   return packages
     .filter((pkg) => mayUseRelease(customer, pkg.entitlementAt))
     .sort((a, b) => a.major - b.major || a.minor - b.minor || a.patch - b.patch);
