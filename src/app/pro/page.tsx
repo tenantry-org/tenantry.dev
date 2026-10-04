@@ -9,16 +9,41 @@ import { TrackedLink } from '@/components/shared/tracked-link';
 import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
 
 export const metadata: Metadata = {
-  title: 'Tenantry Pro — a database or schema per tenant, without writing the tooling',
-  description: `Tenantry Pro onboards a tenant in one call, migrates every tenant database or schema as a deployment step, and keeps the tenant in Hangfire, Quartz.NET, MassTransit and Rebus work. One price for your whole company.`,
+  title: 'Tenantry Pro: the tenant in jobs and messages, audit logging, onboarding and migrations',
+  description: `Tenantry Pro runs Hangfire, Quartz.NET, MassTransit and Rebus work as its tenant, records each tenant's changes, onboards and offboards tenants in one call, and migrates every tenant database or schema as a deployment step. For a shared database, a database or schema per tenant, or a mix. One price for your whole company.`,
   alternates: { canonical: '/pro' },
 };
 
-// From Tenantry Pro's guides (tenant lifecycle, migrations, Hangfire), shortened; each compiles against Pro 0.6.
+// From Tenantry Pro's guides (Hangfire, audit logging, tenant lifecycle, migrations), shortened; each uses Pro 0.6's API.
 const WORKFLOWS = [
   {
+    title: 'Run background work as the tenant',
+    text: 'Hangfire and Quartz.NET jobs and MassTransit and Rebus messages run as the tenant they were created for, with the DbContext isolated as in a request. Recurring jobs and background services can run once for each tenant. By default, work whose tenant no longer exists, or is suspended, fails rather than running without a tenant. An adapter API carries the tenant through other libraries the same way.',
+    caption: 'Program.cs',
+    code: `tenant.UsePro(pro => pro.AddHangfirePropagation());
+
+builder.Services.AddHangfire((sp, config) => config
+    .UseSqlServerStorage(connectionString)
+    .UseTenantry(sp));
+
+// Runs as the current tenant, or as the one you name:
+jobs.WithTenant(tenantId).Enqueue<ReportJob>(job => job.Execute());`,
+    link: { label: 'Background jobs', href: '/docs/pro/background-jobs' },
+  },
+  {
+    title: 'Audit each tenant’s changes',
+    text: 'Pro records each insert, update and delete that SaveChanges writes through a context with UseTenantry(): the tenant, the table and primary key, the old and new values, the time and a correlation id. Your IAuditContextProvider names the user, and your IAuditStore keeps the entries; by default no user is named and the entries go to the log. They are written once the transaction commits, or inside it if you choose. ExecuteUpdate, ExecuteDelete and raw SQL are not recorded.',
+    caption: 'Program.cs',
+    code: `tenant.UsePro(pro => pro.AddAuditLogging(opts =>
+    opts.ExcludeProperty<User>(user => user.PasswordHash)));
+
+builder.Services.AddSingleton<IAuditContextProvider, HttpAuditContextProvider>();   // who made the change
+builder.Services.AddScoped<IAuditStore, AuditTableStore>();                         // where entries go`,
+    link: { label: 'Audit logging', href: '/docs/pro/audit-logging' },
+  },
+  {
     title: 'Onboard and offboard tenants',
-    text: 'One call creates the tenant’s database or schema, migrates it and runs your seeders, and its result reports each step. To retry a failed onboarding, run it again: every step runs again, and Tenantry’s own are safe to repeat, so write your seeders to be too. Offboarding runs your export steps, then can drop the tenant’s database or schema, or delete its rows from a shared database.',
+    text: 'One call onboards a tenant: it creates the tenant’s database or schema and migrates it, if the tenant has one, then runs your seeders, and its result reports each step. With a shared database it runs only your seeders and steps. To retry a failed onboarding, run it again: every step runs again, and Tenantry’s own are safe to repeat, so write your seeders to be too. Offboarding refuses a tenant that is still active, runs your export steps, then deletes the tenant’s rows from every tenant-owned table of a shared database in one transaction, or drops its database or schema.',
     caption: 'TenantOnboarding.cs',
     code: `tenant.UsePro(pro => pro
     .AddSeeder<DefaultDataSeeder>()               // your seeder, last
@@ -44,20 +69,6 @@ await app.RunAsync();
 return 0;`,
     link: { label: 'Tenant migrations', href: '/docs/pro/migration-orchestration' },
   },
-  {
-    title: 'Run background work as the tenant',
-    text: 'Hangfire and Quartz.NET jobs and MassTransit and Rebus messages run as the tenant they were created for, with the DbContext isolated as in a request. Recurring work can run once per tenant. By default, a job whose tenant no longer exists is rejected.',
-    caption: 'Program.cs',
-    code: `tenant.UsePro(pro => pro.AddHangfirePropagation());
-
-builder.Services.AddHangfire((sp, config) => config
-    .UseSqlServerStorage(connectionString)
-    .UseTenantry(sp));
-
-// Runs as the current tenant, or as the one you name:
-jobs.WithTenant(tenantId).Enqueue<ReportJob>(job => job.Execute());`,
-    link: { label: 'Background jobs', href: '/docs/pro/background-jobs' },
-  },
 ];
 
 const ALSO = [
@@ -65,11 +76,6 @@ const ALSO = [
     title: 'Schema per tenant and mixed mode',
     text: 'A schema per tenant on SQL Server and PostgreSQL, or per tenant a choice of its own database, its own schema or the shared database.',
     href: '/docs/pro/schema-per-tenant',
-  },
-  {
-    title: 'Audit logging',
-    text: 'Every insert, update and delete your contexts save, with the tenant, the time, who made it and the changed values: once committed, or in the same transaction.',
-    href: '/docs/pro/audit-logging',
   },
   {
     title: 'Health checks',
@@ -102,15 +108,9 @@ const QUESTIONS = [
     answer: `Every Tenantry Pro package from a private NuGet feed, each release while you subscribe, a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. One price for your whole company, billed monthly or yearly.`,
   },
   {
-    question: 'How does my team install it?',
+    question: 'How does my team install it, locally and in CI?',
     answer:
-      'A subscription gives one GitHub account access to the feed. Connect an account your team controls, such as a machine account, create a read-only token from it, and share the token with your developers and CI as a secret. A classic token reads every package its account can see, which is another reason to use a machine account. Everyone in your company may use Pro.',
-    link: { label: 'Installation', href: '/docs/pro/installation' },
-  },
-  {
-    question: 'How do I install it, locally and in CI?',
-    answer:
-      'Connect GitHub on your Pro access page, then add the feed to your nuget.config with a read-only token. The guide covers CI and Docker builds.',
+      'A subscription gives one GitHub account access to the feed. On your Pro access page, connect an account your team controls, such as a machine account, and create a read-only token from it. Add the feed to your nuget.config with that token, and share the token with your developers and CI as a secret. A classic token reads every package its account can see, which is another reason to use a machine account. Everyone in your company may use Pro. The guide covers CI and Docker builds.',
     link: { label: 'Installation', href: '/docs/pro/installation' },
   },
   {
@@ -164,12 +164,14 @@ export default function ProPage() {
           <div className={'mx-auto max-w-6xl px-4 pb-16 pt-16 md:px-8 md:pt-24'}>
             <p className={'text-sm font-medium text-link'}>Tenantry Pro</p>
             <h1 className={'mt-3 max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl'}>
-              A database or schema per tenant, without writing the tooling
+              Run jobs and messages as their tenant, audit each tenant’s changes, and onboard, offboard and migrate
+              tenants
             </h1>
             <p className={'mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground'}>
-              Onboard a tenant in one call, migrate every tenant database as a deployment step, and keep the tenant in
-              your Hangfire, Quartz.NET, MassTransit and Rebus work. One price covers your whole company. Pro builds on
-              the free, open-source Tenantry Core.
+              Pro is for two kinds of application. With a shared database, it adds Hangfire, Quartz.NET, MassTransit and
+              Rebus work that runs as its tenant, an audit log of each tenant’s changes, and offboarding that deletes a
+              tenant’s rows. With a database or schema per tenant, it also creates, migrates, checks and removes them.
+              Pro builds on the free, open-source Tenantry Core. One price covers your whole company.
             </p>
             <div className={'mt-8 flex flex-wrap items-center gap-3'}>
               <Button asChild size={'lg'}>
@@ -184,8 +186,9 @@ export default function ProPage() {
             <p className={'mt-10 max-w-2xl rounded-xl border border-border bg-card p-5 text-sm leading-relaxed'}>
               <span className={'font-semibold'}>Do I need Pro?</span>{' '}
               <span className={'text-muted-foreground'}>
-                With one shared database, Core may be all you need: it isolates tenant data and runs background work as
-                a tenant with worker scopes. Pro adds audit logging and the tenant carried into your jobs and messages.
+                Core isolates tenant data, connects each tenant to a database of its own if you want one, and runs your
+                own background work as a tenant with ITenantScopeFactory. If that covers your application, Core is all
+                you need.
               </span>
             </p>
           </div>
@@ -232,7 +235,7 @@ export default function ProPage() {
         <section className={'border-t border-border/70 bg-surface'}>
           <div className={'mx-auto max-w-6xl px-4 py-16 md:px-8 md:py-20'}>
             <h2 className={'text-2xl font-bold tracking-tight md:text-3xl'}>Also in Pro</h2>
-            <div className={'mt-8 grid gap-6 sm:grid-cols-2'}>
+            <div className={'mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3'}>
               {ALSO.map((item) => (
                 <Link
                   key={item.title}

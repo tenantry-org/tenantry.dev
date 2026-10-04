@@ -16,15 +16,17 @@ export const SUPPORT_REPLY_WITHIN = '48 hours';
  */
 export const ProOffer: Offer = {
   name: 'Tenantry Pro',
-  description: 'For a database or schema per tenant: provisioning, migrations, and the tenant in jobs and messages.',
+  description:
+    'The tenant in your jobs and messages, audit logging, and tenant onboarding, offboarding and migrations, with a shared database or a database or schema per tenant.',
   features: [
+    'Hangfire, Quartz.NET, MassTransit and Rebus work run as the tenant it was created for, and refused for a suspended or deleted tenant',
+    'Recurring jobs and background services that run once for each tenant',
+    'Audit logging of each tenant’s inserts, updates and deletes',
+    'Onboarding and offboarding in one call, including deleting a tenant’s rows from a shared database',
     'Tenant databases created, migrated and seeded, on SQL Server, PostgreSQL and MySQL',
-    'Offboarding that runs your export steps, then removes the tenant’s database, schema or rows',
     'Migrations across every tenant database or schema, as a deployment step',
     'A schema per tenant (SQL Server, PostgreSQL), and mixed mode',
-    'The tenant carried through Hangfire, MassTransit, Quartz.NET and Rebus',
-    'Audit logging and tenant health checks',
-    'Connection-string caching',
+    'Tenant health checks and connection-string caching',
     'Private NuGet package feed',
     `Email support, with a reply within ${SUPPORT_REPLY_WITHIN}`,
   ],
