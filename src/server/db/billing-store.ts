@@ -389,6 +389,29 @@ export async function listSubscriptions(customerId: string): Promise<Subscriptio
   }));
 }
 
+/** The customer's computed grants as last stored (vested_entitlements, without operator grants). */
+export async function listGrants(customerId: string): Promise<Grant[]> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('vested_entitlements')
+    .select('kind,started_at,vested_through,status,confirmed_at,transaction_id,withdrawn_reason')
+    .eq('customer_id', customerId)
+    .neq('kind', 'operator');
+
+  if (error) throw error;
+
+  // vested_entitlements' check constraints allow only these.
+  return (data ?? []).map((row) => ({
+    kind: row.kind as GrantKind,
+    startedAt: new Date(row.started_at),
+    vestedThrough: new Date(row.vested_through),
+    status: row.status as GrantStatus,
+    confirmedAt: row.confirmed_at ? new Date(row.confirmed_at) : null,
+    transactionId: row.transaction_id,
+    withdrawnReason: row.withdrawn_reason as WithdrawnReason | null,
+  }));
+}
+
 /**
  * Stores the customer's derived state in one transaction (`set_customer_entitlement`): their access and current run
  * (active_subscriptions), their computed grants (vested_entitlements) and each payment's status. Returns the access

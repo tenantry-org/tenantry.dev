@@ -1,6 +1,11 @@
 import 'server-only';
-import type { Entitlement } from '@/server/db/billing-store';
-import { accessRevokedEmail, welcomeProEmail } from '@/server/integrations/email/templates';
+import type { Entitlement, Grant } from '@/server/db/billing-store';
+import {
+  accessRevokedEmail,
+  grantWithdrawnEmail,
+  vestingConfirmedEmail,
+  welcomeProEmail,
+} from '@/server/integrations/email/templates';
 import { errorMessage } from '@/lib/errors';
 import { computeEntitlement, isEntitled } from '@/server/billing/entitlement-policy';
 import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
@@ -17,7 +22,9 @@ import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
  * ends; that is decided when access is computed, so the daily reconcile ends access once grace is over, with no event
  * from Paddle. In the same way, reconcile confirms vesting as periods are served.
  *
- * The lifecycle emails follow access. The licence does not expire (licence-issuer.ts): a
+ * The lifecycle emails follow access, and the customer is told when a grant is confirmed (releases become vested) or
+ * withdrawn (a refund, a chargeback, or an annual term not completed); the operator is alerted about a withdrawal. The
+ * licence does not expire (licence-issuer.ts): a
  * customer is issued one key when their access first starts and keeps it for good, through renewals, lapses and
  * returns. It does not decide which releases they may use (the feed and the EULA do), so ending access leaves it in
  * place, and the dashboard keeps showing it.
@@ -50,11 +57,12 @@ export async function syncCustomer(
   now: Date = new Date(),
 ): Promise<CustomerSync> {
   const { store } = deps;
-  const [subscriptions, payments, adjustments, email] = await Promise.all([
+  const [subscriptions, payments, adjustments, email, previousGrants] = await Promise.all([
     store.listSubscriptions(customerId),
     store.listPayments(customerId),
     store.listPaymentAdjustments(customerId),
     store.getCustomerEmail(customerId),
+    store.listGrants(customerId),
   ]);
   const entitlement = computeEntitlement({
     subscriptions,
@@ -66,6 +74,7 @@ export async function syncCustomer(
   const entitled = isEntitled(entitlement.access.status);
 
   const wasEntitled = isEntitled(await store.saveCustomerState(customerId, entitlement));
+  await notifyGrantChanges(customerId, previousGrants, entitlement, email, deps);
 
   if (!entitled) {
     if (!wasEntitled) return { change: 'unchanged', licence: null, entitlement };
@@ -97,6 +106,57 @@ export async function syncCustomer(
   }
 
   return { change: 'started', licence, entitlement };
+}
+
+/**
+ * Tells the customer about each grant that became confirmed (absent or conditional before: a first vesting, a new
+ * qualifying period that vested, an annual term completed) and each that was withdrawn (conditional or confirmed
+ * before), comparing the grants stored before this sync with those stored by it. A confirmed grant whose vested-through
+ * date only moves forward, as a qualifying period does each month, sends nothing. A withdrawal also alerts the operator,
+ * since a refund or chargeback took away releases. Never throws: a failed email is not resent.
+ */
+async function notifyGrantChanges(
+  customerId: string,
+  previous: Grant[],
+  entitlement: Entitlement,
+  email: string | null,
+  deps: BillingDeps,
+) {
+  const before = new Map(previous.map((grant) => [grantKey(grant), grant.status]));
+  const confirmed = entitlement.grants.filter(
+    (grant) => grant.status === 'confirmed' && before.get(grantKey(grant)) !== 'confirmed',
+  );
+  const withdrawn = entitlement.grants.filter((grant) => {
+    const was = before.get(grantKey(grant));
+    return grant.status === 'withdrawn' && (was === 'conditional' || was === 'confirmed');
+  });
+
+  for (const grant of withdrawn) {
+    await deps.alertOperator(
+      `Grant withdrawn for customer ${customerId}`,
+      `The ${grant.kind === 'annual_term' ? 'annual term' : 'qualifying period'} of Paddle customer ${customerId} ` +
+        `that started ${grant.startedAt.toISOString()} no longer vests releases up to ` +
+        `${grant.vestedThrough.toISOString()} (${grant.withdrawnReason}). Their vested-through date is now ` +
+        `${entitlement.vestedThrough?.toISOString() ?? 'none'}. Check the adjustment in Paddle if this is unexpected.`,
+    );
+  }
+  if (confirmed.length > 0 && entitlement.vestedThrough) {
+    console.info(
+      `Customer access: customer ${customerId} is vested through ${entitlement.vestedThrough.toISOString()}.`,
+    );
+  }
+
+  if (!email) return;
+  for (const grant of withdrawn) {
+    await deps.sendEmail(grantWithdrawnEmail(email, grant, entitlement.vestedThrough, deps.config.siteUrl));
+  }
+  if (confirmed.length > 0 && entitlement.vestedThrough) {
+    await deps.sendEmail(vestingConfirmedEmail(email, entitlement.vestedThrough, deps.config.siteUrl));
+  }
+}
+
+function grantKey(grant: Pick<Grant, 'kind' | 'startedAt'>): string {
+  return `${grant.kind}:${grant.startedAt.getTime()}`;
 }
 
 export type LicenceOutcome = 'issued' | 'current' | 'failed';

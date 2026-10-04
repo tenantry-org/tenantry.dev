@@ -55,6 +55,61 @@ export function feedTokenCreatedEmail(
   };
 }
 
+/**
+ * Sent when a grant is confirmed: a qualifying period reaches 12 paid months, or an annual term is completed. Not sent
+ * as the vested-through date moves forward month by month afterwards.
+ */
+export function vestingConfirmedEmail(to: string, vestedThrough: Date, siteUrl: string): EmailMessage {
+  return {
+    to,
+    subject: 'Your Tenantry Pro releases are vested',
+    html: layout(
+      `<h1 style="font-size:20px">Your releases are vested</h1>
+<p>Every Tenantry Pro release published on or before ${longDate(vestedThrough)}, your vested-through date, is now vested. Vested releases stay licensed to you after your subscription ends, and the package feed keeps serving them to you, with the security patches of their minor versions.</p>
+<p>While you stay subscribed, your vested-through date moves forward at the end of each paid month.</p>
+<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">See your vested releases</a></p>`,
+    ),
+  };
+}
+
+/** A withdrawn grant, as vested_entitlements records it (billing-store.ts: Grant). */
+interface WithdrawnGrant {
+  kind: 'qualifying_run' | 'annual_term';
+  vestedThrough: Date;
+  withdrawnReason: 'refund' | 'chargeback' | 'term_not_completed' | null;
+}
+
+const WITHDRAWN_BECAUSE: Record<NonNullable<WithdrawnGrant['withdrawnReason']>, string> = {
+  refund: 'its payment was refunded',
+  chargeback: 'a payment it relied on was charged back',
+  term_not_completed: 'the subscription ended before the annual term was completed',
+};
+
+/** Sent when a grant is withdrawn: by a refund, a chargeback, or an annual term the subscription did not complete. */
+export function grantWithdrawnEmail(
+  to: string,
+  grant: WithdrawnGrant,
+  vestedThrough: Date | null,
+  siteUrl: string,
+): EmailMessage {
+  const what = grant.kind === 'annual_term' ? 'Your annual term' : 'Your qualifying period';
+  const because = grant.withdrawnReason ? `, because ${WITHDRAWN_BECAUSE[grant.withdrawnReason]}` : '';
+  return {
+    to,
+    subject: 'Your Tenantry Pro vested releases have changed',
+    html: layout(
+      `<h1 style="font-size:20px">Your vested releases have changed</h1>
+<p>${what} no longer vests the releases published up to ${longDate(grant.vestedThrough)}${because}.</p>
+<p>${
+        vestedThrough
+          ? `Your vested-through date is now ${longDate(vestedThrough)}: the releases published on or before it stay vested.`
+          : 'No releases are vested now.'
+      } While your subscription is active, the package feed still serves you every release.</p>
+<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">See your vested releases</a></p>`,
+    ),
+  };
+}
+
 /** Sent when a customer's access ends: none of their subscriptions entitles them any more. */
 export function accessRevokedEmail(to: string, siteUrl: string): EmailMessage {
   return {
@@ -72,4 +127,9 @@ export function accessRevokedEmail(to: string, siteUrl: string): EmailMessage {
 // Text from a customer, such as a token's name, goes into the HTML only escaped.
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (character) => `&#${character.codePointAt(0)};`);
+}
+
+// A date as the Pro pages show it, in UTC.
+function longDate(date: Date): string {
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 }

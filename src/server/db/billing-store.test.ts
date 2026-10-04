@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall, FakeTable } from '@/test/fake-supabase';
 import {
   customersToReconcile,
+  listGrants,
   listPaymentAdjustments,
   listPayments,
   listSubscriptions,
@@ -292,6 +293,37 @@ describe('the payment ledger', () => {
         endedAt: null,
       },
     ]);
+  });
+
+  it('reads the computed grants as stored, leaving out operator grants', async () => {
+    state.tables = {
+      vested_entitlements: {
+        list: [
+          {
+            kind: 'qualifying_run',
+            started_at: '2026-01-01T00:00:00Z',
+            vested_through: '2027-02-01T00:00:00Z',
+            status: 'confirmed',
+            confirmed_at: '2027-01-01T00:00:00Z',
+            transaction_id: null,
+            withdrawn_reason: null,
+          },
+        ],
+      },
+    };
+
+    await expect(listGrants('ctm_1')).resolves.toEqual([
+      {
+        kind: 'qualifying_run',
+        startedAt: new Date('2026-01-01T00:00:00Z'),
+        vestedThrough: new Date('2027-02-01T00:00:00Z'),
+        status: 'confirmed',
+        confirmedAt: new Date('2027-01-01T00:00:00Z'),
+        transactionId: null,
+        withdrawnReason: null,
+      },
+    ]);
+    expect(state.calls).toContainEqual({ table: 'vested_entitlements', method: 'neq', args: ['kind', 'operator'] });
   });
 
   it('stores the derived state in one call and returns the access it replaced', async () => {

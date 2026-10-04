@@ -51,6 +51,7 @@ export function fakeSupabase(
       for (const method of [
         'select',
         'eq',
+        'neq',
         'is',
         'gt',
         'in',

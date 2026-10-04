@@ -209,6 +209,10 @@ export const memory = {
         }));
     },
 
+    async listGrants(customerId: string) {
+      return (state.entitlementStates.get(customerId)?.grants ?? []).map((grant) => ({ ...grant }));
+    },
+
     // As set_customer_entitlement does: returns the access it replaced.
     async saveCustomerState(customerId: string, entitlement: Entitlement) {
       const previous = state.access.get(customerId);

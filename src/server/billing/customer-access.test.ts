@@ -313,3 +313,95 @@ describe('grace period', () => {
     expect(deps.issueLicence).not.toHaveBeenCalled();
   });
 });
+
+describe('vesting emails', () => {
+  const subjects = () => deps.sendEmail.mock.calls.map(([message]) => message.subject);
+  const alerts = () => deps.alertOperator.mock.calls.map(([subject]) => subject);
+
+  async function pay(transactionId: string, startsAt: string, endsAt: string, interval = 'month') {
+    await memory.store.recordPayment({
+      transactionId,
+      customerId: 'ctm_1',
+      subscriptionId: 'sub_1',
+      origin: 'subscription_recurring',
+      priceId: interval === 'year' ? 'pri_01year' : 'pri_01month',
+      billingInterval: interval,
+      billingFrequency: 1,
+      periodStartsAt: startsAt,
+      periodEndsAt: endsAt,
+      subtotal: 3900,
+      discount: 0,
+      total: 3900,
+      currencyCode: 'GBP',
+      occurredAt: startsAt,
+    });
+  }
+
+  const month = (n: number) => new Date(Date.UTC(2026, n, 1)).toISOString();
+
+  it('tells the customer once when a qualifying period vests, not as the vested-through date moves on', async () => {
+    memory.subscribe('ctm_1');
+    for (let n = 0; n < 12; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+    await syncCustomer('ctm_1', deps, new Date('2026-12-15T00:00:00Z'));
+    vi.clearAllMocks();
+
+    await syncCustomer('ctm_1', deps, new Date('2027-01-01T01:00:00Z'));
+    expect(subjects()).toEqual(['Your Tenantry Pro releases are vested']);
+    const [message] = deps.sendEmail.mock.calls[0];
+    expect(message.html).toContain('1 January 2027');
+    expect(message.html).toContain('href="https://sandbox.example.com/dashboard/pro"');
+    vi.clearAllMocks();
+
+    await pay('txn_12', month(12), month(13));
+    await syncCustomer('ctm_1', deps, new Date('2027-02-01T01:00:00Z'));
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-02-01T00:00:00Z'));
+    expect(deps.sendEmail).not.toHaveBeenCalled();
+    expect(deps.alertOperator).not.toHaveBeenCalled();
+  });
+
+  it('tells the customer and alerts the operator when an annual grant is withdrawn by a refund', async () => {
+    memory.subscribe('ctm_1');
+    await pay('txn_year', '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z', 'year');
+    await syncCustomer('ctm_1', deps, new Date('2026-01-05T00:00:00Z'));
+    expect(memory.state.entitlementStates.get('ctm_1')?.conditionalThrough).toEqual(new Date('2027-01-01T00:00:00Z'));
+    vi.clearAllMocks();
+
+    await memory.store.recordPaymentAdjustment({
+      adjustmentId: 'adj_1',
+      transactionId: 'txn_year',
+      customerId: 'ctm_1',
+      subscriptionId: 'sub_1',
+      action: 'refund',
+      type: 'full',
+      itemTypes: ['full'],
+      status: 'approved',
+      createdAt: '2026-01-08T00:00:00Z',
+      updatedAt: '2026-01-08T00:00:00Z',
+      occurredAt: '2026-01-08T00:00:00Z',
+    });
+    await syncCustomer('ctm_1', deps, new Date('2026-01-08T01:00:00Z'));
+
+    expect(subjects()).toEqual(['Your Tenantry Pro vested releases have changed']);
+    const [message] = deps.sendEmail.mock.calls[0];
+    expect(message.html).toContain('Your annual term no longer vests the releases published up to 1 January 2027');
+    expect(message.html).toContain('because its payment was refunded');
+    expect(message.html).toContain('No releases are vested now.');
+    expect(alerts()).toEqual(['Grant withdrawn for customer ctm_1']);
+
+    // Recomputing again changes nothing, and sends nothing.
+    vi.clearAllMocks();
+    await syncCustomer('ctm_1', deps, new Date('2026-01-09T00:00:00Z'));
+    expect(deps.sendEmail).not.toHaveBeenCalled();
+    expect(deps.alertOperator).not.toHaveBeenCalled();
+  });
+
+  it('says nothing about an annual term until it is completed, then that it vested', async () => {
+    memory.subscribe('ctm_1');
+    await pay('txn_year', '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z', 'year');
+    await syncCustomer('ctm_1', deps, new Date('2026-06-01T00:00:00Z'));
+    expect(subjects()).not.toContain('Your Tenantry Pro releases are vested');
+
+    await syncCustomer('ctm_1', deps, new Date('2027-01-01T04:00:00Z'));
+    expect(subjects()).toContain('Your Tenantry Pro releases are vested');
+  });
+});
