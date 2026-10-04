@@ -88,5 +88,7 @@ jobs:
       - run: git diff --exit-code -- src/lib/supabase/database.types.ts
       # supabase/tests/database
       - run: supabase test db
+      # Tests that need the local stack (its default password): supabase/local-tests
+      - run: supabase test db supabase/local-tests
       # Each migration that moves data, against rows of the schema before it (supabase/migration-tests).
       - run: bash scripts/test-migrations.sh

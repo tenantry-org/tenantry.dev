@@ -1,7 +1,8 @@
 -- Two first publishes of one package id in two casings at once: the second waits for the first and is then refused,
 -- rather than missing the first's uncommitted row and recording a second casing. A second connection (dblink) plays
--- the other publish, signing in with the local stack's default password: run it with `supabase test db` against the
--- local database only.
+-- the other publish, signing in with the local stack's default password, so it runs against the local database only:
+-- `supabase test db supabase/local-tests` (CI runs it after supabase/tests). It is kept out of supabase/tests so that
+-- `supabase test db --linked` against a hosted database runs every other test and passes.
 begin;
 create extension if not exists pgtap with schema extensions;
 create extension if not exists dblink with schema extensions;

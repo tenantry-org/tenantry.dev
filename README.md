@@ -57,8 +57,9 @@ helpers for both sides, and `src/test` the fakes the tests share.
 
 The database schema, with its RLS policies and functions, starts with
 `supabase/migrations/20261002120000_baseline.sql`; later changes are migrations after it. Their tests are in
-`supabase/tests/database/`, and a migration that moves data is tested against rows of the schema before it in
-`supabase/migration-tests/` (`pnpm test:migrations`).
+`supabase/tests/database/` (`supabase test db`, which also passes with `--linked` against a hosted database), those
+that need the local stack in `supabase/local-tests/` (`supabase test db supabase/local-tests`), and a migration that
+moves data is tested against rows of the schema before it in `supabase/migration-tests/` (`pnpm test:migrations`).
 
 ## Develop
 
