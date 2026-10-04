@@ -118,13 +118,8 @@ const QUESTIONS = [
   {
     question: 'How does my team install it, locally and in CI?',
     answer:
-      'A subscription gives one GitHub account access to the feed. On your Pro access page, connect an account your team controls, such as a machine account, and create a read-only token from it. Add the feed to your nuget.config with that token, and share the token with your developers and CI as a secret. A classic token reads every package its account can see, which is another reason to use a machine account. Everyone in your company may use Pro. The guide covers CI and Docker builds.',
+      'Create a feed token on your Pro access page for each developer machine and CI system, and add the package feed to your nuget.config, which reads the token from an environment variable. NuGet then restores Tenantry Pro from the package feed and everything else from nuget.org. You can hold up to 10 feed tokens and revoke each one on its own. No GitHub account is needed, and everyone in your company may use Pro. The guide covers CI and Docker builds.',
     link: { label: 'Installation', href: '/docs/pro/installation' },
-  },
-  {
-    question: 'Will the package feed change?',
-    answer:
-      'Yes, before Tenantry Pro goes on sale. The packages are on GitHub Packages today, the feed the subscription system has been built and tested with, so the docs describe it. A private Tenantry feed will replace it, and after a subscription ends it will still let you restore the releases your perpetual licence covers.',
   },
   {
     question: 'Which versions and databases?',

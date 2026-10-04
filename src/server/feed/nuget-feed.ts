@@ -3,6 +3,7 @@ import { isEntitled, mayUseRelease } from '@/server/billing/entitlement-policy';
 import type { FeedCustomer, FeedPackage } from '@/server/db/package-feed';
 import { type FeedDeps, defaultFeedDeps } from '@/server/feed/deps';
 import { feedTokenFrom, hashFeedToken } from '@/server/feed/feed-tokens';
+import { FEED_PATH } from '@/lib/install-snippets';
 
 /**
  * Tenantry Pro's NuGet v3 feed (https://learn.microsoft.com/en-us/nuget/api/overview), served under /feed/v3/ by the
@@ -28,8 +29,6 @@ import { feedTokenFrom, hashFeedToken } from '@/server/feed/feed-tokens';
 
 /** How long a download's signed URL works. NuGet follows the redirect at once. */
 export const DOWNLOAD_URL_SECONDS = 300;
-
-const FEED_PATH = '/feed/v3';
 
 export function feedBaseUrl(deps: FeedDeps): string {
   return `${deps.siteUrl()}${FEED_PATH}`;

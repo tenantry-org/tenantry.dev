@@ -18,5 +18,5 @@ export default function InstallPage() {
 
 async function Install() {
   const view = await getInstallView();
-  return <InstallPanel view={view} githubOrg={serverConfig().github.org} />;
+  return <InstallPanel view={view} siteUrl={serverConfig().siteUrl} />;
 }

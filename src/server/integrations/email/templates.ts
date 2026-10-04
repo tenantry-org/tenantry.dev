@@ -1,5 +1,6 @@
 import 'server-only';
 import { EmailMessage } from '@/server/integrations/email/send';
+import { feedUrl } from '@/lib/install-snippets';
 
 // The public site, for the logo and the footer: the same in every environment, since mail clients cannot reach a
 // preview deployment behind Vercel Authentication. Links into the app go to the environment's own site (`siteUrl`).
@@ -19,16 +20,16 @@ ${body}
 </div>`;
 }
 
-/** Sent when a customer's access starts (their first entitled subscription). Points them at the Pro access page. */
+/** Sent when a customer's access starts (their first entitled subscription): how to restore the packages. */
 export function welcomeProEmail(to: string, siteUrl: string): EmailMessage {
   return {
     to,
-    subject: 'Welcome to Tenantry Pro: connect GitHub to get access',
+    subject: 'Welcome to Tenantry Pro: create a feed token to install it',
     html: layout(
       `<h1 style="font-size:20px">Welcome to Tenantry Pro</h1>
-<p>Thanks for subscribing. Log in to Tenantry with this email address and <strong>connect your GitHub account</strong> to get the private package feed.</p>
-<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">Connect GitHub</a></p>
-<p>The same page has your licence key and the <code>nuget.config</code> for restoring packages.</p>`,
+<p>Thanks for subscribing. Log in to Tenantry with this email address and create a feed token on your Pro access page. NuGet sends it to the package feed, which serves the Tenantry Pro packages at <code>${feedUrl(siteUrl)}</code>.</p>
+<p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">Create a feed token</a></p>
+<p>The same page has your licence key. The <a href="${siteUrl}/dashboard/pro/install" style="color:#2563EB">Install page</a> has the <code>nuget.config</code> to commit next to your solution, and what to set in CI and Docker builds.</p>`,
     ),
   };
 }

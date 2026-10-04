@@ -165,11 +165,8 @@ stays off the site until Pro's release, and the previous line is shown meanwhile
 release has been sold (`FIRST_SOLD_RELEASE` in `scripts/docs-versions.mjs`).
 
 The same run reads what the site says about the newest release from the release itself and writes it to
-[`newest-release.json`](newest-release.json): the .NET versions Core's package targets, the number of sample folders,
-and the setup snippets of Pro's installation guide, which the Pro access page shows with the environment's GitHub org.
-The snippets must still hold the feed, the package patterns, the environment variables and the licence key's setting
-that the portal's own text names (`scripts/install-snippets.mjs`). The home, Pro and comparison pages and the portal
-take these from the file, and the version badge and the docs from `docs-versions.json`. When either file changes, the
+[`newest-release.json`](newest-release.json): the .NET versions Core's package targets and the number of sample
+folders. The home, Pro and comparison pages take these from the file, and the version badge and the docs from `docs-versions.json`. When either file changes, the
 workflow commits both to master and staging and runs the test and audit workflows on the commit, since its own pushes
 start none. Production deploys the commit once they pass. A run that finds nothing new but sees its own commit at
 master's head runs those workflows if they never ran on it, and fast-forwards staging to it; staging with commits master
@@ -178,12 +175,15 @@ few minutes the checks and the build take. Run the workflow from the Actions tab
 
 A release whose tag has no `docs` folder, or whose `CHANGELOG.md` has no section for it, is left out, and its line keeps
 the release before it. So is a release of the newest line that does not give the facts above: a nuspec without target
-frameworks, no sample folder, or an installation guide without those snippets. The run commits what it can publish, then
+frameworks, or no sample folder. The run commits what it can publish, then
 fails, with the releases left out and why in its summary, and fails again each hour until the release is fixed or
 replaced. A run that cannot reach NuGet or read a file from a tag publishes nothing. A release build fails before
-deploying, and production keeps the last deployment, if a listed tag cannot be read or its docs are incomplete. The code
-samples on the home and Pro pages are not release data: when a minor release changes the API they show, they are updated
-by hand.
+deploying, and production keeps the last deployment, if a listed tag cannot be read or its docs are incomplete. Two things
+on the site are not release data. The code samples on the home and Pro pages are updated by hand when a minor release
+changes the API they show. The instructions for restoring from the package feed (the Install page and the emails) are
+written by the site, which serves the feed, with its own address (`src/lib/install-snippets.ts`); Pro's installation
+guide uses the same source key and variable (`tenantry-pro`, `TENANTRY_FEED_TOKEN`), so the two agree whatever a
+release's guide says.
 
 If a release has not reached the site after an hour, check in this order: NuGet lists the Core version
 (`https://www.nuget.org/packages/Tenantry.Core`), or tenantry-pro-docs has the Pro tag (Pro's publish-docs job may need

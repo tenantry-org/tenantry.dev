@@ -58,7 +58,7 @@ describe('syncCustomer', () => {
       githubInvitedAt: null,
     });
     expect(memory.licences('ctm_1')).toHaveLength(1);
-    expect(emailSubjects()).toEqual(['Welcome to Tenantry Pro: connect GitHub to get access']);
+    expect(emailSubjects()).toEqual(['Welcome to Tenantry Pro: create a feed token to install it']);
     expect(emailLinks()).toEqual(['https://sandbox.example.com/dashboard/pro']);
   });
 

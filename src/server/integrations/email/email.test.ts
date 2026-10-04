@@ -39,6 +39,15 @@ describe('email templates', () => {
     expect(msg.html).toContain(`href="${SITE}/dashboard/pro"`);
   });
 
+  it("welcomeProEmail gives this environment's package feed and asks for a feed token, with no GitHub step", () => {
+    const { html } = welcomeProEmail('cust@example.com', SITE);
+
+    expect(html).toContain(`<code>${SITE}/feed/v3/index.json</code>`);
+    expect(html).toContain('create a feed token');
+    expect(html).toContain(`href="${SITE}/dashboard/pro/install"`);
+    expect(html).not.toMatch(/github/i);
+  });
+
   it('welcomeProEmail says which account to log in with: purchases are matched to accounts by email address', () => {
     expect(welcomeProEmail('cust@example.com', SITE).html).toContain('Log in to Tenantry with this email address');
   });
