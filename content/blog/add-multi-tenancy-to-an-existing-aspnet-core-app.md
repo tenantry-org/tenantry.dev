@@ -3,7 +3,7 @@ title: Add multi-tenancy to an existing ASP.NET Core application
 description: Keep your organisations table as the tenant registry, resolve the tenant on each request, and isolate EF Core data with one call on the DbContext you already have.
 date: 2026-10-03
 author: Oliver McNally
-versions: Tenantry 0.5, .NET 10, EF Core 10 and PostgreSQL 16
+versions: Tenantry 0.6, .NET 10, EF Core 10 and PostgreSQL 16
 tags: [dotnet, aspnetcore, efcore, multitenancy]
 next:
   label: Get started with Tenantry Core
@@ -55,8 +55,8 @@ dotnet add package Tenantry.EfCore
 
 ## 1. The organisations table is the tenant registry
 
-Tenantry has no tenants table of its own. It reads tenants from a store you write over what you already have, which
-finds a tenant by id and lists them all. Override the third method when requests name a tenant by a slug or a domain.
+Tenantry has no tenants table of its own. You write a store over the table you have: it finds a tenant by id and
+lists them all. When requests name a tenant by a slug or a domain, also implement `FindByIdentifierAsync`.
 
 ```csharp
 public sealed record OrganisationTenant(Guid TenantId, string Name, bool IsActive) : ITenantDescriptor<Guid>;
@@ -96,7 +96,7 @@ builder.Services.AddTenantry<Guid>(tenant => tenant
     .CacheTenants()                                                 // five minutes by default
     .RequireTenantByDefault()
     .ValidateTenantAccessByClaim("org_id")                          // the caller belongs to it
-    .ValidateTenantAccess((_, t) => t.As<OrganisationTenant>().IsActive));
+    .ValidateTenantActivity(t => t.As<OrganisationTenant>().IsActive));
 ```
 
 ```csharp
@@ -105,13 +105,11 @@ app.UseTenantry();
 app.UseAuthorization();
 ```
 
-Anyone can type a subdomain, so the access validators check the caller before the organisation becomes current:
-
-- the user's `org_id` claims must include the organisation's id, and it must be active;
-- otherwise the answer is `403`, the same as for an organisation that does not exist, so users cannot find out which
-  others do;
-- a request with no organisation gets `400`, unless its endpoint calls `AllowMissingTenant()`;
-- `UseTenantry()` goes after `UseAuthentication()`, because the validators read the user.
+Anyone can type a subdomain, so two checks run before the organisation becomes current. `ValidateTenantActivity`
+refuses a deactivated organisation, and `ValidateTenantAccessByClaim` refuses a user whose `org_id` claims do not
+include the organisation's id. Either refusal is answered with `403`, the same as for an organisation that does not
+exist, so users cannot find out which others do. A request with no organisation gets `400`, unless its endpoint calls
+`AllowMissingTenant()`. `UseTenantry()` goes after `UseAuthentication()`, because the claim check reads the user.
 
 With `CacheTenants`, a deactivated organisation is served from the cache until its entry expires; call
 `ITenantInvalidator<Guid>.InvalidateAsync` when you deactivate one.
@@ -171,8 +169,8 @@ query matches nothing rather than everything.
 `TenantIsolationViolationException`, and one with no tenant at all throws `TenantNotResolvedException`; nothing is
 written either way.
 
-**Updates and deletes are checked twice.** An entity can be changed only while its own tenant is current, and it must
-have been loaded or attached as that tenant. So an update built straight from a request body is refused, whichever
+**Updates and deletes are checked twice.** First, the entity's `TenantId`, as it was loaded or attached and as it is
+now, must be the current tenant's. A new instance built from a request body has no tenant, so it is refused, whichever
 organisation the order belongs to:
 
 ```csharp
@@ -224,7 +222,9 @@ await scopes.RunInScopeAsync(message.OrganisationId, async (scope, ct) =>
 }, cancellationToken);
 ```
 
-Access validators run only for requests, so background work checks `IsActive` itself.
+`RunInScopeAsync` applies the `ValidateTenantActivity` check as a request does: for a deactivated organisation it
+throws `TenantInactiveException` and the work does not run. The claim check needs a request, so it does not run here,
+and `CreateScope` checks neither.
 
 ## From here
 
