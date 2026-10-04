@@ -23,32 +23,40 @@ const STABLE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 export const CONFIG_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs-versions.json');
 
 /**
- * The first release that was on sale, such as `v0.6.1`, or null while Tenantry Pro is not on sale. The site shows
- * nothing older: no docs of an earlier minor, and no changelog entry of an earlier release. While it is null no
- * release has been sold, so the site shows only the newest minor and, in its changelog, only that minor's newest
- * release. Set it once, to the release that is current when checkout opens.
+ * The first releases that were on sale, one per product, such as `{ core: 'v0.7.3', pro: 'v0.7.1' }`, or null while
+ * Tenantry Pro is not on sale. Core and Pro number their patches separately, so each has its own. The site shows
+ * nothing older: no docs of a minor before theirs, and no changelog entry of a product's release before its own.
+ * While it is null no release has been sold, so the site shows only the newest minor and, in its changelog, only
+ * that minor's newest release of each product.
  *
- * @type {string | null}
+ * Set it once, when checkout opens, to each product's newest published release at that moment: the Core and Pro tags
+ * docs-versions.json lists first. Both are in the same minor.
+ *
+ * @type {{ core: string, pro: string } | null}
  */
 export const FIRST_SOLD_RELEASE = null;
 
-/** The first release sold, checked: null, or a release tag without a pre-release suffix, such as `v0.6.1`. */
+/** The first releases sold, checked: null, or Core's and Pro's stable release tags in one minor. */
 export function checkFirstSold(firstSold) {
-  if (firstSold === null || STABLE_TAG.test(firstSold ?? '')) return firstSold;
+  if (firstSold === null) return null;
+  const tags = GROUPS.map((group) => firstSold?.[group]);
+  if (tags.every((tag) => STABLE_TAG.test(tag ?? '')) && new Set(tags.map(minorOf)).size === 1) return firstSold;
   throw new Error(
-    `FIRST_SOLD_RELEASE is ${JSON.stringify(firstSold)}: set it to null, or to a release tag such as v0.6.1, ` +
-      'with its v and without a pre-release suffix.',
+    `FIRST_SOLD_RELEASE is ${JSON.stringify(firstSold)}: set it to null, or to Core's and Pro's first releases ` +
+      "sold, such as { core: 'v0.7.3', pro: 'v0.7.1' }: both release tags with their v, without a pre-release " +
+      'suffix, in the same minor.',
   );
 }
 
 /**
- * The oldest release a docs version's changelog shows, given the release its docs are of (`tag`): the first release
- * sold, or the docs' own release when that is older or none has been sold. A minor whose product released only
- * before the first sale still shows the release its docs describe.
+ * The oldest release a group's (`core` or `pro`) changelog shows, given the release its docs are of (`tag`): the
+ * group's first release sold, or the docs' own release when that is older or none has been sold. The docs' release
+ * is older only when the release sold was taken back, and then the changelog still shows the release its docs describe.
  */
-export function oldestReleaseShown(tag, firstSold = FIRST_SOLD_RELEASE) {
+export function oldestReleaseShown(group, tag, firstSold = FIRST_SOLD_RELEASE) {
   checkFirstSold(firstSold);
-  return firstSold !== null && compareReleases(firstSold, tag) < 0 ? firstSold : tag;
+  const sold = firstSold?.[group];
+  return sold && compareReleases(sold, tag) < 0 ? sold : tag;
 }
 
 /** The minor version a tag belongs to: v0.4.1 → 0.4, v1.12.3 → 1.12. */
@@ -124,10 +132,10 @@ export function publishedTags(tags, publishedVersions) {
 
 /**
  * The versions to publish, given each group's tags: every minor both groups released, the newest patch of each, from
- * the minor of the first release sold (`firstSold`) on. With none sold yet (null), only the newest minor.
+ * the minor of the first releases sold (`firstSold`) on. With none sold yet (null), only the newest minor.
  *
  * @param {Record<string, string[]>} tagsByGroup
- * @param {string | null} [firstSold]
+ * @param {{ core: string, pro: string } | null} [firstSold]
  */
 export function resolveVersions(tagsByGroup, firstSold = FIRST_SOLD_RELEASE) {
   checkFirstSold(firstSold);
@@ -149,7 +157,7 @@ export function resolveVersions(tagsByGroup, firstSold = FIRST_SOLD_RELEASE) {
 
   return firstSold === null
     ? versions.slice(0, 1)
-    : versions.filter((entry) => compareMinors(entry.version, minorOf(firstSold)) >= 0);
+    : versions.filter((entry) => compareMinors(entry.version, minorOf(firstSold.core)) >= 0);
 }
 
 /**
@@ -161,7 +169,7 @@ export function resolveVersions(tagsByGroup, firstSold = FIRST_SOLD_RELEASE) {
  * @param {Record<string, string[]>} tagsByGroup
  * @param {(group: string, tag: string, newest: boolean) => Promise<string | null> | string | null} problem
  * @param {(release: { group: string, tag: string, reason: string }) => void} [onLeftOut]
- * @param {string | null} [firstSold]
+ * @param {{ core: string, pro: string } | null} [firstSold]
  */
 export async function resolvePublishable(tagsByGroup, problem, onLeftOut = () => {}, firstSold = FIRST_SOLD_RELEASE) {
   const tags = { ...tagsByGroup };

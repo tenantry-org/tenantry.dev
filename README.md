@@ -112,8 +112,9 @@ since Core is tagged before its release runs; pre-release tags never count. To t
 NuGet and the next run drops it; a Pro release is dropped by deleting its tag from tenantry-pro-docs. A minor is listed
 once both Core and Pro have a release in it, with the newest patch of each, so a new minor released by Core first
 stays off the site until Pro's release, and the previous minor is shown meanwhile. Only the newest minor is shown until
-a release has been sold (`FIRST_SOLD_RELEASE` in `scripts/docs-versions.mjs`); from then on every minor from the first
-one sold is shown.
+a release has been sold. When checkout opens, `FIRST_SOLD_RELEASE` in `scripts/docs-versions.mjs` is set to Core's and
+Pro's newest published releases (their patches can differ, such as `{ core: 'v0.7.3', pro: 'v0.7.1' }`); from then on
+every minor from that one is shown, and each product's changelog starts at its own release sold.
 
 The same run reads what the site says about the newest release from the release itself and writes it to
 [`newest-release.json`](newest-release.json): the .NET versions Core's package targets, the number of sample folders,

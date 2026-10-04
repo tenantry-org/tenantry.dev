@@ -1,4 +1,4 @@
-import { compareReleases, minorOf } from './docs-versions.mjs';
+import { compareMinors, compareReleases, minorOf } from './docs-versions.mjs';
 
 // The version of a release's section heading: `## [0.5.0] - 2026-10-03` → 0.5.0.
 const SECTION_VERSION = /^## \[?v?(\d+\.\d+\.\d+[0-9A-Za-z.-]*)/;
@@ -13,6 +13,8 @@ export function hasReleaseSection(markdown, tag) {
  * patches, with the steps to update from 0.4) without the Keep a Changelog preamble, under a title and a
  * one-line introduction, and a link to the full changelog for earlier releases. Ready for sync-docs' frontmatter and
  * link rewriting.
+ *   - Sections of other minors are left out. The link counts only earlier minors: a later minor's sections, which a
+ *     backport's changelog can have, are neither shown nor linked as earlier releases.
  *   - With `from`, a release before it, or a pre-release of it, is left out, and so is the link when every earlier
  *     release is: the site shows nothing of a release older than the first one sold (oldestReleaseShown in
  *     docs-versions.mjs).
@@ -61,7 +63,10 @@ export function changelogPage(markdown, { product, minor, fullChangelog, from })
       target.startsWith('docs/') ? `](${target.slice(5)})` : `](../${target})`,
     )
     .trim();
-  const earlier = sections.some((section) => ![null, minor].includes(minorOfSection(section)) && shown(section))
+  const earlier = sections.some((section) => {
+    const sectionMinor = minorOfSection(section);
+    return sectionMinor !== null && compareMinors(sectionMinor, minor) < 0 && shown(section);
+  })
     ? `Earlier releases are in the [full changelog](${fullChangelog}).`
     : '';
 

@@ -125,7 +125,8 @@ if (expected.length === 0) {
   console.error(
     FIRST_SOLD_RELEASE === null
       ? 'docs-versions: no minor version has both a Core and a Pro release the site can publish.'
-      : `docs-versions: no minor version from ${minorOf(FIRST_SOLD_RELEASE)} on (FIRST_SOLD_RELEASE is ${FIRST_SOLD_RELEASE}) ` +
+      : `docs-versions: no minor version from ${minorOf(FIRST_SOLD_RELEASE.core)} on ` +
+          `(FIRST_SOLD_RELEASE is ${JSON.stringify(FIRST_SOLD_RELEASE)}) ` +
           'has both a Core and a Pro release the site can publish yet.',
   );
   process.exit(1);

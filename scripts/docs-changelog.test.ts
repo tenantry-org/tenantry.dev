@@ -35,6 +35,21 @@ describe('changelogPage', () => {
     expect(changelogPage(changelog, { ...core110, from: 'v1.10.0' })).not.toContain('Earlier releases');
   });
 
+  it("leaves out a later minor's sections, which a backport's changelog can have, and does not count them as earlier", () => {
+    const changelog =
+      `${preamble}\n## [0.8.0] - 2026-12-01\n\n- Newer.\n\n## [0.7.4] - 2026-12-05\n\n- Backport.\n\n` +
+      '## [0.7.3] - 2026-11-10\n\n- Sold.\n\n## [0.6.0] - 2026-10-01\n\n- Older.\n';
+    const core07 = { ...core05, minor: '0.7' };
+
+    expect(changelogPage(changelog, { ...core07, from: 'v0.7.3' })).toBe(
+      '# Changelog\n\nThe changes in each release of Tenantry Core 0.7, newest first.\n\n' +
+        '## 0.7.4 - 2026-12-05\n\n- Backport.\n\n## 0.7.3 - 2026-11-10\n\n- Sold.\n',
+    );
+    const withOlder = changelogPage(changelog, core07);
+    expect(withOlder).not.toContain('0.8.0');
+    expect(withOlder).toContain('Earlier releases');
+  });
+
   it("drops a release tag's empty Unreleased section, and keeps one with entries", () => {
     const released = changelogPage(`${preamble}\n## [Unreleased]\n\n## [0.5.0] - 2026-10-03\n\n- B.\n`, core05);
     expect(released).not.toContain('Unreleased');

@@ -230,8 +230,8 @@ function syncChangelog(source, outDir, group, linkSource, context) {
     product: group.title,
     minor: context.version,
     fullChangelog: `${linkSource.repository}/blob/${linkSource.ref}/CHANGELOG.md`,
-    // Nothing older than the first release sold, nor than the release the docs are of when that is older.
-    from: oldestReleaseShown(context.tags[group.name]),
+    // Nothing older than the group's first release sold, nor than the release the docs are of when that is older.
+    from: oldestReleaseShown(group.name, context.tags[group.name]),
   });
   const content = toFrontmatter(page, group.name, linkSource, '', context);
   for (const link of relativeLinks(content)) brokenLinks.push(`${context.version} ${group.name}/CHANGELOG.md: ${link}`);
