@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { absoluteLinks, isPublished, llmsFullTxt, llmsTxt, markdownDocument, type MarkdownPage } from './docs-markdown';
+import { absoluteLinks, llmsFullTxt, llmsTxt, markdownDocument, type MarkdownPage } from './docs-markdown';
 
 // vi.mock is hoisted above the import: two published versions, the newest first.
 vi.mock('../../docs-versions.json', () => ({
@@ -79,14 +79,6 @@ describe('docs as Markdown', () => {
     expect(full).not.toMatch(/ITenantStore|v0\.[45]/);
   });
 
-  it('publishes the newest docs and the older versions listed, and no other', () => {
-    expect(isPublished([])).toBe(true);
-    expect(isPublished(['core', 'getting-started'])).toBe(true);
-    expect(isPublished(['v0.5', 'core'])).toBe(true);
-    expect(isPublished(['v0.4', 'core'])).toBe(false);
-    expect(isPublished(['v0.6', 'core'])).toBe(false);
-  });
-
   it('makes links to the site absolute, and links to docs pages links to their Markdown, outside code', () => {
     const markdown =
       '[setup](/docs/core/getting-started#install) [home](/docs) [old](/docs/v0.5/core/) [access](/dashboard/pro) ' +
@@ -99,10 +91,37 @@ describe('docs as Markdown', () => {
     );
   });
 
+  it('leaves a code block alone up to the fence that closes it: one as long or longer, of the same character', () => {
+    const markdown = [
+      '````md',
+      '```cs',
+      '[in four](/docs/core)',
+      '```',
+      '[still in four](/docs/core)',
+      '````',
+      '[between](/docs/core)',
+      '~~~',
+      '[in tilde](/docs/core)',
+      '```',
+      '[still in tilde](/docs/core)',
+      '~~~~',
+      '[after](/docs/pro)',
+    ].join('\n');
+    expect(absoluteLinks(markdown)).toBe(
+      markdown
+        .replace('[between](/docs/core)', '[between](https://tenantry.dev/docs/core.md)')
+        .replace('[after](/docs/pro)', '[after](https://tenantry.dev/docs/pro.md)'),
+    );
+  });
+
   it('heads a page with its title and the version it is of', () => {
     expect(markdownDocument(page('/docs/core/getting-started', 'Getting started', '', 'See [Pro](/docs/pro).'))).toBe(
       '# Getting started\n\nThe docs of Tenantry 0.6 (Core v0.6.2, Pro v0.6.1), the newest release. Web page: ' +
         'https://tenantry.dev/docs/core/getting-started\n\nSee [Pro](https://tenantry.dev/docs/pro.md).\n',
+    );
+    expect(markdownDocument(page('/docs', 'Tenantry documentation', '', 'Guides.'))).toBe(
+      '# Tenantry documentation\n\nThe docs of Tenantry 0.6 (Core v0.6.2, Pro v0.6.1), the newest release. Their ' +
+        'pages are listed at https://tenantry.dev/llms.txt. Web page: https://tenantry.dev/docs\n\nGuides.\n',
     );
     expect(markdownDocument(page('/docs/v0.5/core', 'Tenantry Core'))).toContain(
       'The docs of Tenantry 0.5 (Core v0.5.0, Pro v0.5.0). The newest release is 0.6, whose docs are listed at ' +

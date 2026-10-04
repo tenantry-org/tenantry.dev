@@ -1,9 +1,15 @@
 import 'server-only';
 import { flattenTree } from 'fumadocs-core/page-tree';
 import type { MarkdownPage } from '@/lib/docs-markdown';
+import { latestDocsVersion, slugsInVersion } from '@/lib/docs-versions';
 import { source } from '@/lib/source';
 
 type DocsPage = ReturnType<typeof source.getPages>[number];
+
+/** The same page in the latest docs, or the latest docs' home when the page is gone. */
+export function latestUrl(slugs: string[]): string {
+  return source.getPage(slugsInVersion(slugs, latestDocsVersion))?.url ?? latestDocsVersion.base;
+}
 
 /** A docs page as Markdown (docs-markdown.ts), from the Markdown kept with its compiled page (source.config.ts). */
 export async function markdownPage(page: DocsPage): Promise<MarkdownPage> {

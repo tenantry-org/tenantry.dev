@@ -4,13 +4,9 @@ import { Callout } from 'fumadocs-ui/components/callout';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getMDXComponents } from '@/mdx-components';
-import { docsVersionOf, latestDocsVersion, slugsInVersion, slugsOutsidePublishedVersions } from '@/lib/docs-versions';
+import { docsVersionOf, latestDocsVersion, slugsOutsidePublishedVersions } from '@/lib/docs-versions';
 import { markdownUrl } from '@/lib/docs-markdown';
-
-// The same page in the latest docs, or the latest docs' home when the page is gone.
-function latestUrl(slugs: string[]): string {
-  return source.getPage(slugsInVersion(slugs, latestDocsVersion))?.url ?? latestDocsVersion.base;
-}
+import { latestUrl } from '@/lib/docs-pages';
 
 // The page at these slugs. A path under a docs version the site does not publish redirects to the same page in the
 // latest docs, or to the latest docs' home when the page is not there; any other missing page is not found.

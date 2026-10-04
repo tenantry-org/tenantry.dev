@@ -21,14 +21,6 @@ export function markdownUrl(pageUrl: string): string {
   return `${pageUrl}.md`;
 }
 
-/**
- * Whether the site publishes the docs version a page's slugs are in: the newest, which has no prefix, or an older
- * version docs-versions.json lists.
- */
-export function isPublished(slugs: string[]): boolean {
-  return !isVersionPrefix(slugs[0]) || docsVersions.some((entry) => !entry.latest && slugs[0] === `v${entry.version}`);
-}
-
 function isVersionPrefix(slug: string | undefined): boolean {
   return /^v\d+\.\d+$/.test(slug ?? '');
 }
@@ -38,17 +30,18 @@ function newestPages(pages: MarkdownPage[]): MarkdownPage[] {
   return pages.filter((page) => !isVersionPrefix(page.slugs[0]));
 }
 
+// A fenced code block, closed by a fence of its own character at least as long (a ```` fence can hold ```), or a
+// link to a path on the site.
+const FENCE_OR_SITE_LINK = /^[ \t]*((`|~)\2{2,})[^\n]*\n[\s\S]*?^[ \t]*\1\2*[ \t]*$|\]\((\/[^)\s]*)\)/gm;
+
 /**
  * Links to the site made absolute, and a link to a docs page made a link to its Markdown, so an agent reading the
  * Markdown can follow them. Code blocks are left as they are.
  */
 export function absoluteLinks(markdown: string): string {
-  return markdown
-    .split(/(^```[\s\S]*?^```)/m)
-    .map((part, index) =>
-      index % 2 === 1 ? part : part.replace(/\]\((\/[^)\s]*)\)/g, (_, target: string) => `](${linkTarget(target)})`),
-    )
-    .join('');
+  return markdown.replace(FENCE_OR_SITE_LINK, (match, _fence, _char, target?: string) =>
+    target === undefined ? match : `](${linkTarget(target)})`,
+  );
 }
 
 function linkTarget(target: string): string {
@@ -61,8 +54,10 @@ function linkTarget(target: string): string {
 export function markdownDocument(page: MarkdownPage): string {
   const version = docsVersionOf(page.slugs);
   const releases = `Core ${version.core}, Pro ${version.pro}`;
+  // The newest docs' home, which on the site points to the sidebar and search, points to their list of pages.
+  const home = version.latest && page.slugs.length === 0 ? ` Their pages are listed at ${absolute('/llms.txt')}.` : '';
   const about = version.latest
-    ? `The docs of Tenantry ${version.version} (${releases}), the newest release. Web page: ${absolute(page.url)}`
+    ? `The docs of Tenantry ${version.version} (${releases}), the newest release.${home} Web page: ${absolute(page.url)}`
     : `The docs of Tenantry ${version.version} (${releases}). The newest release is ${latestDocsVersion.version}, ` +
       `whose docs are listed at ${absolute('/llms.txt')}.`;
   return `# ${page.title}\n\n${about}\n\n${absoluteLinks(page.markdown).trim()}\n`;

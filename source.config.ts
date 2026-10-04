@@ -3,11 +3,25 @@ import { pageSchema } from 'fumadocs-core/source/schema';
 import { z } from 'zod';
 
 // Docs are synced from the Core/Pro repos into content/docs by scripts/sync-docs.mjs. Each page's Markdown is kept
-// with its compiled page, for its Markdown copy and llms.txt (src/lib/docs-markdown.ts); without Fumadocs' heading
-// ids (`## Title [#id]`), which are not Markdown.
+// with its compiled page, for its Markdown copy and llms.txt (src/lib/docs-markdown.ts): without Fumadocs' heading
+// ids (`## Title [#id]`), which are not Markdown, and without an element marked `data-web-only` (the landing page's
+// line about the sidebar and search), which only the web page has. Other elements keep their text only.
 export const docs = defineDocs({
   dir: 'content/docs',
-  docs: { postprocess: { includeProcessedMarkdown: { headingIds: false } } },
+  docs: {
+    postprocess: {
+      includeProcessedMarkdown: {
+        headingIds: false,
+        filterElement: (node) => {
+          if (node.type !== 'mdxJsxFlowElement' && node.type !== 'mdxJsxTextElement') return true;
+          const webOnly = node.attributes.some(
+            (attribute) => 'name' in attribute && attribute.name === 'data-web-only',
+          );
+          return webOnly ? false : 'children-only';
+        },
+      },
+    },
+  },
 });
 
 // Blog posts (src/lib/blog.ts): Markdown files (.md, not MDX), since each published post is also copied to dev.to

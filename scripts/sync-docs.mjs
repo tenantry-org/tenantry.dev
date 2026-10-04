@@ -31,6 +31,7 @@ import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { changelogPage } from './docs-changelog.mjs';
+import { pageDescription } from './docs-description.mjs';
 import { brokenDocsLinks, linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
 import { basePath, compareMinors, oldestReleaseShown, readVersions, versionProblems } from './docs-versions.mjs';
 import { CHANGELOG_SINCE, docsProblem, fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
@@ -124,30 +125,7 @@ function toFrontmatter(raw, group, source, dir, context) {
     body.push(line);
   }
 
-  // Derive a clean meta description (used for SEO only — not rendered on the page) from the first
-  // paragraph's first sentence, so search snippets aren't truncated mid-word.
-  const firstParagraph = [];
-  for (const line of body) {
-    const text = line.trim();
-    if (!text) {
-      if (firstParagraph.length) break;
-      continue;
-    }
-    // API reference pages open with a "Namespace: … · Package: …" line, which is not a description.
-    if (/^(#|```|\||-|Namespace:)/.test(text)) {
-      if (firstParagraph.length) break;
-      continue;
-    }
-    firstParagraph.push(text);
-  }
-  // A link or image keeps only its text; parentheses in the prose stay.
-  const cleaned = firstParagraph
-    .join(' ')
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/[`*]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const description = (cleaned.match(/^.*?\.(?:\s|$)/)?.[0] ?? cleaned).trim();
+  const description = pageDescription(body);
 
   const linked = dir === 'api' ? body.join('\n') : linkApiTypes(body.join('\n'), context.apiTypes);
   const rewritten = rewriteLinks(linked, group, source, dir, context.base).trimStart();
@@ -343,7 +321,8 @@ for (const [index, entry] of versions.entries()) {
   }
 
   // The version's landing page, and its folder as a root folder: the sidebar shows one version at a time and
-  // offers the others in its dropdown.
+  // offers the others in its dropdown. The line about the sidebar and search is marked data-web-only, so the page's
+  // Markdown copy leaves it out (source.config.ts).
   writeFileSync(
     join(versionDir, 'index.mdx'),
     `---
@@ -358,7 +337,7 @@ Tenantry adds tenant isolation to ASP.NET Core and EF Core applications. It is i
 - **[Tenantry Pro](${base}/pro)**: provisioning, migrations across tenant databases, schema per tenant and mixed
   mode, and the tenant in background jobs and messages.
 
-Use the sidebar to browse, or press <kbd>⌘</kbd> <kbd>K</kbd> to search.
+<p data-web-only>Use the sidebar to browse, or press <kbd>⌘</kbd> <kbd>K</kbd> to search.</p>
 `,
   );
   writeFileSync(
