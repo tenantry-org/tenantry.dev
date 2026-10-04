@@ -19,12 +19,12 @@ const PRINCIPLES = [
   {
     icon: SlidersHorizontal,
     title: 'Your keys, your registry',
-    text: 'A Guid, int, string or any parsable tenant key. Resolve it from a header, subdomain, route, claim or query string, and keep your tenants where they already are.',
+    text: 'A Guid, int, string or any parsable tenant key. Resolve it from a header, subdomain, host name, route, claim or query string, and keep your tenants where they already are.',
   },
   {
     icon: ServerCog,
     title: 'HTTP and beyond',
-    text: 'ASP.NET Core middleware and access validation, and the same isolation in workers, console and desktop apps. .NET 10, and .NET 8 and 9 until November 2027; Native AOT for the core and ASP.NET Core packages.',
+    text: 'ASP.NET Core middleware and access validation, and the same isolation in workers, console and desktop apps. .NET 10, and .NET 8 and 9 until November 2027; Native AOT for every package except Tenantry.EfCore.',
   },
 ];
 
@@ -112,8 +112,7 @@ export function Features() {
       <div className={'mt-24 max-w-2xl'}>
         <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>Open-source Core. Pro for running tenants.</h2>
         <p className={'mt-4 text-lg text-muted-foreground'}>
-          Core is free and complete for isolating tenant data. Pro is for running a database or schema per tenant:
-          provisioning, migrations, jobs and audit.
+          Core is free and isolates tenant data. Pro adds the tooling for a database or schema per tenant.
         </p>
       </div>
       <div className={'mt-10 grid gap-6 lg:grid-cols-2'}>
