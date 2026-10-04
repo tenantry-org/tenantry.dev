@@ -12,7 +12,8 @@ export const metadata: Metadata = {
   alternates: { canonical: '/compare' },
 };
 
-// The details behind the table. Finbuckle.MultiTenant and ABP facts come from the documents the table links.
+// The details behind the table. Finbuckle.MultiTenant and ABP facts come from the documents the table links, and from
+// their source at the versions named at the end of the page.
 const NOTES = [
   {
     title: 'Writes',
@@ -20,7 +21,7 @@ const NOTES = [
   },
   {
     title: 'A database per tenant',
-    text: 'Tenantry Core connects each tenant’s context to its own database, pooled contexts included (AddDbContextPerTenantDatabase with pooled: true): a pooled context reads the tenant each time it is used. Finbuckle’s docs recommend setting a context’s tenant when it is created and not changing it. ABP migrates a new tenant’s database with a framework event handler the application configures, and its commercial SaaS module manages tenants’ connection strings from a UI. Tenantry Pro creates and migrates tenant databases.',
+    text: 'Tenantry Core’s AddDbContextPerTenantDatabase, pooled or not, connects each context, or each pool lease, to the current tenant’s database when it is created. Before every connection open and command it checks that the same tenant is still current, and throws if not. Finbuckle.MultiTenant’s docs have the context read the tenant’s connection string in OnConfiguring, with the tenant taken in its constructor and the context registered with AddDbContext; the context keeps that database. It documents no pooled path, and an open issue (#375) has the maintainer recommending against AddDbContextPool. ABP registers contexts with AddAbpDbContext and, in a unit of work, resolves the current tenant’s connection string each time a context is requested. Neither project checks, when a connection opens or a command runs, that the context’s database belongs to the tenant current then. ABP provides a base class for a handler you write that migrates a tenant’s database when the tenant is created; managing tenants’ connection strings from a UI needs the commercial SaaS module. Tenantry Pro creates and migrates tenant databases.',
   },
   {
     title: 'Options and authentication',
@@ -32,7 +33,7 @@ const NOTES = [
   },
   {
     title: '.NET versions',
-    text: `From version 10, Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only. Tenantry supports ${DOTNET_SUPPORT}.`,
+    text: `From version 10, Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only; its 9.x and 8.x lines still get fixes (9.4.13 and 8.1.18 in September 2026). Tenantry supports ${DOTNET_SUPPORT}.`,
   },
 ];
 
@@ -43,7 +44,7 @@ export default function ComparePage() {
       <main className={'mx-auto max-w-6xl px-4 py-16 md:px-8 md:py-24'}>
         <h1 className={'text-4xl font-bold tracking-tight text-balance sm:text-5xl'}>How Tenantry compares</h1>
         <p className={'mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground'}>
-          Tenantry beside the options most .NET teams weigh, as each project documents itself.
+          Tenantry beside the usual alternatives: your own query filters, Finbuckle.MultiTenant and ABP.
         </p>
         <div className={'mt-10'}>
           <ComparisonTable full={true} />
@@ -64,7 +65,8 @@ export default function ComparePage() {
           takes a Finbuckle application to Tenantry step by step.
         </p>
         <p className={'mt-12 text-sm text-muted-foreground'}>
-          Checked in October 2026 against each project’s documentation. Something out of date? Email{' '}
+          Checked in October 2026 against Finbuckle.MultiTenant 10.1.4 and ABP 10.6.1, their documentation and source.
+          Something out of date? Email{' '}
           <Link href={'mailto:support@tenantry.dev'} className={'text-link hover:underline'}>
             support@tenantry.dev
           </Link>
