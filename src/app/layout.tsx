@@ -15,9 +15,9 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jet
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
-  title: 'Tenantry — tenant isolation for ASP.NET Core and EF Core',
+  title: 'Tenantry: tenant isolation for ASP.NET Core and EF Core',
   description:
-    'Tenantry adds tenant isolation to your ASP.NET Core and EF Core app with one call on the DbContext you already have. It fails closed: with no tenant, queries return nothing, and a forged tenant key changes no rows. Tenantry Pro adds provisioning and migrations for a database or schema per tenant.',
+    'Tenantry adds tenant isolation to an existing ASP.NET Core and EF Core application with one call on its DbContext, and reads tenants from where the application already keeps them. With no tenant, queries return nothing, and a forged tenant key changes no rows. Tenantry Pro adds the tenant in background jobs and messages, audit logging, and tenant onboarding, offboarding and migrations.',
 };
 
 export const viewport: Viewport = {

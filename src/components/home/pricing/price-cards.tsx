@@ -2,7 +2,6 @@ import { ProOffer } from '@/constants/pro-offer';
 import type { BillingIntervalOption } from '@/constants/billing-intervals';
 import type { PricesState } from '@/hooks/use-paddle-prices';
 import { publicConfig } from '@/lib/public-config';
-import { FeaturesList } from '@/components/home/pricing/features-list';
 import { PriceAmount } from '@/components/home/pricing/price-amount';
 import { Button } from '@/components/ui/button';
 import { PriceTitle } from '@/components/home/pricing/price-title';
@@ -34,9 +33,6 @@ export function PriceCards({ option, prices }: Props) {
             <div className={'text-5xl leading-[60px] font-bold tracking-tight'}>Free</div>
             <div className={'text-sm text-muted-foreground'}>Apache-2.0, on GitHub</div>
           </div>
-          <p className={'text-muted-foreground'}>
-            Tenant resolution and EF Core isolation, in a shared database or a database per tenant.
-          </p>
           <Button className={'w-full'} size={'lg'} variant={'outline'} asChild={true}>
             <Link href={'/docs/core/getting-started'}>Get started with Core</Link>
           </Button>
@@ -47,7 +43,6 @@ export function PriceCards({ option, prices }: Props) {
         <div className={'flex flex-col gap-6 p-8'}>
           <PriceTitle offer={offer} />
           <PriceAmount prices={prices} priceId={priceId} priceSuffix={option.priceSuffix} />
-          <p className={'text-muted-foreground'}>{offer.description}</p>
           {checkoutEnabled ? (
             <Button className={'w-full'} size={'lg'} asChild={true}>
               <Link href={`/checkout/${priceId}`}>Subscribe to Pro</Link>
@@ -64,8 +59,10 @@ export function PriceCards({ option, prices }: Props) {
             · Cancel any time · The versions you have keep working
           </p>
         </div>
-        <div className={'border-t border-border bg-surface px-8 py-6'}>
-          <FeaturesList offer={offer} />
+        <div className={'border-t border-border bg-surface px-8 py-6 text-sm'}>
+          <Link href={'/pro'} className={'font-medium text-link hover:underline'}>
+            What Pro includes
+          </Link>
         </div>
       </div>
     </div>

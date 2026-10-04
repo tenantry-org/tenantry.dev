@@ -1,12 +1,12 @@
 name: docs-versions
 
-# Publishes each release's docs without anyone pinning them: works out the docs versions from Core's and Pro's
-# release tags (scripts/docs-versions-update.mjs) and, when they differ from docs-versions.json, commits the new list
-# to master and staging, which redeploys the site. A new line appears once both Core and Pro have released in it;
-# a later release in a line updates it. Hourly, so a release's docs are live within the hour; on demand as well.
-# Production deploys the commit once the test and audit workflows pass on it, and the test workflow checks the Pro
-# access page's install snippets against the newest Pro docs: the docs of a Pro release that starts a line or changes
-# its installation guide go live once the snippets match (README.md, Docs pipeline).
+# Publishes each release on the site without anyone editing it: works out the docs versions from Core's and Pro's
+# release tags (scripts/docs-versions-update.mjs), and what the site says about the newest release: the .NET versions,
+# the samples and the Pro access page's install snippets. When either differs from docs-versions.json or
+# newest-release.json, it commits both to master and staging, which redeploys the site. A new line appears once both
+# Core and Pro have released in it; a later release in a line updates it. A release whose docs lack their folder or
+# changelog section is left out, with a warning. Hourly, so a release is live within the hour; on demand as well.
+# Production deploys the commit once the test and audit workflows pass on it (README.md, Docs pipeline).
 on:
   schedule:
     - cron: '23 * * * *'
@@ -25,22 +25,25 @@ jobs:
     name: Docs follow the releases
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: master
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: '.nvmrc'
-      # Plain Node and git; nothing is installed.
-      - run: node scripts/docs-versions-update.mjs update
+      # Plain Node and git; nothing is installed. A run that fails publishes nothing, and the next one tries again.
+      - id: update
+        run: node scripts/docs-versions-update.mjs update
       - name: Commit and deploy a change
         run: |
           # Production deploys a commit only once the test and audit workflows pass on it (Vercel Deployment Checks),
           # and a push made with this token starts no workflow, so this job runs both on its own commits. If that
-          # failed last time, master's head is still this job's commit without those runs, and it runs them now.
+          # failed last time, master's head is still this job's commit without those runs, and it runs them now. The
+          # sandbox follows production (staging is master): a run that pushed master but not staging is caught up the
+          # same way, by a fast-forward only, so a change pushed to staging to try out is left alone.
           bot='41898282+github-actions[bot]@users.noreply.github.com'
           run_on_master() {
-            for attempt in 1 2 3; do
+            for _ in 1 2 3; do
               gh workflow run "$1" --ref master && return 0
               sleep 10
             done
@@ -53,16 +56,20 @@ jobs:
               fi
             done
           }
-          if git diff --quiet -- docs-versions.json; then
+          follow_master() {
+            git push origin HEAD:staging || echo "::warning::staging has commits master lacks; left as it is"
+          }
+          if git diff --quiet -- docs-versions.json newest-release.json; then
             echo "No change."
             if [ "$(git log -1 --format=%ae)" = "$bot" ]; then
               check_master
+              follow_master
             fi
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email "$bot"
-          git commit -q -m 'Docs: publish the docs of the latest releases' -m "$(cat docs-versions.json)" -- docs-versions.json
+          git commit -q -m 'Docs: publish the docs of the latest releases' -m "$(cat docs-versions.json)" -- docs-versions.json newest-release.json
           staging="$(git ls-remote origin refs/heads/staging | cut -f1)"
           git push origin HEAD:master
           check_master
@@ -70,3 +77,12 @@ jobs:
           git push --force-with-lease="staging:$staging" origin HEAD:staging
         env:
           GH_TOKEN: ${{ github.token }}
+      # Last, so what could be published is committed first: a release left out (its docs folder, changelog section or
+      # facts are missing) fails the run, which notifies, with the reasons in the run's summary.
+      - name: Fail when a release was left out
+        if: always() && steps.update.outputs.left_out != '' && steps.update.outputs.left_out != '0'
+        env:
+          LEFT_OUT: ${{ steps.update.outputs.left_out }}
+        run: |
+          echo "::error::$LEFT_OUT release(s) left out; the run's summary gives the reasons."
+          exit 1

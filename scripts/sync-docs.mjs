@@ -8,6 +8,8 @@
  *   - derives a short `description` from the first paragraph,
  *   - rewrites relative `.md` links to clean docs paths (e.g. `(tenant-stores.md)` → `(tenant-stores)`),
  *   - adds the release line's part of each tag's CHANGELOG.md as the group's Changelog page (docs-changelog.mjs).
+ * The pages are written as `.md`, which Fumadocs compiles as plain Markdown: braces and tags in a release's docs are
+ * text, never code run while the site builds. Only the version's landing page, which this script writes, is MDX.
  *
  * The versions are listed in docs-versions.json (docs-versions.mjs), each with the release tags of Core's
  * repository and of the public tenantry-pro-docs repository (which each Pro release publishes to and tags; Vercel
@@ -30,8 +32,8 @@ import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { changelogPage } from './docs-changelog.mjs';
 import { brokenDocsLinks, linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
-import { basePath, compareLines, readVersions, versionProblems } from './docs-versions.mjs';
-import { fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
+import { basePath, compareLines, oldestReleaseShown, readVersions, versionProblems } from './docs-versions.mjs';
+import { CHANGELOG_SINCE, docsProblem, fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = resolve(here, '..');
@@ -43,16 +45,12 @@ const groups = [
     title: 'Tenantry Core',
     envVar: 'CORE_DOCS_DIR',
     repository: REPOSITORIES.core,
-    // The release lines whose tags have a CHANGELOG.md: every Core tag has one at the repository's root.
-    changelogSince: '0.1',
   },
   {
     name: 'pro',
     title: 'Tenantry Pro',
     envVar: 'PRO_DOCS_DIR',
     repository: REPOSITORIES.pro,
-    // Pro's releases publish their CHANGELOG.md to tenantry-pro-docs from 0.5.0 (its scripts/publish-docs.sh).
-    changelogSince: '0.5',
   },
 ];
 
@@ -166,7 +164,7 @@ function syncFolder(sourceDir, outDir, group, linkSource, dir, context) {
     const content = toFrontmatter(readFileSync(join(sourceDir, file), 'utf8'), group.name, linkSource, dir, context);
     for (const link of relativeLinks(content))
       brokenLinks.push(`${context.version} ${group.name}/${dir ? `${dir}/` : ''}${file}: ${link}`);
-    writeFileSync(join(outDir, `${slug}.mdx`), content);
+    writeFileSync(join(outDir, `${slug}.md`), content);
     slugs.push(slug);
     total += 1;
   }
@@ -199,9 +197,15 @@ function fail(message) {
   process.exit(1);
 }
 
+// Why a tag's docs cannot be synced (docsProblem: a docs folder, and the release's section in its changelog), or null.
+function tagProblem(dir, group, tag) {
+  if (!tag) return 'no tag is pinned';
+  if (!dir || !hasTag(dir, tag)) return `${tag} cannot be read`;
+  return docsProblem(dir, group, tag);
+}
+
 // The docs folder of a tag, extracted to a temporary folder, with the tag's CHANGELOG.md beside it.
 function docsAt(dir, tag) {
-  if (!hasTag(dir, tag)) return null;
   const out = mkdtempSync(join(tmpdir(), 'tenantry-docs-'));
   scratch.push(out);
   const archive = execFileSync('git', ['-C', dir, 'archive', '--format=tar', tag, 'docs'], { maxBuffer: 1 << 28 }); // NOSONAR
@@ -216,7 +220,7 @@ function docsAt(dir, tag) {
 function syncChangelog(source, outDir, group, linkSource, context) {
   const file = join(source, '..', 'CHANGELOG.md');
   if (!existsSync(file)) {
-    if (compareLines(context.version, group.changelogSince) < 0) return null;
+    if (compareLines(context.version, CHANGELOG_SINCE[group.name]) < 0) return null;
     const message = `no CHANGELOG.md for ${context.version} ${group.name}.`;
     if (releaseBuild) fail(message);
     console.warn(`sync-docs: ${message}`);
@@ -226,10 +230,12 @@ function syncChangelog(source, outDir, group, linkSource, context) {
     product: group.title,
     line: context.version,
     fullChangelog: `${linkSource.repository}/blob/${linkSource.ref}/CHANGELOG.md`,
+    // Nothing older than the first release sold, nor than the release the docs are of when that is older.
+    from: oldestReleaseShown(context.tags[group.name]),
   });
   const content = toFrontmatter(page, group.name, linkSource, '', context);
   for (const link of relativeLinks(content)) brokenLinks.push(`${context.version} ${group.name}/CHANGELOG.md: ${link}`);
-  writeFileSync(join(outDir, 'changelog.mdx'), content);
+  writeFileSync(join(outDir, 'changelog.md'), content);
   total += 1;
   return 'changelog';
 }
@@ -266,19 +272,20 @@ for (const [index, entry] of versions.entries()) {
     if (override) {
       if (releaseBuild) fail(`${group.envVar} is set; release builds publish only the pinned releases.`);
       const dir = resolve(override);
-      sources[group.name] = existsSync(dir) ? { dir, ref: 'master' } : null;
+      sources[group.name] = existsSync(dir) ? { dir, ref: 'master' } : { problem: `${dir} does not exist` };
       continue;
     }
     const tag = entry[group.name];
-    const dir = tag && repositories[group.name] && docsAt(repositories[group.name], tag);
-    sources[group.name] = dir ? { dir, ref: tag } : null;
+    const repository = repositories[group.name];
+    const problem = tagProblem(repository, group.name, tag);
+    sources[group.name] = problem ? { problem } : { dir: docsAt(repository, tag), ref: tag };
   }
 
   const missing = groups
-    .filter((group) => !sources[group.name])
-    .map((group) => `${group.name} ${entry[group.name] ?? '(not pinned)'}`);
+    .filter((group) => sources[group.name].problem)
+    .map((group) => `${group.name}: ${sources[group.name].problem}`);
   if (missing.length > 0) {
-    const message = `no docs for ${entry.version}: ${missing.join(', ')}.`;
+    const message = `no docs for ${entry.version} (${missing.join('; ')}).`;
     if (releaseBuild) fail(`${message} A build without these docs would publish none.`);
     console.warn(`sync-docs: ${message} Skipping.`);
     continue;
@@ -300,7 +307,7 @@ for (const [index, entry] of versions.entries()) {
   }
   for (const name of ambiguous) apiTypes.delete(name);
 
-  const context = { apiTypes, base, version: entry.version };
+  const context = { apiTypes, base, version: entry.version, tags: entry };
   const versionDir = join(docsRoot, folder);
 
   for (const group of groups) {
@@ -375,8 +382,8 @@ writeFileSync(join(docsRoot, 'meta.json'), JSON.stringify({ pages: folders }, nu
 const written = new Map();
 for (const folder of folders) {
   const base = folder === '(latest)' ? '/docs' : `/docs/${folder}`;
-  for (const file of readdirSync(join(docsRoot, folder), { recursive: true }).filter((f) => f.endsWith('.mdx'))) {
-    const path = `${base}/${file.replace(/\\/g, '/').replace(/\.mdx$/, '')}`.replace(/\/index$/, '');
+  for (const file of readdirSync(join(docsRoot, folder), { recursive: true }).filter((f) => /\.mdx?$/.test(f))) {
+    const path = `${base}/${file.replace(/\\/g, '/').replace(/\.mdx?$/, '')}`.replace(/\/index$/, '');
     written.set(path, readFileSync(join(docsRoot, folder, file), 'utf8'));
   }
 }

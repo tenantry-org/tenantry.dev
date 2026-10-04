@@ -16,10 +16,39 @@ import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 export const GROUPS = ['core', 'pro'];
-export const RELEASE_TAG = /^v(\d+)\.(\d+)\.\d+(-[0-9A-Za-z.-]+)?$/;
+export const RELEASE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(?:0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$/;
 // A release without a pre-release suffix: the only kind whose docs the site publishes.
-const STABLE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
+const STABLE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 export const CONFIG_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs-versions.json');
+
+/**
+ * The first release that was on sale, such as `v0.6.1`, or null while Tenantry Pro is not on sale. The site shows
+ * nothing older: no docs of an earlier release line, and no changelog entry of an earlier release. While it is null
+ * no release has been sold, so the site shows only the newest release line and, in its changelog, only that line's
+ * newest release. Set it once, to the release that is current when checkout opens.
+ *
+ * @type {string | null}
+ */
+export const FIRST_SOLD_RELEASE = null;
+
+/** The first release sold, checked: null, or a release tag without a pre-release suffix, such as `v0.6.1`. */
+export function checkFirstSold(firstSold) {
+  if (firstSold === null || STABLE_TAG.test(firstSold ?? '')) return firstSold;
+  throw new Error(
+    `FIRST_SOLD_RELEASE is ${JSON.stringify(firstSold)}: set it to null, or to a release tag such as v0.6.1, ` +
+      'with its v and without a pre-release suffix.',
+  );
+}
+
+/**
+ * The oldest release a docs version's changelog shows, given the release its docs are of (`tag`): the first release
+ * sold, or the docs' own release when that is older or none has been sold. A line whose product released only
+ * before the first sale still shows the release its docs describe.
+ */
+export function oldestReleaseShown(tag, firstSold = FIRST_SOLD_RELEASE) {
+  checkFirstSold(firstSold);
+  return firstSold !== null && compareReleases(firstSold, tag) < 0 ? firstSold : tag;
+}
 
 /** The release line a tag belongs to: v0.4.1 → 0.4, v1.2.3 → 1. */
 export function lineOf(tag) {
@@ -49,6 +78,7 @@ export function versionProblems(versions) {
     for (const group of GROUPS) {
       const tag = entry[group];
       if (!tag) problems.push(`${version} has no ${group} tag.`);
+      else if (!STABLE_TAG.test(tag)) problems.push(`${version}'s ${group} tag ${tag} is not a release tag (vX.Y.Z).`);
       else if (lineOf(tag) !== version) problems.push(`${version}'s ${group} tag ${tag} is not a ${version} release.`);
     }
   }
@@ -61,8 +91,8 @@ export function compareLines(a, b) {
   return aMajor - bMajor || aMinor - bMinor;
 }
 
-// Two stable tags by version: v0.4.10 is after v0.4.2.
-function compareReleases(a, b) {
+/** Two stable tags by version: v0.4.10 is after v0.4.2. */
+export function compareReleases(a, b) {
   const [, ...aParts] = STABLE_TAG.exec(a).map(Number);
   const [, ...bParts] = STABLE_TAG.exec(b).map(Number);
   return aParts[0] - bParts[0] || aParts[1] - bParts[1] || aParts[2] - bParts[2];
@@ -91,8 +121,15 @@ export function publishedTags(tags, publishedVersions) {
   return tags.filter((tag) => tag.startsWith('v') && published.has(tag.slice(1).toLowerCase()));
 }
 
-/** The versions to publish, given each group's tags: every line both groups released, the newest patch of each. */
-export function resolveVersions(tagsByGroup) {
+/**
+ * The versions to publish, given each group's tags: every line both groups released, the newest patch of each, from
+ * the line of the first release sold (`firstSold`) on. With none sold yet (null), only the newest line.
+ *
+ * @param {Record<string, string[]>} tagsByGroup
+ * @param {string | null} [firstSold]
+ */
+export function resolveVersions(tagsByGroup, firstSold = FIRST_SOLD_RELEASE) {
+  checkFirstSold(firstSold);
   const newest = {};
   for (const group of GROUPS) {
     newest[group] = new Map();
@@ -104,8 +141,59 @@ export function resolveVersions(tagsByGroup) {
     }
   }
 
-  return [...newest.core.keys()]
+  const versions = [...newest.core.keys()]
     .filter((line) => newest.pro.has(line))
     .sort((a, b) => compareLines(b, a))
     .map((line) => ({ version: line, core: newest.core.get(line), pro: newest.pro.get(line) }));
+
+  return firstSold === null
+    ? versions.slice(0, 1)
+    : versions.filter((entry) => compareLines(entry.version, lineOf(firstSold)) >= 0);
+}
+
+/**
+ * resolveVersions, leaving out each release whose docs cannot be published: `problem(group, tag, newest)` gives the
+ * reason, or null; `newest` is true for the releases of the newest line, from which the site also takes what it says
+ * about the newest release. The line of a release left out keeps the release before it, or waits for the next one.
+ * `onLeftOut` is called with each release left out and its reason.
+ *
+ * @param {Record<string, string[]>} tagsByGroup
+ * @param {(group: string, tag: string, newest: boolean) => Promise<string | null> | string | null} problem
+ * @param {(release: { group: string, tag: string, reason: string }) => void} [onLeftOut]
+ * @param {string | null} [firstSold]
+ */
+export async function resolvePublishable(tagsByGroup, problem, onLeftOut = () => {}, firstSold = FIRST_SOLD_RELEASE) {
+  const tags = { ...tagsByGroup };
+  for (;;) {
+    const versions = resolveVersions(tags, firstSold);
+    let left = null;
+    for (const [index, entry] of versions.entries()) {
+      for (const group of GROUPS) {
+        const reason = left ? null : await problem(group, entry[group], index === 0);
+        if (reason) left = { group, tag: entry[group], reason };
+      }
+    }
+    if (!left) return versions;
+    onLeftOut(left);
+    tags[left.group] = tags[left.group].filter((tag) => tag !== left.tag);
+  }
+}
+
+/**
+ * The versions NuGet lists for a package, from its registration index (the registration API, which marks a version
+ * that was unlisted): `fetchJson` reads a URL. A page of the index that is not inlined is fetched.
+ *
+ * @param {{ items: { '@id': string, items?: { catalogEntry: { version: string, listed?: boolean } }[] }[] }} index
+ * @param {(url: string) => Promise<any>} fetchJson
+ */
+export async function listedVersions(index, fetchJson) {
+  if (!Array.isArray(index?.items)) throw new Error('the registration index has no items.');
+  const versions = [];
+  for (const page of index.items) {
+    const leaves = page.items ?? (await fetchJson(page['@id'])).items ?? [];
+    for (const { catalogEntry } of leaves) {
+      if (catalogEntry.listed !== false) versions.push(catalogEntry.version.split('+')[0]);
+    }
+  }
+  return versions;
 }

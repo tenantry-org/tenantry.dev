@@ -6,14 +6,16 @@ import { Button } from '@/components/ui/button';
 import { GithubIcon } from '@/components/icons/github-icon';
 import { latestDocsVersion } from '@/lib/docs-versions';
 
-// From Tenantry Core's README and getting-started guide.
+// From Tenantry Core's README and getting-started guide, with the access check that guide asks for in production
+// (docs/access-control.md): a header alone lets any caller name any tenant.
 const SNIPPET = `builder.Services.AddTenantry<Guid>(tenant => tenant
-    .ResolveFromHeader("X-Tenant-Id")   // where the tenant comes from
-    .UseInMemoryStore(tenants));        // where tenants are defined
+    .ResolveFromHeader("X-Tenant-Id")           // names the tenant
+    .ValidateTenantAccessByClaim("tenant_id")   // the user may use it
+    .UseInMemoryStore(tenants));                // lists the tenants
 
 builder.Services.AddDbContext<AppDbContext>(options => options
     .UseSqlServer(connectionString)
-    .UseTenantry());                    // how data is isolated
+    .UseTenantry());                            // isolates the data
 
 // Tenant-owned: stamped on insert, filtered in every query.
 public class Order : ITenantEntity<Guid>
@@ -60,12 +62,12 @@ export async function HeroSection() {
               'mt-6 text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-[3.25rem] lg:leading-[1.08]'
             }
           >
-            Stop one missed WHERE clause <span className={'text-link'}>from leaking a customer’s data.</span>
+            Tenant isolation for <span className={'text-link'}>your existing ASP.NET Core and EF Core app</span>
           </h1>
           <p className={'mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground'}>
-            Tenantry adds tenant isolation to your ASP.NET Core and EF Core app with one call on the DbContext you
-            already have. No base class, no new tenants table. With no tenant, queries return nothing, and a forged
-            tenant key changes no rows.
+            One call on the DbContext you already have isolates its data, with no base class, and Tenantry reads tenants
+            from where your application keeps them. With no tenant, queries return nothing, and a forged tenant key
+            changes no rows.
           </p>
           <div className={'mt-8 flex flex-wrap items-center gap-3'}>
             <Button asChild size={'lg'}>

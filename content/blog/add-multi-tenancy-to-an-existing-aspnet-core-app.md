@@ -2,20 +2,19 @@
 title: Add multi-tenancy to an existing ASP.NET Core application
 description: Keep your organisations table as the tenant registry, resolve the tenant on each request, and isolate EF Core data with one call on the DbContext you already have.
 date: 2026-10-03
+updated: 2026-10-04
 author: Oliver McNally
-versions: Tenantry 0.5, .NET 10, EF Core 10 and PostgreSQL 16
+versions: Tenantry 0.6, .NET 10, EF Core 10 and PostgreSQL 16
 tags: [dotnet, aspnetcore, efcore, multitenancy]
 next:
   label: Get started with Tenantry Core
   href: /docs/core/getting-started
 ---
 
-Most applications do not start multi-tenant. They gain a second customer, then a third, and every query gains a
-`WHERE OrganisationId = …`. One query without it shows a customer another customer's data.
-
-This post adds tenant isolation to an application like that with [Tenantry Core](/docs/core), the open-source part
-of Tenantry. The organisations table stays the tenant registry, the tenant comes from the request, and EF Core applies
-it to every query and save. The context stays the one you have.
+This post adds tenant isolation to an ASP.NET Core application whose tables already carry an `OrganisationId`, so
+that no query depends on remembering a `WHERE` clause. It uses [Tenantry Core](/docs/core), the open-source part of
+Tenantry. The organisations table stays the tenant registry, the tenant comes from the request, and EF Core applies it
+to every query and save. The context stays the one you have.
 
 ## The starting point
 
@@ -55,8 +54,8 @@ dotnet add package Tenantry.EfCore
 
 ## 1. The organisations table is the tenant registry
 
-Tenantry has no tenants table of its own. It reads tenants from a store you write over what you already have, which
-finds a tenant by id and lists them all. Override the third method when requests name a tenant by a slug or a domain.
+Tenantry has no tenants table of its own. You write a store over the table you have: it finds a tenant by id and
+lists them all. When requests name a tenant by a slug or a domain, also implement `FindByIdentifierAsync`.
 
 ```csharp
 public sealed record OrganisationTenant(Guid TenantId, string Name, bool IsActive) : ITenantDescriptor<Guid>;
@@ -96,7 +95,7 @@ builder.Services.AddTenantry<Guid>(tenant => tenant
     .CacheTenants()                                                 // five minutes by default
     .RequireTenantByDefault()
     .ValidateTenantAccessByClaim("org_id")                          // the caller belongs to it
-    .ValidateTenantAccess((_, t) => t.As<OrganisationTenant>().IsActive));
+    .ValidateTenantActivity(t => t.As<OrganisationTenant>().IsActive));
 ```
 
 ```csharp
@@ -105,13 +104,11 @@ app.UseTenantry();
 app.UseAuthorization();
 ```
 
-Anyone can type a subdomain, so the access validators check the caller before the organisation becomes current:
-
-- the user's `org_id` claims must include the organisation's id, and it must be active;
-- otherwise the answer is `403`, the same as for an organisation that does not exist, so users cannot find out which
-  others do;
-- a request with no organisation gets `400`, unless its endpoint calls `AllowMissingTenant()`;
-- `UseTenantry()` goes after `UseAuthentication()`, because the validators read the user.
+Anyone can type a subdomain, so two checks run before the organisation becomes current. `ValidateTenantActivity`
+refuses a deactivated organisation, and `ValidateTenantAccessByClaim` refuses a user whose `org_id` claims do not
+include the organisation's id. Either refusal is answered with `403`, the same as for an organisation that does not
+exist, so users cannot find out which others do. A request with no organisation gets `400`, unless its endpoint calls
+`AllowMissingTenant()`. `UseTenantry()` goes after `UseAuthentication()`, because the claim check reads the user.
 
 With `CacheTenants`, a deactivated organisation is served from the cache until its entry expires; call
 `ITenantInvalidator<Guid>.InvalidateAsync` when you deactivate one.
@@ -163,16 +160,16 @@ was created.
 
 I ran the following against PostgreSQL 16, with two organisations, Acme and Globex.
 
-**Queries are filtered.** In Acme's requests, `db.Orders.ToListAsync()` returns Acme's orders, and `FindAsync` with
+In Acme's requests, `db.Orders.ToListAsync()` returns Acme's orders, and `FindAsync` with
 the id of a Globex order returns `null`, so an endpoint that loads before it changes answers `404`. With no tenant, a
 query matches nothing rather than everything.
 
-**Inserts are stamped** with the current tenant. An insert that names another tenant throws
+An insert is stamped with the current tenant. One that names another tenant throws
 `TenantIsolationViolationException`, and one with no tenant at all throws `TenantNotResolvedException`; nothing is
 written either way.
 
-**Updates and deletes are checked twice.** An entity can be changed only while its own tenant is current, and it must
-have been loaded or attached as that tenant. So an update built straight from a request body is refused, whichever
+Updates and deletes are checked twice. First, the entity's `TenantId`, as it was loaded or attached and as it is now,
+must be the current tenant's. A new instance built from a request body has no tenant, so it is refused, whichever
 organisation the order belongs to:
 
 ```csharp
@@ -195,14 +192,14 @@ UPDATE "Orders" SET "Total" = @p0 WHERE "Id" = @p1 AND "OrganisationId" = @p2;
 An entity that pairs Globex's order id with Acme's tenant id, the forged case, passes the first check and matches no
 row: EF Core throws `DbUpdateConcurrencyException`, and Globex's order is unchanged.
 
-**Bulk updates and deletes** (`ExecuteUpdate`, `ExecuteDelete`) are filtered in the same way, and an `ExecuteUpdate`
-may not set `TenantId`.
+`ExecuteUpdate` and `ExecuteDelete` are filtered in the same way, and an `ExecuteUpdate` may not set `TenantId`.
 
 ## What it does not do
 
 The isolation is in EF Core, not in the database:
 
-- Raw SQL (`FromSql`, `SqlQuery`, `ExecuteSql`) is not seen. Add the tenant to it yourself.
+- SQL you send yourself with `SqlQuery` or `ExecuteSql` is not seen. Add the tenant to it yourself. `FromSql` on a
+  tenant entity is filtered like any other query on it.
 - `IgnoreQueryFilters()` turns the tenant filter off for that query, for administrators' reports. On EF Core 10,
   `IgnoreQueryFilters([TenantryQueryFilters.Tenant])` keeps your other filters.
 - A context whose options do not call `UseTenantry()` is not isolated.
@@ -224,7 +221,9 @@ await scopes.RunInScopeAsync(message.OrganisationId, async (scope, ct) =>
 }, cancellationToken);
 ```
 
-Access validators run only for requests, so background work checks `IsActive` itself.
+`RunInScopeAsync` applies the `ValidateTenantActivity` check as a request does: for a deactivated organisation it
+throws `TenantInactiveException` and the work does not run. The claim check needs a request, so it does not run here,
+and `CreateScope` checks neither.
 
 ## From here
 

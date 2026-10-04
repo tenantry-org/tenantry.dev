@@ -3,6 +3,7 @@ import Link from 'next/link';
 import Header from '@/components/home/header/header';
 import { Footer } from '@/components/home/footer/footer';
 import { ComparisonTable } from '@/components/home/comparison/comparison';
+import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 
 export const metadata: Metadata = {
   title: 'Tenantry compared with Finbuckle.MultiTenant, ABP and your own query filters',
@@ -11,31 +12,27 @@ export const metadata: Metadata = {
   alternates: { canonical: '/compare' },
 };
 
-// The details behind the table, each checked against the project's own docs (comparison.tsx says when).
+// The details behind the table. Finbuckle.MultiTenant and ABP facts come from the documents the table links.
 const NOTES = [
   {
     title: 'Writes',
-    text: 'Finbuckle checks the entities EF Core tracks before saving, and by default throws when one belongs to another tenant. Tenantry rejects those writes too, and also puts the stored tenant in every UPDATE and DELETE, so a forged key changes no rows. ExecuteUpdate and ExecuteDelete are filtered to the current tenant, and cannot set TenantId.',
-  },
-  {
-    title: 'No tenant',
-    text: 'With no current tenant, Tenantry’s filter matches nothing and tenant-scoped writes are rejected. Finbuckle throws when a multi-tenant entity is saved with no tenant.',
+    text: 'Tenantry filters ExecuteUpdate and ExecuteDelete to the current tenant, and an ExecuteUpdate cannot set TenantId. With no current tenant, its filter matches nothing and, by default, writes to tenant-owned entities are rejected.',
   },
   {
     title: 'A database per tenant',
-    text: 'Tenantry supports a database per tenant with pooled contexts (AddDbContextPerTenantDatabase with pooled: true). Finbuckle’s docs do not cover pooling. ABP’s SaaS module, and Tenantry Pro, create and migrate tenant databases; Finbuckle leaves that to you.',
+    text: 'Tenantry Core connects each tenant’s context to its own database, pooled contexts included (AddDbContextPerTenantDatabase with pooled: true): a pooled context reads the tenant each time it is used. Finbuckle’s docs recommend setting a context’s tenant when it is created and not changing it. ABP migrates a new tenant’s database with a framework event handler the application configures, and its commercial SaaS module manages tenants’ connection strings from a UI. Tenantry Pro creates and migrates tenant databases.',
   },
   {
     title: 'Options and authentication',
-    text: 'Core gives options, named options included, the current tenant’s values, so each authentication scheme can have a tenant’s own settings. app.UseTenantResolution() makes the tenant current before authentication, and tenants on different identity providers each get a scheme of their own. ASP.NET Core Identity works with its own IdentityDbContext and a user type that implements ITenantEntity.',
+    text: 'Tenantry.Options gives each tenant its own option values, named options included, so an authentication scheme can use a tenant’s own settings. app.UseTenantResolution() makes the tenant current before authentication, and tenants on different identity providers get a scheme each. ASP.NET Core Identity works with its own IdentityDbContext and a user type that implements ITenantEntity.',
   },
   {
     title: 'What Tenantry does not do',
-    text: 'Tenantry is a library, not an application framework: there is no admin UI or tenant management screen, as ABP has. It builds in one tenant store, which holds tenants in memory. Finbuckle also has stores that read tenants from configuration, a distributed cache or an HTTP service.',
+    text: 'Tenantry is a library, not an application framework: there is no tenant management UI, as ABP’s Tenant Management module has. It builds in one tenant store, which holds tenants in memory. It adds TenantId to no key or index, where Finbuckle can, with AdjustUniqueIndexes(), so declare per-tenant unique indexes yourself. When a resolver’s identifier names no tenant, Tenantry does not try the next resolver, as Finbuckle does. The isolation is in EF Core, not the database: FromSql on a tenant entity is filtered like any other query on it; SQL sent with SqlQuery or ExecuteSql, and queries with IgnoreQueryFilters(), are not isolated.',
   },
   {
     title: '.NET versions',
-    text: 'Finbuckle.MultiTenant 10 targets .NET 10 only. Tenantry supports .NET 10, and .NET 8 and 9 until November 2027.',
+    text: `From version 10, Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only. Tenantry supports ${DOTNET_SUPPORT}.`,
   },
 ];
 
@@ -49,7 +46,7 @@ export default function ComparePage() {
           Tenantry beside the options most .NET teams weigh, as each project documents itself.
         </p>
         <div className={'mt-10'}>
-          <ComparisonTable />
+          <ComparisonTable full={true} />
         </div>
         <dl className={'mt-12 flex max-w-3xl flex-col gap-8'}>
           {NOTES.map((note) => (

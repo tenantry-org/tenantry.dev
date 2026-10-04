@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { lineOf, publishedTags, resolveVersions, versionProblems } from './docs-versions.mjs';
+import {
+  checkFirstSold,
+  lineOf,
+  listedVersions,
+  oldestReleaseShown,
+  publishedTags,
+  resolvePublishable,
+  resolveVersions,
+  versionProblems,
+} from './docs-versions.mjs';
 
 const v04 = { version: '0.4', core: 'v0.4.0', pro: 'v0.4.0' };
+// A first sale older than every release: no line is hidden.
+const ALL = 'v0.1.0';
 
 describe('docs versions', () => {
   it('reads a tag’s release line', () => {
@@ -25,6 +36,9 @@ describe('docs versions', () => {
     expect(versionProblems([{ version: '0.4', core: 'v0.4.0', pro: 'v0.5.0' }])).toEqual([
       "0.4's pro tag v0.5.0 is not a 0.4 release.",
     ]);
+    expect(versionProblems([{ version: '0.4', core: 'v0.4.0', pro: 'v0.4.0-rc.1' }])).toEqual([
+      "0.4's pro tag v0.4.0-rc.1 is not a release tag (vX.Y.Z).",
+    ]);
     expect(versionProblems([v04, v04])).toEqual(['0.4 is listed twice.', '0.4 is out of order (newest first).']);
     expect(versionProblems([{ version: '1.0', core: 'v1.0.0', pro: 'v1.0.0' }])).toEqual([
       '"1.0" is not a release line (0.MINOR, or MAJOR from 1).',
@@ -42,10 +56,13 @@ describe('docs versions', () => {
 
   it('publishes each line both groups released, with the newest stable patch of each', () => {
     expect(
-      resolveVersions({
-        core: ['v0.3.0-alpha.1', 'v0.4.0', 'v0.4.2', 'v0.4.10', 'v0.5.0', 'v0.6.0-rc.1', 'not-a-release'],
-        pro: ['v0.4.0', 'v0.4.1', 'v0.5.0', 'v0.5.1', 'v0.6.0-rc.1'],
-      }),
+      resolveVersions(
+        {
+          core: ['v0.3.0-alpha.1', 'v0.4.0', 'v0.4.2', 'v0.4.10', 'v0.5.0', 'v0.6.0-rc.1', 'not-a-release'],
+          pro: ['v0.4.0', 'v0.4.1', 'v0.5.0', 'v0.5.1', 'v0.6.0-rc.1'],
+        },
+        ALL,
+      ),
     ).toEqual([
       { version: '0.5', core: 'v0.5.0', pro: 'v0.5.1' },
       { version: '0.4', core: 'v0.4.10', pro: 'v0.4.1' },
@@ -53,27 +70,124 @@ describe('docs versions', () => {
   });
 
   it('waits for both groups before publishing a new line', () => {
-    expect(resolveVersions({ core: ['v0.4.0', 'v0.5.0'], pro: ['v0.4.0'] })).toEqual([v04]);
-    expect(resolveVersions({ core: [], pro: ['v0.4.0'] })).toEqual([]);
+    expect(resolveVersions({ core: ['v0.4.0', 'v0.5.0'], pro: ['v0.4.0'] }, ALL)).toEqual([v04]);
+    expect(resolveVersions({ core: [], pro: ['v0.4.0'] }, ALL)).toEqual([]);
   });
 
   it('orders lines numerically, newest first', () => {
     expect(
-      resolveVersions({ core: ['v0.9.0', 'v0.10.0', 'v1.0.0'], pro: ['v0.9.0', 'v0.10.0', 'v1.0.0'] }).map(
+      resolveVersions({ core: ['v0.9.0', 'v0.10.0', 'v1.0.0'], pro: ['v0.9.0', 'v0.10.0', 'v1.0.0'] }, ALL).map(
         (v) => v.version,
       ),
     ).toEqual(['1', '0.10', '0.9']);
   });
 
   it('publishes one line per major from 1.0, with its newest release', () => {
-    const versions = resolveVersions({
-      core: ['v0.5.6', 'v1.0.1', 'v1.2.0', 'v1.10.0', 'v2.0.0-rc.1'],
-      pro: ['v0.5.0', 'v1.0.0', 'v1.1.3', 'v1.1.12'],
-    });
+    const versions = resolveVersions(
+      {
+        core: ['v0.5.6', 'v1.0.1', 'v1.2.0', 'v1.10.0', 'v2.0.0-rc.1'],
+        pro: ['v0.5.0', 'v1.0.0', 'v1.1.3', 'v1.1.12'],
+      },
+      ALL,
+    );
     expect(versions).toEqual([
       { version: '1', core: 'v1.10.0', pro: 'v1.1.12' },
       { version: '0.5', core: 'v0.5.6', pro: 'v0.5.0' },
     ]);
     expect(versionProblems(versions)).toEqual([]);
+  });
+
+  it('publishes only the newest line while no release has been sold', () => {
+    const tags = { core: ['v0.4.0', 'v0.5.0', 'v0.6.0', 'v0.6.1'], pro: ['v0.4.0', 'v0.5.0', 'v0.6.1'] };
+    expect(resolveVersions(tags, null)).toEqual([{ version: '0.6', core: 'v0.6.1', pro: 'v0.6.1' }]);
+    expect(resolveVersions({ core: [], pro: [] }, null)).toEqual([]);
+  });
+
+  it('publishes the line of the first release sold and every later one, and none before it', () => {
+    const tags = {
+      core: ['v0.5.0', 'v0.6.0', 'v0.6.1', 'v0.7.0', 'v1.0.0'],
+      pro: ['v0.5.0', 'v0.6.1', 'v0.7.2', 'v1.0.0'],
+    };
+    expect(resolveVersions(tags, 'v0.6.1').map((v) => v.version)).toEqual(['1', '0.7', '0.6']);
+  });
+
+  it('accepts no first sale, or a release tag, and refuses anything else with the reason', () => {
+    expect(checkFirstSold(null)).toBeNull();
+    expect(checkFirstSold('v0.6.1')).toBe('v0.6.1');
+    for (const value of ['0.6.1', 'v0.6.1-rc.1', 'v0.6', '']) {
+      expect(() => checkFirstSold(value)).toThrow(/FIRST_SOLD_RELEASE is .*: set it to null, or to a release tag/);
+      expect(() => resolveVersions({ core: ['v0.6.1'], pro: ['v0.6.1'] }, value)).toThrow(/FIRST_SOLD_RELEASE/);
+      expect(() => oldestReleaseShown('v0.6.1', value)).toThrow(/FIRST_SOLD_RELEASE/);
+    }
+  });
+
+  it('publishes nothing while no line at or after the first release sold has both releases', () => {
+    expect(resolveVersions({ core: ['v0.6.0', 'v0.7.0'], pro: ['v0.6.0'] }, 'v0.7.0')).toEqual([]);
+  });
+
+  it('starts a changelog at the first release sold, or at the release its docs are of when that is older', () => {
+    expect(oldestReleaseShown('v0.6.2', null)).toBe('v0.6.2');
+    expect(oldestReleaseShown('v0.6.2', 'v0.6.1')).toBe('v0.6.1');
+    expect(oldestReleaseShown('v0.6.0', 'v0.6.1')).toBe('v0.6.0');
+    expect(oldestReleaseShown('v0.7.3', 'v0.6.1')).toBe('v0.6.1');
+  });
+
+  it('leaves out a release whose docs cannot be published, and keeps the one before it', async () => {
+    const tags = { core: ['v0.6.0', 'v0.6.1', 'v0.7.0'], pro: ['v0.6.0', 'v0.6.1', 'v0.7.0'] };
+    const broken: Record<string, string> = { 'pro v0.6.1': 'no docs folder', 'core v0.7.0': 'no changelog section' };
+    const leftOut: string[] = [];
+    const versions = await resolvePublishable(
+      tags,
+      (group, tag) => broken[`${group} ${tag}`] ?? null,
+      ({ group, tag, reason }) => leftOut.push(`${group} ${tag}: ${reason}`),
+      ALL,
+    );
+
+    expect(versions).toEqual([{ version: '0.6', core: 'v0.6.1', pro: 'v0.6.0' }]);
+    expect(leftOut).toEqual(['core v0.7.0: no changelog section', 'pro v0.6.1: no docs folder']);
+    expect(tags.core).toContain('v0.7.0');
+  });
+
+  it('checks the facts of the newest line only, and leaves out its release when they cannot be read', async () => {
+    const tags = { core: ['v0.6.0', 'v0.7.0'], pro: ['v0.6.0', 'v0.7.0', 'v0.7.1'] };
+    const asked: string[] = [];
+    const versions = await resolvePublishable(
+      tags,
+      async (group, tag, newest) => {
+        if (newest) asked.push(`${group} ${tag}`);
+        return newest && tag === 'v0.7.1' ? 'no docs/installation.md' : null;
+      },
+      undefined,
+      ALL,
+    );
+
+    expect(versions).toEqual([
+      { version: '0.7', core: 'v0.7.0', pro: 'v0.7.0' },
+      { version: '0.6', core: 'v0.6.0', pro: 'v0.6.0' },
+    ]);
+    expect(asked).toEqual(['core v0.7.0', 'pro v0.7.1', 'core v0.7.0', 'pro v0.7.0']);
+  });
+
+  it('counts only the versions NuGet lists, reading a page of the index that is not inlined', async () => {
+    const entry = (version: string, listed?: boolean) => ({ catalogEntry: { version, listed } });
+    const index = {
+      items: [
+        { '@id': 'page/0', items: [entry('0.5.0'), entry('0.6.0', false), entry('0.6.1+build.7', true)] },
+        { '@id': 'page/1' },
+      ],
+    };
+    const pages: Record<string, unknown> = { 'page/1': { items: [entry('0.7.0-rc.1'), entry('0.7.0')] } };
+
+    expect(await listedVersions(index, async (url) => pages[url])).toEqual(['0.5.0', '0.6.1', '0.7.0-rc.1', '0.7.0']);
+    await expect(listedVersions({} as never, async () => ({}))).rejects.toThrow('the registration index has no items.');
+  });
+
+  it('reads a release tag only without leading zeros', () => {
+    expect(lineOf('v01.2.3')).toBeNull();
+    expect(() => checkFirstSold('v01.2.3')).toThrow(/FIRST_SOLD_RELEASE/);
+    expect(() => checkFirstSold('v0.6.01')).toThrow(/FIRST_SOLD_RELEASE/);
+    expect(resolveVersions({ core: ['v0.06.0', 'v0.6.0'], pro: ['v0.6.0'] }, ALL)).toEqual([
+      { version: '0.6', core: 'v0.6.0', pro: 'v0.6.0' },
+    ]);
   });
 });

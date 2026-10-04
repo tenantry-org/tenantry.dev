@@ -93,9 +93,10 @@ database job pins.
 
 ## Docs pipeline
 
-`/docs` is rendered by Fumadocs from MDX under `content/docs/` (gitignored, generated). `pnpm sync:docs`
+`/docs` is rendered by Fumadocs from Markdown under `content/docs/` (gitignored, generated). `pnpm sync:docs`
 (`scripts/sync-docs.mjs`) runs before `dev`/`build`: it reads each docs version's markdown from git and transforms
-it (injects frontmatter, rewrites links, `.md`→`.mdx`).
+it (injects frontmatter, rewrites links). The pages stay `.md`, compiled as plain Markdown, so nothing in a release's
+docs runs as code when the site builds.
 
 The versions are listed in [`docs-versions.json`](docs-versions.json), newest first: each release line (`0.4`)
 with the Core and Pro release tags its docs come from (Core's repository, and the public `tenantry-pro-docs`
@@ -109,23 +110,45 @@ Each sync fetches the listed tags again, so moving a tenantry-pro-docs tag to co
 deployment. A release build fails when a link in the docs reaches no page or heading the sync wrote, or is
 still relative after rewriting (`scripts/docs-links.mjs`).
 
-- **Releases publish their docs by themselves.** The versions are worked out from the release tags: a line is
-  listed once both Core and Pro have a stable release in it, with the newest release of each. The `docs-versions`
-  workflow checks hourly (or on demand), commits any change to master and staging, which redeploys the site, and runs
-  the test and audit workflows on the commit, since its own pushes start none.
-  A Core tag counts once NuGet lists its version, since Core is tagged before its release runs; tenantry-pro-docs is
-  tagged after Pro's packages are published. `pnpm docs:update` does the same locally; `pnpm docs:check` fails unless
-  the file matches the releases.
-- **The Pro access page's install snippets follow a Pro release line**, `PRO_RELEASE_LINE` in
-  `src/lib/install-snippets.ts`. Once that line's docs are published, the tests compare the snippets with its
-  installation guide, and they fail when a newer line is published. So the docs of a Pro release that starts a line
-  or changes the installation guide reach production only with matching snippets: until then the test workflow
-  fails on master, and production deployments, these docs' and any other change's, wait. For a new line, update the
-  snippets before the release: the tests accept the next line; for a patch that changes the guide, once its docs are
-  listed.
-- **Preview unreleased docs** locally with an override, for example
-  `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or `CORE_DOCS_DIR`); it replaces the newest version's docs.
-  Vercel and CI builds refuse overrides.
+Releasing Core or Pro needs no edit to the site. The owner pushes a signed `v*` tag, and the repository's release
+workflow publishes the packages; Pro's also publishes its docs to tenantry-pro-docs under the same tag. The
+`docs-versions` workflow runs hourly, at 23 minutes past, and reads both repositories' tags
+(`scripts/docs-versions-update.mjs`). A Core tag counts once NuGet lists its version (Tenantry.Core's registration),
+since Core is tagged before its release runs; pre-release tags never count. To take a Core release back, unlist it on
+NuGet and the next run drops it; a Pro release is dropped by deleting its tag from tenantry-pro-docs. A line is listed
+once both Core and Pro have a release in it, with the newest release of each, so a new minor released by Core first
+stays off the site until Pro's release, and the previous line is shown meanwhile. Only the newest line is shown until a
+release has been sold (`FIRST_SOLD_RELEASE` in `scripts/docs-versions.mjs`).
+
+The same run reads what the site says about the newest release from the release itself and writes it to
+[`newest-release.json`](newest-release.json): the .NET versions Core's package targets, the number of sample folders,
+and the setup snippets of Pro's installation guide, which the Pro access page shows with the environment's GitHub org.
+The snippets must still hold the feed, the package patterns, the environment variables and the licence key's setting
+that the portal's own text names (`scripts/install-snippets.mjs`). The home, Pro and comparison pages and the portal
+take these from the file, and the version badge and the docs from `docs-versions.json`. When either file changes, the
+workflow commits both to master and staging and runs the test and audit workflows on the commit, since its own pushes
+start none. Production deploys the commit once they pass. A run that finds nothing new but sees its own commit at
+master's head runs those workflows if they never ran on it, and fast-forwards staging to it; staging with commits master
+lacks is left alone. A release is live at the first run after its packages are published, so within the hour, plus the
+few minutes the checks and the build take. Run the workflow from the Actions tab to publish sooner.
+
+A release whose tag has no `docs` folder, or whose `CHANGELOG.md` has no section for it, is left out, and its line keeps
+the release before it. So is a release of the newest line that does not give the facts above: a nuspec without target
+frameworks, no sample folder, or an installation guide without those snippets. The run commits what it can publish, then
+fails, with the releases left out and why in its summary, and fails again each hour until the release is fixed or
+replaced. A run that cannot reach NuGet or read a file from a tag publishes nothing. A release build fails before
+deploying, and production keeps the last deployment, if a listed tag cannot be read or its docs are incomplete. The code
+samples on the home and Pro pages are not release data: when a minor release changes the API they show, they are updated
+by hand.
+
+If a release has not reached the site after an hour, check in this order: NuGet lists the Core version
+(`https://www.nuget.org/packages/Tenantry.Core`), or tenantry-pro-docs has the Pro tag (Pro's publish-docs job may need
+a re-run); the latest `docs-versions` run, whose summary names any release it left out; the test and audit runs on its
+commit on master; then the Vercel deployment. `pnpm docs:update` does the same as the workflow locally, and
+`pnpm docs:check` fails unless both files match the releases.
+
+To preview unreleased docs locally, set an override, for example `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or
+`CORE_DOCS_DIR`); it replaces the newest version's docs. Vercel and CI builds refuse overrides.
 
 ## Blog
 
