@@ -62,7 +62,8 @@ export async function HeroSection() {
               'mt-6 text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-[3.25rem] lg:leading-[1.08]'
             }
           >
-            Tenant isolation for <span className={'text-link'}>your existing ASP.NET Core and EF Core app</span>
+            <span className={'text-link'}>Fail-closed tenant isolation</span> for your existing ASP.NET Core and EF Core
+            apps
           </h1>
           <p className={'mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground'}>
             One call on the DbContext you already have isolates its data, with no base class, and Tenantry reads tenants
