@@ -19,7 +19,7 @@ const PRINCIPLES = [
   {
     icon: SlidersHorizontal,
     title: 'Your keys, your registry',
-    text: 'A Guid, int, string or any parsable tenant key. Resolve it from a header, subdomain, host name, route, claim or query string, and keep your tenants where they already are.',
+    text: 'A Guid, int, string or any parsable tenant key. Resolve it from a header, subdomain, host name, route value, claim or a resolver of your own, and find a tenant by its slug or custom domain.',
   },
   {
     icon: ServerCog,
@@ -30,12 +30,15 @@ const PRINCIPLES = [
 
 // What Core is, beyond the principles above.
 const CORE = [
-  'A shared database, or a database per tenant with pooled contexts',
   'Tenant resolution, your tenant store and access validation',
+  'Suspended tenants refused in requests and in RunInScopeAsync (ValidateTenantActivity)',
   'Worker scopes for background work as a tenant',
   'Options per tenant, authentication settings included (Tenantry.Options)',
-  'HybridCache entries (Tenantry.Caching) and cached responses kept per tenant',
-  'The current tenant sent with HttpClient and gRPC calls (Tenantry.Http)',
+  'HybridCache and IDistributedCache entries (Tenantry.Caching) and cached responses kept per tenant',
+  'ITenantInvalidator, which clears what Tenantry keeps for a tenant when the tenant changes',
+  'The current tenant sent with HttpClient and gRPC calls, and read back only from callers you trust (Tenantry.Http, Tenantry.AspNetCore)',
+  'Log event ids to alert on, a tenant.id tag on traces, and request metrics per tenant',
+  'A model check that refuses mappings it cannot isolate, and a list of unisolated entity types for your tests',
 ];
 
 function Edition({
@@ -112,14 +115,17 @@ export function Features() {
       <div className={'mt-24 max-w-2xl'}>
         <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>Open-source Core. Pro for running tenants.</h2>
         <p className={'mt-4 text-lg text-muted-foreground'}>
-          Core is free and isolates tenant data. Pro adds the tooling for a database or schema per tenant.
+          Core is free and isolates tenant data, in a shared database or a database per tenant. Pro adds the operations
+          around it: with a shared database, the tenant in Hangfire, Quartz.NET, MassTransit and Rebus work, audit
+          logging, and offboarding that deletes a tenant’s rows; with a database or schema per tenant, also
+          provisioning, migrations and health checks.
         </p>
       </div>
       <div className={'mt-10 grid gap-6 lg:grid-cols-2'}>
         <Edition
           name={'Tenantry Core'}
           badge={'Free · Apache-2.0'}
-          summary={'Tenant resolution and EF Core isolation, in a shared database or a database per tenant.'}
+          summary={'Tenant resolution and EF Core isolation for an existing application.'}
           items={CORE}
           links={[
             { label: 'Core docs', href: '/docs/core' },
