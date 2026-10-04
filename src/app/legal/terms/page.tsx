@@ -5,19 +5,20 @@ export const metadata = { title: 'Terms of Service — Tenantry' };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Service" lastUpdated="2026-09-29">
+    <LegalPage title="Terms of Service" lastUpdated="2026-10-04">
       <p>
         These Terms of Service (&quot;Terms&quot;) govern your access to and use of the Tenantry website, the Tenantry
-        Pro software, the private package feed, and related services (collectively, the &quot;Services&quot;) provided
-        by {LegalEntity.name}, {LegalEntity.registration} (&quot;Tenantry&quot;, &quot;we&quot;, &quot;us&quot;). By
-        using the Services you agree to these Terms.
+        Pro software, the package feed, and related services (collectively, the &quot;Services&quot;) provided by{' '}
+        {LegalEntity.name}, {LegalEntity.registration} (&quot;Tenantry&quot;, &quot;we&quot;, &quot;us&quot;). By using
+        the Services you agree to these Terms.
       </p>
 
       <h2>1. Tenantry Core vs Tenantry Pro</h2>
       <p>
         Tenantry Core is open-source software licensed separately under the Apache License 2.0; your use of Core is
         governed by that licence, not these Terms. Tenantry Pro is proprietary software licensed under our{' '}
-        <a href="/legal/eula">End User Licence Agreement (EULA)</a> and made available to active subscribers.
+        <a href="/legal/eula">End User Licence Agreement (EULA)</a>, which sets out which releases you may use while you
+        subscribe and after your subscription ends. It is delivered through the package feed (section 3).
       </p>
 
       <h2>2. Subscriptions and billing</h2>
@@ -29,11 +30,12 @@ export default function TermsPage() {
 
       <h2>3. Access provisioning</h2>
       <p>
-        An active subscription grants access to the private package feed, and so to new versions of Tenantry Pro, via
-        membership of our GitHub organisation. Access is granted after you connect your GitHub account and is removed
-        when your subscription ends, or 30 days after a renewal payment fails if it is not recovered. You are also
-        issued a licence key, which does not expire; what you may do with the versions you have after your subscription
-        ends is set out in the <a href="/legal/eula">EULA</a>.
+        Tenantry Pro is delivered through the package feed, a private NuGet feed that Tenantry runs, which you access
+        with feed tokens. While your subscription is active, the package feed serves every release of Tenantry Pro. Your
+        subscription stays active for up to 30 days after a renewal payment first fails, while Paddle tries to collect
+        it. After your subscription ends, the package feed serves only the releases that are vested under the EULA, and
+        none if no release is. You are also issued a licence key, which does not expire and stays the same after your
+        subscription ends. The key does not decide which releases you may use; the <a href="/legal/eula">EULA</a> does.
       </p>
 
       <h2>4. Acceptable use</h2>
@@ -58,7 +60,7 @@ export default function TermsPage() {
       <h2>7. Termination</h2>
       <p>
         We may suspend or terminate access for breach of these Terms. You may cancel at any time; cancellation stops
-        future renewals.
+        future renewals and does not affect the releases already vested under the EULA.
       </p>
 
       <h2>8. Governing law</h2>
