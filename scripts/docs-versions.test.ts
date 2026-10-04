@@ -4,6 +4,7 @@ import {
   lineOf,
   oldestReleaseShown,
   publishedTags,
+  resolvePublishable,
   resolveVersions,
   versionProblems,
 } from './docs-versions.mjs';
@@ -128,5 +129,21 @@ describe('docs versions', () => {
     expect(oldestReleaseShown('v0.6.2', 'v0.6.1')).toBe('v0.6.1');
     expect(oldestReleaseShown('v0.6.0', 'v0.6.1')).toBe('v0.6.0');
     expect(oldestReleaseShown('v0.7.3', 'v0.6.1')).toBe('v0.6.1');
+  });
+
+  it('leaves out a release whose docs cannot be published, and keeps the one before it', () => {
+    const tags = { core: ['v0.6.0', 'v0.6.1', 'v0.7.0'], pro: ['v0.6.0', 'v0.6.1', 'v0.7.0'] };
+    const broken: Record<string, string> = { 'pro v0.6.1': 'no docs folder', 'core v0.7.0': 'no changelog section' };
+    const leftOut: string[] = [];
+    const versions = resolvePublishable(
+      tags,
+      (group, tag) => broken[`${group} ${tag}`] ?? null,
+      ({ group, tag, reason }) => leftOut.push(`${group} ${tag}: ${reason}`),
+      ALL,
+    );
+
+    expect(versions).toEqual([{ version: '0.6', core: 'v0.6.1', pro: 'v0.6.0' }]);
+    expect(leftOut).toEqual(['core v0.7.0: no changelog section', 'pro v0.6.1: no docs folder']);
+    expect(tags.core).toContain('v0.7.0');
   });
 });

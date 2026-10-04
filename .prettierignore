@@ -12,3 +12,5 @@ pnpm-lock.yaml
 # Supabase CLI temp/local state
 /supabase/.temp/
 /supabase/.branches/
+# Written by scripts/docs-versions-update.mjs, as JSON.stringify writes it
+/newest-release.json

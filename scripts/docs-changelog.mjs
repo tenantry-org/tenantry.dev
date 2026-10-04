@@ -1,5 +1,13 @@
 import { compareReleases, lineOf } from './docs-versions.mjs';
 
+// The version of a release's section heading: `## [0.5.0] - 2026-10-03` → 0.5.0.
+const SECTION_VERSION = /^## \[?v?(\d+\.\d+\.\d+[0-9A-Za-z.-]*)/;
+
+/** Whether a changelog has a section for the release of a tag (`v0.6.1`: `## [0.6.1] - …`). */
+export function hasReleaseSection(markdown, tag) {
+  return markdown.split(/\r?\n/).some((text) => `v${SECTION_VERSION.exec(text)?.[1]}` === tag);
+}
+
 /**
  * A repository's CHANGELOG.md as the Changelog page of one docs version: that release line's sections (0.5.0 and
  * its patches, with the steps to update from 0.4) without the Keep a Changelog preamble, under a title and a
@@ -29,7 +37,7 @@ export function changelogPage(markdown, { product, line, fullChangelog, from }) 
     else sections.at(-1).push(text);
   }
 
-  const versionOfSection = ([heading]) => /^## \[?v?(\d+\.\d+\.\d+[0-9A-Za-z.-]*)/.exec(heading)?.[1];
+  const versionOfSection = ([heading]) => SECTION_VERSION.exec(heading)?.[1];
   const lineOfSection = (section) => {
     const version = versionOfSection(section);
     return version === undefined ? null : lineOf(`v${version}`);

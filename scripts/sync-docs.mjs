@@ -31,7 +31,7 @@ import { fileURLToPath } from 'url';
 import { changelogPage } from './docs-changelog.mjs';
 import { brokenDocsLinks, linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
 import { basePath, compareLines, oldestReleaseShown, readVersions, versionProblems } from './docs-versions.mjs';
-import { fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
+import { CHANGELOG_SINCE, docsProblem, fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = resolve(here, '..');
@@ -43,16 +43,12 @@ const groups = [
     title: 'Tenantry Core',
     envVar: 'CORE_DOCS_DIR',
     repository: REPOSITORIES.core,
-    // The release lines whose tags have a CHANGELOG.md: every Core tag has one at the repository's root.
-    changelogSince: '0.1',
   },
   {
     name: 'pro',
     title: 'Tenantry Pro',
     envVar: 'PRO_DOCS_DIR',
     repository: REPOSITORIES.pro,
-    // Pro's releases publish their CHANGELOG.md to tenantry-pro-docs from 0.5.0 (its scripts/publish-docs.sh).
-    changelogSince: '0.5',
   },
 ];
 
@@ -199,9 +195,15 @@ function fail(message) {
   process.exit(1);
 }
 
+// Why a tag's docs cannot be synced (docsProblem: a docs folder, and the release's section in its changelog), or null.
+function tagProblem(dir, group, tag) {
+  if (!tag) return 'no tag is pinned';
+  if (!dir || !hasTag(dir, tag)) return `${tag} cannot be read`;
+  return docsProblem(dir, group, tag);
+}
+
 // The docs folder of a tag, extracted to a temporary folder, with the tag's CHANGELOG.md beside it.
 function docsAt(dir, tag) {
-  if (!hasTag(dir, tag)) return null;
   const out = mkdtempSync(join(tmpdir(), 'tenantry-docs-'));
   scratch.push(out);
   const archive = execFileSync('git', ['-C', dir, 'archive', '--format=tar', tag, 'docs'], { maxBuffer: 1 << 28 }); // NOSONAR
@@ -216,7 +218,7 @@ function docsAt(dir, tag) {
 function syncChangelog(source, outDir, group, linkSource, context) {
   const file = join(source, '..', 'CHANGELOG.md');
   if (!existsSync(file)) {
-    if (compareLines(context.version, group.changelogSince) < 0) return null;
+    if (compareLines(context.version, CHANGELOG_SINCE[group.name]) < 0) return null;
     const message = `no CHANGELOG.md for ${context.version} ${group.name}.`;
     if (releaseBuild) fail(message);
     console.warn(`sync-docs: ${message}`);
@@ -268,19 +270,20 @@ for (const [index, entry] of versions.entries()) {
     if (override) {
       if (releaseBuild) fail(`${group.envVar} is set; release builds publish only the pinned releases.`);
       const dir = resolve(override);
-      sources[group.name] = existsSync(dir) ? { dir, ref: 'master' } : null;
+      sources[group.name] = existsSync(dir) ? { dir, ref: 'master' } : { problem: `${dir} does not exist` };
       continue;
     }
     const tag = entry[group.name];
-    const dir = tag && repositories[group.name] && docsAt(repositories[group.name], tag);
-    sources[group.name] = dir ? { dir, ref: tag } : null;
+    const repository = repositories[group.name];
+    const problem = tagProblem(repository, group.name, tag);
+    sources[group.name] = problem ? { problem } : { dir: docsAt(repository, tag), ref: tag };
   }
 
   const missing = groups
-    .filter((group) => !sources[group.name])
-    .map((group) => `${group.name} ${entry[group.name] ?? '(not pinned)'}`);
+    .filter((group) => sources[group.name].problem)
+    .map((group) => `${group.name}: ${sources[group.name].problem}`);
   if (missing.length > 0) {
-    const message = `no docs for ${entry.version}: ${missing.join(', ')}.`;
+    const message = `no docs for ${entry.version} (${missing.join('; ')}).`;
     if (releaseBuild) fail(`${message} A build without these docs would publish none.`);
     console.warn(`sync-docs: ${message} Skipping.`);
     continue;

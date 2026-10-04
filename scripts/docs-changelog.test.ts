@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changelogPage } from './docs-changelog.mjs';
+import { changelogPage, hasReleaseSection } from './docs-changelog.mjs';
 
 const preamble = `# Changelog
 
@@ -74,5 +74,12 @@ describe('changelogPage', () => {
     expect(changelogPage(preamble, core05)).toBe(
       '# Changelog\n\nThe changes in each release of Tenantry Core 0.5, newest first.\n',
     );
+  });
+
+  it('finds the section of a release, not of its pre-release', () => {
+    const changelog = `${preamble}\n## [Unreleased]\n\n## [0.6.1] - 2026-10-10\n\n## [0.6.0-rc.1] - 2026-10-01\n`;
+    expect(hasReleaseSection(changelog, 'v0.6.1')).toBe(true);
+    expect(hasReleaseSection(changelog, 'v0.6.0')).toBe(false);
+    expect(hasReleaseSection(changelog, 'v0.6.0-rc.1')).toBe(true);
   });
 });

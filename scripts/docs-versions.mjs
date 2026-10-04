@@ -150,3 +150,27 @@ export function resolveVersions(tagsByGroup, firstSold = FIRST_SOLD_RELEASE) {
     ? versions.slice(0, 1)
     : versions.filter((entry) => compareLines(entry.version, lineOf(firstSold)) >= 0);
 }
+
+/**
+ * resolveVersions, leaving out each release whose docs cannot be published: `problem(group, tag)` gives the reason, or
+ * null. The line of a release left out keeps the release before it, or waits for the next one. `onLeftOut` is called
+ * with each release left out and its reason.
+ *
+ * @param {Record<string, string[]>} tagsByGroup
+ * @param {(group: string, tag: string) => string | null} problem
+ * @param {(release: { group: string, tag: string, reason: string }) => void} [onLeftOut]
+ * @param {string | null} [firstSold]
+ */
+export function resolvePublishable(tagsByGroup, problem, onLeftOut = () => {}, firstSold = FIRST_SOLD_RELEASE) {
+  const tags = { ...tagsByGroup };
+  for (;;) {
+    const versions = resolveVersions(tags, firstSold);
+    const left = versions
+      .flatMap((entry) => GROUPS.map((group) => ({ group, tag: entry[group] })))
+      .map((release) => ({ ...release, reason: problem(release.group, release.tag) }))
+      .find((release) => release.reason);
+    if (!left) return versions;
+    onLeftOut(left);
+    tags[left.group] = tags[left.group].filter((tag) => tag !== left.tag);
+  }
+}

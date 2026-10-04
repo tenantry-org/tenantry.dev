@@ -2,17 +2,25 @@
  * Where the docs come from: Core's repository and the public tenantry-pro-docs repository (which each Pro release
  * publishes its docs to and tags; the Pro repository itself is private). Their release tags are read from partial
  * clones kept in `content/_src/{core,pro}` (gitignored), which fetch a file's contents only when it is read. Used by
- * sync-docs.mjs, docs-versions-update.mjs and the tests that compare the site with the released docs.
+ * sync-docs.mjs and docs-versions-update.mjs.
  */
 import { execFileSync } from 'child_process';
 import { existsSync, rmSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { hasReleaseSection } from './docs-changelog.mjs';
+import { compareLines, lineOf } from './docs-versions.mjs';
 
 export const REPOSITORIES = {
   core: 'https://github.com/tenantry-org/tenantry-core',
   pro: 'https://github.com/tenantry-org/tenantry-pro-docs',
 };
+
+/**
+ * The first release line whose tags have a CHANGELOG.md: every Core tag has one at the repository's root, and Pro's
+ * releases publish theirs to tenantry-pro-docs from 0.5.0 (its scripts/publish-docs.sh).
+ */
+export const CHANGELOG_SINCE = { core: '0.1', pro: '0.5' };
 
 const sourcesRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'content', '_src');
 
@@ -68,4 +76,27 @@ export function fileAt(dir, tag, path) {
   } catch {
     return null;
   }
+}
+
+/** The folders in a tag's folder (`samples`), or an empty list when it has none. */
+export function foldersAt(dir, tag, path) {
+  try {
+    return git('-C', dir, 'ls-tree', '-d', '--name-only', `${tag}:${path}`).split('\n').filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Why the site cannot publish a release's docs from a group's tag (`core` or `pro`), or null when it can: the tag must
+ * have a docs folder, and from CHANGELOG_SINCE on a CHANGELOG.md with the release's own section, which the
+ * Changelog page shows. The tag must be in the clone (hasTag).
+ */
+export function docsProblem(dir, group, tag) {
+  if (foldersAt(dir, tag, '').every((folder) => folder !== 'docs')) return `${tag} has no docs folder`;
+  if (compareLines(lineOf(tag), CHANGELOG_SINCE[group]) < 0) return null;
+  const changelog = fileAt(dir, tag, 'CHANGELOG.md');
+  if (changelog === null) return `${tag} has no CHANGELOG.md`;
+  if (!hasReleaseSection(changelog, tag)) return `${tag}'s CHANGELOG.md has no section for it`;
+  return null;
 }
