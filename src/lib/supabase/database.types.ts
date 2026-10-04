@@ -226,17 +226,14 @@ export type Database = {
       };
       offered_prices: {
         Row: {
-          billing_interval: string;
           first_seen_at: string;
           price_id: string;
         };
         Insert: {
-          billing_interval: string;
           first_seen_at?: string;
           price_id: string;
         };
         Update: {
-          billing_interval?: string;
           first_seen_at?: string;
           price_id?: string;
         };

@@ -371,12 +371,7 @@ describe('vesting emails', () => {
     await syncCustomer('ctm_1', deps, new Date('2027-02-01T00:00:00Z'));
 
     expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-02-01T00:00:00Z'));
-    expect([...memory.state.offeredPrices.keys()].sort()).toEqual([
-      'pri_01month',
-      'pri_01year',
-      'pri_02month',
-      'pri_02year',
-    ]);
+    expect([...memory.state.offeredPrices].sort()).toEqual(['pri_01month', 'pri_01year', 'pri_02month', 'pri_02year']);
   });
 
   it('tells the customer once when a qualifying period vests, not as the vested-through date moves on', async () => {

@@ -44,8 +44,8 @@ const state = {
   entitlementStates: new Map<string, Entitlement>(),
   /** The customers marked as test customers (customers.is_test). */
   testCustomers: new Set<string>(),
-  /** Every price Pro was offered at (offered_prices), by price id, with its interval. */
-  offeredPrices: new Map<string, string>(),
+  /** Every price Pro was offered at (offered_prices). */
+  offeredPrices: new Set<string>(),
 };
 
 /** The customer's licences, oldest first. */
@@ -106,13 +106,11 @@ export const memory = {
 
     // As record_offered_prices does: adds any price not yet recorded, never removes or changes one.
     async recordOfferedPrices(prices: Record<string, string>) {
-      for (const [interval, priceId] of Object.entries(prices)) {
-        if (!state.offeredPrices.has(priceId)) state.offeredPrices.set(priceId, interval);
-      }
+      for (const priceId of Object.values(prices)) state.offeredPrices.add(priceId);
     },
 
     async listOfferedPriceIds() {
-      return [...state.offeredPrices.keys()];
+      return [...state.offeredPrices];
     },
 
     async recordCustomerEvent(event: { customerId: string; email: string; occurredAt: string }) {

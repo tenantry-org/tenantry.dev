@@ -141,7 +141,7 @@ export async function getCustomerEmail(customerId: string): Promise<string | nul
  */
 export async function recordOfferedPrices(prices: OfferPrices): Promise<void> {
   const supabase = createServiceRoleClient();
-  const rows = Object.entries(prices).map(([interval, priceId]) => ({ price_id: priceId, billing_interval: interval }));
+  const rows = Object.values(prices).map((priceId) => ({ price_id: priceId }));
   const { error } = await supabase
     .from('offered_prices')
     .upsert(rows, { onConflict: 'price_id', ignoreDuplicates: true });

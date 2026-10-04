@@ -1,12 +1,12 @@
 -- Every price Tenantry Pro has been offered at. A payment counts towards vesting only at one of them
 -- (src/server/billing/entitlement-policy.ts), and a subscriber keeps paying the price they subscribed at after the
--- offer prices change. So the set only grows: the site adds the configured PADDLE_PRICE_MONTHLY and _YEARLY before it
--- evaluates a customer (record_offered_prices, idempotent), and nothing removes a row. Only the service role reads or
--- writes it: row level security is on, with no policy.
+-- offer prices change. So the set only grows: before it evaluates a customer, the site adds the configured
+-- PADDLE_PRICE_MONTHLY and _YEARLY if they are missing (billing-store.ts: recordOfferedPrices, an upsert that ignores
+-- rows already there), and nothing removes a row. Only the service role reads or writes it: row level security is on,
+-- with no policy.
 
 create table public.offered_prices (
   price_id text primary key,
-  billing_interval text not null check (billing_interval in ('month', 'year')),
   first_seen_at timestamp with time zone not null default now()
 );
 
