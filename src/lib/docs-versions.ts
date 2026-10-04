@@ -5,7 +5,7 @@ import config from '../../docs-versions.json';
  * newest is served at /docs, each older one at /docs/v<version>.
  */
 export interface DocsVersion {
-  /** The release line, such as `0.4`; also the search tag of its pages. */
+  /** The minor version, such as `0.4` or `1.2`; also the search tag of its pages. */
   version: string;
   core: string;
   pro: string;
@@ -28,12 +28,11 @@ export function docsVersionOf(slugs: string[]): DocsVersion {
 }
 
 /**
- * When a page's slugs start with a version the site does not serve under its own path (an older release line it no
- * longer publishes, or the newest, which is served at /docs), the same page's slugs in the newest docs; otherwise
- * null.
+ * When a page's slugs start with a version the site does not serve under its own path (an older minor it no longer
+ * publishes, or the newest, which is served at /docs), the same page's slugs in the newest docs; otherwise null.
  */
 export function slugsOutsidePublishedVersions(slugs: string[]): string[] | null {
-  return /^v\d+(?:\.\d+)?$/.test(slugs[0] ?? '') && docsVersionOf(slugs).latest ? slugs.slice(1) : null;
+  return /^v\d+\.\d+$/.test(slugs[0] ?? '') && docsVersionOf(slugs).latest ? slugs.slice(1) : null;
 }
 
 /** The version of the docs page at a site path (the latest for any other path). */

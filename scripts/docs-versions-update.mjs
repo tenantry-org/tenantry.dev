@@ -5,8 +5,8 @@
  * packages are published) and writes the versions they give (resolveVersions in docs-versions.mjs), and what the site
  * says about the newest of them (newest-release.mjs). A Core tag counts only once NuGet lists its version: Core is
  * tagged before its release runs, which can wait for approval, fail or be refused, and one taken back is unlisted. A
- * release whose docs the site cannot publish (docsProblem in docs-sources.mjs), or, in the newest line, whose facts it
- * cannot read (releaseFacts), is left out with a warning, and its line keeps the release before it. The
+ * release whose docs the site cannot publish (docsProblem in docs-sources.mjs), or, in the newest minor, whose facts it
+ * cannot read (releaseFacts), is left out with a warning, and its minor keeps the release before it. The
  * docs-versions workflow runs it on a schedule and commits any change, which redeploys the site; nobody edits either
  * file by hand.
  *
@@ -20,7 +20,7 @@ import { docsProblem, fetchJson, fetchText, foldersAt, hasTag, partialClone, REP
 import {
   FIRST_SOLD_RELEASE,
   GROUPS,
-  lineOf,
+  minorOf,
   listedVersions,
   publishedTags,
   readVersions,
@@ -68,12 +68,12 @@ const clones = Object.fromEntries(
     group,
     partialClone(
       group,
-      released[group].filter((tag) => lineOf(tag) && !tag.includes('-')),
+      released[group].filter((tag) => minorOf(tag) && !tag.includes('-')),
     ),
   ]),
 );
 
-// The checks of a release (docsProblem), and for one of the newest line what the site says about it (releaseFacts).
+// The checks of a release (docsProblem), and for one of the newest minor what the site says about it (releaseFacts).
 // A reason is returned for a release that does not give them; a read that fails throws, and the run stops.
 const facts = {};
 async function problem(group, tag, newest) {
@@ -112,8 +112,9 @@ if (process.env.GITHUB_STEP_SUMMARY && leftOut.length > 0) {
 if (expected.length === 0) {
   console.error(
     FIRST_SOLD_RELEASE === null
-      ? 'docs-versions: no release line has both a Core and a Pro release the site can publish.'
-      : `docs-versions: no release line from ${lineOf(FIRST_SOLD_RELEASE)} on (FIRST_SOLD_RELEASE is ${FIRST_SOLD_RELEASE}) ` +
+      ? 'docs-versions: no minor version has both a Core and a Pro release the site can publish.'
+      : `docs-versions: no minor version from ${minorOf(FIRST_SOLD_RELEASE.core)} on ` +
+          `(FIRST_SOLD_RELEASE is ${JSON.stringify(FIRST_SOLD_RELEASE)}) ` +
           'has both a Core and a Pro release the site can publish yet.',
   );
   process.exit(1);

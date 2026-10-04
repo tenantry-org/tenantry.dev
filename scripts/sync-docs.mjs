@@ -7,7 +7,7 @@
  *   - injects frontmatter (`title` from the first H1, which is then removed from the body),
  *   - derives a short `description` from the first paragraph,
  *   - rewrites relative `.md` links to clean docs paths (e.g. `(tenant-stores.md)` → `(tenant-stores)`),
- *   - adds the release line's part of each tag's CHANGELOG.md as the group's Changelog page (docs-changelog.mjs).
+ *   - adds the version's releases from each tag's CHANGELOG.md as the group's Changelog page (docs-changelog.mjs).
  * The pages are written as `.md`, which Fumadocs compiles as plain Markdown: braces and tags in a release's docs are
  * text, never code run while the site builds. Only the version's landing page, which this script writes, is MDX.
  *
@@ -32,7 +32,7 @@ import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { changelogPage } from './docs-changelog.mjs';
 import { brokenDocsLinks, linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
-import { basePath, compareLines, oldestReleaseShown, readVersions, versionProblems } from './docs-versions.mjs';
+import { basePath, compareMinors, oldestReleaseShown, readVersions, versionProblems } from './docs-versions.mjs';
 import { CHANGELOG_SINCE, docsProblem, fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -220,7 +220,7 @@ function docsAt(dir, tag) {
 function syncChangelog(source, outDir, group, linkSource, context) {
   const file = join(source, '..', 'CHANGELOG.md');
   if (!existsSync(file)) {
-    if (compareLines(context.version, CHANGELOG_SINCE[group.name]) < 0) return null;
+    if (compareMinors(context.version, CHANGELOG_SINCE[group.name]) < 0) return null;
     const message = `no CHANGELOG.md for ${context.version} ${group.name}.`;
     if (releaseBuild) fail(message);
     console.warn(`sync-docs: ${message}`);
@@ -228,10 +228,10 @@ function syncChangelog(source, outDir, group, linkSource, context) {
   }
   const page = changelogPage(readFileSync(file, 'utf8'), {
     product: group.title,
-    line: context.version,
+    minor: context.version,
     fullChangelog: `${linkSource.repository}/blob/${linkSource.ref}/CHANGELOG.md`,
-    // Nothing older than the first release sold, nor than the release the docs are of when that is older.
-    from: oldestReleaseShown(context.tags[group.name]),
+    // Nothing older than the group's first release sold, nor than the release the docs are of when that is older.
+    from: oldestReleaseShown(group.name, context.tags[group.name]),
   });
   const content = toFrontmatter(page, group.name, linkSource, '', context);
   for (const link of relativeLinks(content)) brokenLinks.push(`${context.version} ${group.name}/CHANGELOG.md: ${link}`);

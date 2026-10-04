@@ -158,14 +158,15 @@ and undoes them.
 it (injects frontmatter, rewrites links). The pages stay `.md`, compiled as plain Markdown, so nothing in a release's
 docs runs as code when the site builds.
 
-The versions are listed in [`docs-versions.json`](docs-versions.json), newest first: each release line (`0.4`)
-with the Core and Pro release tags its docs come from (Core's repository, and the public `tenantry-pro-docs`
+The versions are listed in [`docs-versions.json`](docs-versions.json), newest first: each minor version (`0.4`,
+`1.2`) with the Core and Pro release tags its docs come from (Core's repository, and the public `tenantry-pro-docs`
 repository, which each Pro release publishes and tags). The newest is served at `/docs`, each older one at
 `/docs/v<version>` with a notice pointing to the latest; the sidebar has a version dropdown and search covers
 the version being read. The tags are read from partial clones kept in `content/_src/` (gitignored), so every
-build, local ones included, shows what the released packages do. A release line keeps one API: each minor before
-1.0 (`0.4`, `0.5`), each major from 1.0 (`1`). Each group ends with a Changelog page: the line's releases from the
-tag's `CHANGELOG.md`, with a link to the rest (`scripts/docs-changelog.mjs`); tenantry-pro-docs has Pro's from 0.5.0.
+build, local ones included, shows what the released packages do. Each minor has its own docs, after 1.0 as before,
+because a customer whose rights to new releases end at a minor needs the docs of the release they can restore; the
+newest patch of each minor is shown. Each group ends with a Changelog page: the minor's releases from the tag's
+`CHANGELOG.md`, with a link to the rest (`scripts/docs-changelog.mjs`); tenantry-pro-docs has Pro's from 0.5.0.
 Each sync fetches the listed tags again, so moving a tenantry-pro-docs tag to corrected docs publishes them at the next
 deployment. A release build fails when a link in the docs reaches no page or heading the sync wrote, or is
 still relative after rewriting (`scripts/docs-links.mjs`).
@@ -175,10 +176,12 @@ workflow publishes the packages; Pro's also publishes its docs to tenantry-pro-d
 `docs-versions` workflow runs hourly, at 23 minutes past, and reads both repositories' tags
 (`scripts/docs-versions-update.mjs`). A Core tag counts once NuGet lists its version (Tenantry.Core's registration),
 since Core is tagged before its release runs; pre-release tags never count. To take a Core release back, unlist it on
-NuGet and the next run drops it; a Pro release is dropped by deleting its tag from tenantry-pro-docs. A line is listed
-once both Core and Pro have a release in it, with the newest release of each, so a new minor released by Core first
-stays off the site until Pro's release, and the previous line is shown meanwhile. Only the newest line is shown until a
-release has been sold (`FIRST_SOLD_RELEASE` in `scripts/docs-versions.mjs`).
+NuGet and the next run drops it; a Pro release is dropped by deleting its tag from tenantry-pro-docs. A minor is listed
+once both Core and Pro have a release in it, with the newest patch of each, so a new minor released by Core first
+stays off the site until Pro's release, and the previous minor is shown meanwhile. Only the newest minor is shown until
+a release has been sold. When checkout opens, `FIRST_SOLD_RELEASE` in `scripts/docs-versions.mjs` is set to Core's and
+Pro's newest published releases (their patches can differ, such as `{ core: 'v0.7.3', pro: 'v0.7.1' }`); from then on
+every minor from that one is shown, and each product's changelog starts at its own release sold.
 
 The same run reads what the site says about the newest release from the release itself and writes it to
 [`newest-release.json`](newest-release.json): the .NET versions Core's package targets and the number of sample

@@ -9,7 +9,7 @@ import { existsSync, rmSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { hasReleaseSection } from './docs-changelog.mjs';
-import { compareLines, lineOf } from './docs-versions.mjs';
+import { compareMinors, minorOf } from './docs-versions.mjs';
 
 export const REPOSITORIES = {
   core: 'https://github.com/tenantry-org/tenantry-core',
@@ -17,7 +17,7 @@ export const REPOSITORIES = {
 };
 
 /**
- * The first release line whose tags have a CHANGELOG.md: every Core tag has one at the repository's root, and Pro's
+ * The first minor whose tags have a CHANGELOG.md: every Core tag has one at the repository's root, and Pro's
  * releases publish theirs to tenantry-pro-docs from 0.5.0 (its scripts/publish-docs.sh).
  */
 export const CHANGELOG_SINCE = { core: '0.1', pro: '0.5' };
@@ -117,7 +117,7 @@ export async function fetchJson(url, fetchUrl = fetch) {
  */
 export function docsProblem(dir, group, tag) {
   if (foldersAt(dir, tag, '').every((folder) => folder !== 'docs')) return `${tag} has no docs folder`;
-  if (compareLines(lineOf(tag), CHANGELOG_SINCE[group]) < 0) return null;
+  if (compareMinors(minorOf(tag), CHANGELOG_SINCE[group]) < 0) return null;
   const changelog = fileAt(dir, tag, 'CHANGELOG.md');
   if (changelog === null) return `${tag} has no CHANGELOG.md`;
   if (!hasReleaseSection(changelog, tag)) return `${tag}'s CHANGELOG.md has no section for it`;
