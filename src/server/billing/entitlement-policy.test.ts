@@ -444,6 +444,92 @@ describe('edge cases', () => {
     expect(entitlement.grants).toEqual([expect.objectContaining({ status: 'withdrawn', withdrawnReason: 'refund' })]);
   });
 
+  describe('an annual term partially refunded or credited', () => {
+    // Monthly from January 2027, annual from 1 July 2027, changed back to monthly on 1 October 2027: Paddle credits
+    // the unserved part of the annual term, and monthly payments resume from the change.
+    const before = monthly('2027-01-01T00:00:00Z', 6);
+    const term = annual('2027-07-01T00:00:00Z');
+    const after = monthly('2027-10-01T00:00:00Z', 6);
+    const credit = adjustment(term, 'credit', '2027-10-01T00:00:00Z', { type: 'partial', itemTypes: ['proration'] });
+
+    it('counts the term up to the credit, so the run continues through the change', () => {
+      const withCredit = compute({
+        payments: [...before, term, ...after],
+        adjustments: [credit],
+        now: '2028-03-15T00:00:00Z',
+      });
+
+      expect(vested(withCredit)).toBe('2028-03-01T00:00:00.000Z');
+      expect(withCredit.run).toMatchObject({ startedAt: date('2027-01-01T00:00:00Z'), monthsPaid: 15 });
+      expect(withCredit.grants).toContainEqual(
+        expect.objectContaining({ kind: 'annual_term', status: 'withdrawn', withdrawnReason: 'refund' }),
+      );
+    });
+
+    it('vests as the same history would without the credit, apart from the annual grant', () => {
+      const withCredit = compute({
+        payments: [...before, term, ...after],
+        adjustments: [credit],
+        now: '2028-03-15T00:00:00Z',
+      });
+      const withoutCredit = compute({ payments: [...before, term, ...after], now: '2028-03-15T00:00:00Z' });
+
+      expect(vested(withoutCredit)).toBe('2028-03-01T00:00:00.000Z');
+      expect(vested(withCredit)).toBe(vested(withoutCredit));
+    });
+
+    it('counts a partially refunded term up to the refund, then breaks the run where nothing follows it', () => {
+      const refund = adjustment(term, 'refund', '2027-11-01T00:00:00Z', { type: 'partial', itemTypes: ['partial'] });
+
+      const entitlement = compute({
+        payments: [...before, term],
+        adjustments: [refund],
+        now: '2027-12-01T00:00:00Z',
+        endedAt: '2027-11-01T00:00:00Z',
+      });
+
+      expect(entitlement.vestedThrough).toBeNull();
+      expect(entitlement.grants).toEqual([expect.objectContaining({ kind: 'annual_term', status: 'withdrawn' })]);
+      // Ten months served (January to November) remain counted towards a run that a return within the hour continues.
+      const resumed = compute({
+        payments: [...before, term, ...monthly('2027-11-01T00:00:00Z', 2)],
+        adjustments: [refund],
+        now: '2028-01-01T00:00:00Z',
+      });
+      expect(vested(resumed)).toBe('2028-01-01T00:00:00.000Z');
+    });
+
+    it('withdraws the grant for a seat-reduction credit mid-term, counting the term only up to the credit', () => {
+      // An annual term whose quantity is reduced on 1 April 2027: Paddle credits the unused seats, and the term runs
+      // on to January 2028 with no new payment. Only the term up to the credit is a paid period.
+      const seats = annual('2027-01-01T00:00:00Z');
+      const seatCredit = adjustment(seats, 'credit', '2027-04-01T00:00:00Z', {
+        type: 'partial',
+        itemTypes: ['proration'],
+      });
+
+      const entitlement = compute({ payments: [seats], adjustments: [seatCredit], now: '2027-06-01T00:00:00Z' });
+
+      expect(entitlement.grants).toEqual([expect.objectContaining({ status: 'withdrawn', withdrawnReason: 'refund' })]);
+      expect(entitlement.run).toBeNull();
+      expect(entitlement.paymentStatuses[seats.transactionId]).toBe('partially_refunded');
+    });
+
+    it('still drops a term refunded in full or charged back', () => {
+      for (const action of ['refund', 'chargeback']) {
+        const full = adjustment(term, action, '2027-10-01T00:00:00Z');
+        const entitlement = compute({
+          payments: [...before, term, ...after],
+          adjustments: [full],
+          now: '2028-03-15T00:00:00Z',
+        });
+
+        expect(entitlement.vestedThrough).toBeNull();
+        expect(entitlement.run).toMatchObject({ startedAt: date('2027-10-01T00:00:00Z') });
+      }
+    });
+  });
+
   it('breaks the run at a pause: the period ends when paused, and the resumed one starts later', () => {
     const before = monthly('2027-01-01T00:00:00Z', 6, { subscriptionId: 'sub_1' });
     // Paused on 15 June, mid-period; resumed on 1 August as a new subscription period (recorded here under another id,

@@ -43,8 +43,8 @@ import {
  * - An annual payment grants its term at once, conditionally (`annual_term`): confirmed when the term has been served,
  *   withdrawn by a refund, credit or chargeback of that payment approved before then, or if the subscription ended
  *   before the term did.
- * - A monthly period stops counting when a full refund or a chargeback of it is approved; a partial refund leaves it.
- *   An annual period stops counting on any refund, credit (not tax-only) or chargeback.
+ * - A period stops counting when a full refund or a chargeback of it is approved. A partial refund or credit leaves a
+ *   monthly period counting; an annual term then counts only until that adjustment, and its grant is withdrawn.
  * - Each vesting is decided with the adjustments approved by the moment it was confirmed, so a later refund does not
  *   undo it. A chargeback does while `chargebackUndoesConfirmedVesting` is on (the owner's open question; see
  *   ENTITLEMENT_RULES).
@@ -360,10 +360,30 @@ class Ledger {
 
   private periodsCountingAt(at: Date, chargebackAt: Date): Period[] {
     return this.input.payments
-      .filter((payment) => counts(payment, this.statusAt(payment, at, chargebackAt)))
-      .map((payment) => this.period(payment))
-      .filter((period) => period.endsAt > period.startsAt)
+      .flatMap((payment) => {
+        const period = this.countedPeriod(payment, this.statusAt(payment, at, chargebackAt), at);
+        return period && period.endsAt > period.startsAt ? [period] : [];
+      })
       .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.endsAt.getTime() - b.endsAt.getTime());
+  }
+
+  // The part of a payment's period that is a paid period at `at`, in this status, or null if none is. It charged
+  // something; a monthly period counts whole unless refunded in full or charged back; an annual term refunded in full
+  // or charged back does not count, and one partially refunded or credited counts until the first such adjustment
+  // (its grant is withdrawn all the same: annualTerms).
+  private countedPeriod(payment: Payment, status: PaymentStatus, at: Date): Period | null {
+    if (payment.total <= 0 || status === 'refunded' || status === 'charged_back') return null;
+
+    const period = this.period(payment);
+    if (status !== 'partially_refunded' || !isAnnualTerm(payment.billingInterval, payment.billingFrequency)) {
+      return period;
+    }
+
+    const partialAt = (this.adjustments.get(payment.transactionId) ?? [])
+      .filter((adjustment) => effectOf(adjustment) === 'partial' && this.inEffect(adjustment, at))
+      .map((adjustment) => adjustment.approvedAt!.getTime());
+    const cut = Math.min(...partialAt);
+    return cut < period.endsAt.getTime() ? { ...period, endsAt: new Date(cut) } : period;
   }
 
   private period(payment: Payment): Period {
@@ -372,14 +392,17 @@ class Ledger {
     return { payment, startsAt: payment.periodStartsAt, endsAt };
   }
 
-  // Every instant a run could be confirmed at: the end of each period, and 12 months after each period's start (the
-  // only instants a run can start at).
+  // Every instant a run could be confirmed at: the end of each period (or where an adjustment cuts one short), and 12
+  // months after each period's start (the only instants a run can start at).
   private confirmationInstants(): Date[] {
     const instants = new Set<number>();
     for (const payment of this.input.payments) {
       const period = this.period(payment);
       instants.add(period.endsAt.getTime());
       instants.add(addMonths(period.startsAt, 12).getTime());
+    }
+    for (const adjustment of this.input.adjustments) {
+      if (adjustment.approvedAt) instants.add(adjustment.approvedAt.getTime());
     }
     return [...instants].sort((a, b) => a - b).map((time) => new Date(time));
   }
@@ -418,14 +441,6 @@ function effectOf(adjustment: PaymentAdjustment): Effect | null {
     default:
       return null;
   }
-}
-
-// Whether a payment in this status is a paid period: it charged something, a monthly period is not refunded in full or
-// charged back, and an annual term is not adjusted at all.
-function counts(payment: Payment, status: PaymentStatus): boolean {
-  if (payment.total <= 0) return false;
-  if (isAnnualTerm(payment.billingInterval, payment.billingFrequency)) return status === 'paid';
-  return status === 'paid' || status === 'partially_refunded';
 }
 
 // When the run reaches 12 months, or null if its periods do not get there: 12 calendar months after its start, or the
