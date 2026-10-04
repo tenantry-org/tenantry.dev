@@ -134,6 +134,22 @@ printf '%s' "$key" | shasum -a 256 | cut -d' ' -f1  # FEED_PUBLISH_KEY_SHA256 fo
 `FEED_PUBLISH_KEY="$key" scripts/feed-publish.sh push https://sandbox.tenantry.dev ./artifacts` pushes a folder of
 packages oldest version first, and `scripts/feed-publish.sh list https://sandbox.tenantry.dev` prints the listing.
 
+## Package feed: tokens, access and testing
+
+A customer creates and revokes feed tokens on the Access page (`src/app/dashboard/pro/actions.ts`); a token is shown
+once, only its SHA-256 is stored, and a customer holds at most 10. The feed, the Access page and the Billing page take
+what a customer may use from the same rules (`entitlement-policy.ts`: `currentAccess`, `canRestore`, `mayUseRelease`),
+so a grace period that has ended stops the feed serving every release at the moment the pages stop saying it does.
+Unauthenticated and bad-credential requests are limited by a Vercel Firewall rate limit rule on `/feed/v3`, set up in
+the dashboard (it is configuration, not code); a credential that is not shaped like a feed token is refused without a
+database query.
+
+`scripts/feed-e2e.sh` (`pnpm test:feed-e2e`) runs the whole journey against a local stack: publishing, creating tokens
+through the Access page's actions, restoring as a subscriber, a lapsed customer with vested releases and one without,
+revoking a token, and vesting through `scripts/rehearse.mjs` and reconcile. `scripts/rehearse.mjs` produces, in the
+sandbox only, the states that take a year to reach (vested, an annual term, a refund, a chargeback, an operator grant)
+and undoes them.
+
 ## Docs pipeline
 
 `/docs` is rendered by Fumadocs from Markdown under `content/docs/` (gitignored, generated). `pnpm sync:docs`
