@@ -21,7 +21,7 @@ const NOTES = [
   },
   {
     title: 'A database per tenant',
-    text: 'Tenantry Core’s AddDbContextPerTenantDatabase, pooled or not, connects each context, or each pool lease, to the current tenant’s database when it is created. Before every connection open and command it checks that the same tenant is still current, and throws if not. Finbuckle.MultiTenant’s docs have the context read the tenant’s connection string in OnConfiguring, with the tenant taken in its constructor and the context registered with AddDbContext; the context keeps that database. It documents no pooled path, and an open issue (#375) has the maintainer recommending against AddDbContextPool. ABP registers contexts with AddAbpDbContext and, in a unit of work, resolves the current tenant’s connection string each time a context is requested. Neither project checks, when a connection opens or a command runs, that the context’s database belongs to the tenant current then. ABP provides a base class for a handler you write that migrates a tenant’s database when the tenant is created; managing tenants’ connection strings from a UI needs the commercial SaaS module. Tenantry Pro creates and migrates tenant databases.',
+    text: 'Tenantry Core’s AddDbContextPerTenantDatabase, pooled or not, connects each context, or each pool lease, to the database of the tenant current when it is created. Before every connection EF Core opens and every command it runs, it checks that the same tenant is still current, and throws if not. Finbuckle.MultiTenant’s docs have the context read the tenant’s connection string in OnConfiguring, with the tenant taken in its constructor and the context registered with AddDbContext; the context keeps that database. It documents no pooled path, and an open issue (#375) has the maintainer recommending against AddDbContextPool. ABP registers contexts with AddAbpDbContext and, in a unit of work, resolves the current tenant’s connection string each time a context is requested. Neither Finbuckle.MultiTenant's EF Core package nor ABP's EF Core integration checks, when a connection opens or a command runs, that the context’s database belongs to the tenant current then. ABP provides a base class for a handler you write that migrates a tenant’s database when the tenant is created; managing tenants’ connection strings from a UI needs the commercial SaaS module. Tenantry Pro creates and migrates tenant databases.',
   },
   {
     title: 'Options and authentication',
@@ -44,7 +44,7 @@ export default function ComparePage() {
       <main className={'mx-auto max-w-6xl px-4 py-16 md:px-8 md:py-24'}>
         <h1 className={'text-4xl font-bold tracking-tight text-balance sm:text-5xl'}>How Tenantry compares</h1>
         <p className={'mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground'}>
-          Tenantry beside the usual alternatives: your own query filters, Finbuckle.MultiTenant and ABP.
+          Tenantry beside three alternatives: your own query filters, Finbuckle.MultiTenant and ABP.
         </p>
         <div className={'mt-10'}>
           <ComparisonTable full={true} />

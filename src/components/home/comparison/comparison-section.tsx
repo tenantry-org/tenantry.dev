@@ -8,8 +8,8 @@ export function ComparisonSection() {
       <div className={'mx-auto max-w-6xl px-4 py-20 md:px-8 md:py-24'}>
         <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>How Tenantry compares</h2>
         <p className={'mt-4 max-w-2xl text-lg text-muted-foreground'}>
-          The usual alternatives are your own query filters, Finbuckle.MultiTenant and ABP. The full comparison also
-          lists what Tenantry does not do.
+          Tenantry beside your own query filters, Finbuckle.MultiTenant and ABP. The full comparison also lists what
+          Tenantry does not do.
         </p>
         <div className={'mt-10'}>
           <ComparisonTable />

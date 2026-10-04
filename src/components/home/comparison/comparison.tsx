@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
 // Checked in October 2026 against Finbuckle.MultiTenant 10.1.4 and ABP 10.6.1 (the documents in SOURCES, and their
-// source) and against Tenantry Core 0.6 and Pro 0.6. Check them again when any of them releases a major version. A row whose Finbuckle or
-// ABP cell the sources do not support is left out, not filled in.
+// source) and against Tenantry Core 0.6 and Pro 0.6. Check them again when any of them releases a major version. A row
+// whose Finbuckle or ABP cell the sources do not support is left out, not filled in.
 const PROJECTS = ['Your own query filters', 'Finbuckle.MultiTenant', 'ABP', 'Tenantry'] as const;
 
 const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]; fullOnly?: boolean }[] = [
@@ -114,7 +114,8 @@ const SOURCES: { project: string; links: { label: string; href: string }[] }[] =
 ];
 
 /**
- * Tenantry beside the usual alternatives, in the facts each project documents, with links to those documents. The home page shows the main rows; /compare passes `full` for every row.
+ * Tenantry beside its alternatives, in the facts each project documents, with links to those documents. The home page
+ * shows the main rows; /compare passes `full` for every row.
  */
 export function ComparisonTable({ full = false }: Readonly<{ full?: boolean }>) {
   const rows = full ? ROWS : ROWS.filter((row) => !row.fullOnly);
