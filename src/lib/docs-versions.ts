@@ -52,3 +52,14 @@ export function slugsInVersion(slugs: string[], version: DocsVersion): string[] 
   const within = slugsWithinVersion(slugs);
   return version.latest ? within : [`v${version.version}`, ...within];
 }
+
+/**
+ * Whether the newest docs are of `release` or a later release of the group (`core` or `pro`): copy that describes a
+ * feature from the release that adds it follows the release, as the docs do.
+ */
+export function publishedSince(group: 'core' | 'pro', release: string): boolean {
+  const parts = (tag: string) => tag.slice(1).split('.').map(Number);
+  const [published, wanted] = [parts(latestDocsVersion[group]), parts(release)];
+  const difference = published.map((part, index) => part - wanted[index]).find((part) => part !== 0) ?? 0;
+  return difference >= 0;
+}

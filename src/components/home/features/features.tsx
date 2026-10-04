@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowRight, Check, Layers, ServerCog, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { LogoMark } from '@/components/brand/logo';
 import { ProOffer } from '@/constants/pro-offer';
+import { publishedSince } from '@/lib/docs-versions';
 import { cn } from '@/lib/utils';
 
 // From Tenantry Core's README ("Why Tenantry?" and "Tenantry and Tenantry.Pro"), for the release the docs show.
@@ -24,7 +25,7 @@ const PRINCIPLES = [
   {
     icon: ServerCog,
     title: 'HTTP and beyond',
-    text: 'ASP.NET Core middleware and access validation, and the same isolation in workers, console and desktop apps. .NET 10, and .NET 8 and 9 until November 2027; Native AOT for every package except Tenantry.EfCore.',
+    text: 'ASP.NET Core middleware and access validation, and the same isolation in workers, console and desktop apps. .NET 10, and .NET 8 and 9 until November 2027; Native AOT for every Core package except Tenantry.EfCore.',
   },
 ];
 
@@ -37,7 +38,8 @@ const CORE = [
   'HybridCache and IDistributedCache entries (Tenantry.Caching) and cached responses kept per tenant',
   'ITenantInvalidator, which clears what Tenantry keeps for a tenant when the tenant changes',
   'The current tenant sent with HttpClient and gRPC calls, and read back only from callers you trust (Tenantry.Http, Tenantry.AspNetCore)',
-  'Log event ids to alert on, a tenant.id tag on traces, and request metrics per tenant',
+  // Core 0.6.1 tags ASP.NET Core's request metric with the tenant (tenant.TagRequestMetrics()).
+  `Log event ids to alert on, a tenant.id tag on traces, and ${publishedSince('core', 'v0.6.1') ? 'request metrics per tenant' : 'a count of how requests were resolved'}`,
   'A model check that refuses mappings it cannot isolate, and a list of unisolated entity types for your tests',
 ];
 

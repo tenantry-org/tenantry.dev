@@ -3,6 +3,7 @@ import {
   docsVersionOf,
   docsVersionOfPath,
   docsVersions,
+  publishedSince,
   slugsInVersion,
   slugsOutsidePublishedVersions,
   slugsWithinVersion,
@@ -62,5 +63,13 @@ describe('docs versions', () => {
     expect(slugsOutsidePublishedVersions(['v0.4', 'pro', 'licensing'])).toBeNull();
     expect(slugsOutsidePublishedVersions(['core', 'installation'])).toBeNull();
     expect(slugsOutsidePublishedVersions([])).toBeNull();
+  });
+
+  it('says whether the newest docs are of a release or a later one', () => {
+    expect(publishedSince('core', 'v0.5.0')).toBe(true);
+    expect(publishedSince('core', 'v0.4.9')).toBe(true);
+    expect(publishedSince('core', 'v0.5.1')).toBe(false);
+    expect(publishedSince('pro', 'v0.5.1')).toBe(true);
+    expect(publishedSince('pro', 'v0.10.0')).toBe(false);
   });
 });
