@@ -20,7 +20,7 @@ const NOTES = [
   },
   {
     title: 'A database per tenant',
-    text: 'Tenantry Core connects each tenant’s context to its own database, pooled contexts included (AddDbContextPerTenantDatabase with pooled: true): a pooled context reads the tenant each time it is used. Finbuckle’s docs recommend setting a context’s tenant when it is created and not changing it. ABP migrates a new tenant’s database with a framework event handler the application configures, and its commercial SaaS module manages tenants’ connection strings. Tenantry Pro creates and migrates tenant databases.',
+    text: 'Tenantry Core connects each tenant’s context to its own database, pooled contexts included (AddDbContextPerTenantDatabase with pooled: true): a pooled context reads the tenant each time it is used. Finbuckle’s docs recommend setting a context’s tenant when it is created and not changing it. ABP migrates a new tenant’s database with a framework event handler the application configures, and its commercial SaaS module manages tenants’ connection strings from a UI. Tenantry Pro creates and migrates tenant databases.',
   },
   {
     title: 'Options and authentication',

@@ -20,7 +20,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
     cells: [
       'Whatever your SaveChanges override checks',
       'Throws by default; TenantMismatchMode can ignore or overwrite it instead',
-      'Not documented; its docs advise setting TenantId only in the entity’s constructor',
+      'Saved with that TenantId: its docs say changing it moves the entity to that tenant, and advise setting it only in the entity’s constructor',
       'Throws, and the stored TenantId is in every UPDATE and DELETE, so a forged key matches no row',
     ],
   },
@@ -34,7 +34,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
     cells: [
       'You write it',
       'No',
-      'A framework event handler, if the application configures it, migrates a new tenant’s database; managing tenants’ connection strings needs the commercial SaaS module',
+      'A framework event handler, if the application configures it, migrates a new tenant’s database; managing tenants’ connection strings from a UI needs the commercial SaaS module',
       'Yes, in Pro',
     ],
   },
