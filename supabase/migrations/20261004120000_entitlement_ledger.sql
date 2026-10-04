@@ -53,6 +53,17 @@ from public.subscriptions s2
 left join public.entitlements e on e.subscription_id = s2.subscription_id
 where s2.subscription_id = s.subscription_id;
 
+-- When a cancelled or paused subscription ended, as near as the old schema knows it: the cancellation or pause it had
+-- scheduled, if that is still recorded, else its last event (the one that ended it, or a later one). A period is
+-- counted only until then, so a subscription cancelled at once does not count as having served its whole period.
+update public.subscriptions s
+set ended_at = coalesce(
+      case when s.scheduled_change_action in ('cancel', 'pause') then s.scheduled_change_at end,
+      s.last_event_at,
+      s.updated_at
+    )
+where s.status in ('canceled', 'paused');
+
 alter table public.subscriptions
   add constraint subscriptions_grace_started_check check (grace_started_at is null or status = 'past_due');
 

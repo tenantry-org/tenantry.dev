@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path to public, extensions;
 
-select plan(9);
+select plan(10);
 
 select results_eq(
   $$select subscription_id, current_period_ends_at, grace_started_at from public.subscriptions order by subscription_id$$,
@@ -12,7 +12,9 @@ select results_eq(
     ('sub_expired', '2026-09-01 00:00+00', '2026-08-01 04:00+00'),
     ('sub_grace', '2026-11-01 00:00+00', '2026-10-01 00:05+00'),
     ('sub_lapsed', null, null),
-    ('sub_no_entitlement', null, '2026-09-15 00:00+00')$$,
+    ('sub_no_entitlement', null, '2026-09-15 00:00+00'),
+    ('sub_paused', null, null),
+    ('sub_scheduled', null, null)$$,
   'each subscription takes its entitlement''s period end and grace start');
 select ok(
   (select grace_started_at + interval '30 days' <= '2026-08-31 04:00+00'
@@ -21,6 +23,18 @@ select ok(
 select is(
   (select count(*)::int from public.subscriptions where status = 'past_due' and grace_started_at is null), 0,
   'no past-due subscription is left without a grace start');
+
+select results_eq(
+  $$select subscription_id, ended_at from public.subscriptions order by subscription_id$$,
+  $$values
+    ('sub_active'::text, null::timestamptz),
+    ('sub_expired', null),
+    ('sub_grace', null),
+    ('sub_lapsed', '2026-09-01 00:00+00'),
+    ('sub_no_entitlement', null),
+    ('sub_paused', '2026-09-10 00:00+00'),
+    ('sub_scheduled', '2026-09-20 00:00+00')$$,
+  'a cancelled or paused subscription ended at its scheduled change, if recorded, or at its last event; others run');
 
 select results_eq(
   $$select customer_id, access_status, github_state, github_invited_at from public.active_subscriptions

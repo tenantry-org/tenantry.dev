@@ -11,7 +11,9 @@ insert into public.customers (customer_id, email) values
   ('ctm_grace', 'grace@example.com'),
   ('ctm_expired', 'expired@example.com'),
   ('ctm_no_entitlement', 'no-entitlement@example.com'),
-  ('ctm_lapsed', 'lapsed@example.com');
+  ('ctm_lapsed', 'lapsed@example.com'),
+  ('ctm_paused', 'paused@example.com'),
+  ('ctm_scheduled', 'scheduled@example.com');
 
 insert into public.subscriptions (subscription_id, customer_id, status, product_id, last_event_at) values
   ('sub_active', 'ctm_active', 'active', 'pro_01', '2026-10-01 00:00+00'),
@@ -19,6 +21,12 @@ insert into public.subscriptions (subscription_id, customer_id, status, product_
   ('sub_expired', 'ctm_expired', 'past_due', 'pro_01', '2026-08-01 00:05+00'),
   ('sub_no_entitlement', 'ctm_no_entitlement', 'past_due', 'pro_01', '2026-09-15 00:00+00'),
   ('sub_lapsed', 'ctm_lapsed', 'canceled', 'pro_01', '2026-09-01 00:00+00');
+-- Paused, and cancelled with the scheduled change it was cancelled by still recorded, with later events after it.
+insert into public.subscriptions (
+  subscription_id, customer_id, status, product_id, scheduled_change_at, scheduled_change_action, last_event_at
+) values
+  ('sub_paused', 'ctm_paused', 'paused', 'pro_01', null, null, '2026-09-10 00:00+00'),
+  ('sub_scheduled', 'ctm_scheduled', 'canceled', 'pro_01', '2026-09-20 00:00+00', 'cancel', '2026-09-25 00:00+00');
 
 insert into public.entitlements (customer_id, subscription_id, status, current_period_ends_at, grace_started_at, revoked_at)
 values
