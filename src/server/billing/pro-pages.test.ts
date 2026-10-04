@@ -19,9 +19,7 @@ const { paddle } = testServerConfig();
 
 const BUYER = { email: 'buyer@example.com', email_confirmed_at: '2026-09-01T00:00:00Z' };
 
-const access = (status: string, githubState = 'active', githubInvitedAt: string | null = null) => ({
-  single: { access_status: status, github_state: githubState, github_invited_at: githubInvitedAt },
-});
+const access = (status: string) => ({ single: { access_status: status } });
 
 // The tables a read model read, besides the customer lookup.
 const tablesRead = () => new Set(state.calls.map(({ table }) => table).filter((table) => table !== 'customers'));
@@ -35,7 +33,6 @@ beforeEach(() => {
     customers: { single: { customer_id: 'ctm_1' } },
     active_subscriptions: access('active'),
     licences: { single: { jwt: 'licence.key' } },
-    github_links: { single: { github_login: 'octocat' } },
   };
 });
 
@@ -62,21 +59,9 @@ describe.each([
 });
 
 describe('getAccessView', () => {
-  it('shows a customer with Pro their GitHub connection and licence key, and reads nothing else', async () => {
-    await expect(getAccessView()).resolves.toEqual({
-      noSubscription: false,
-      github: { login: 'octocat', state: 'active', invitationExpiresAt: null },
-      licenceKey: 'licence.key',
-    });
-    expect(tablesRead()).toEqual(new Set(['active_subscriptions', 'licences', 'github_links']));
-  });
-
-  it('says when a pending org invitation lapses', async () => {
-    state.tables.active_subscriptions = access('active', 'invited', '2026-10-18T09:00:00Z');
-
-    await expect(getAccessView()).resolves.toMatchObject({
-      github: { state: 'invited', invitationExpiresAt: '2026-10-25T09:00:00.000Z' },
-    });
+  it('shows a customer with Pro their licence key, and reads nothing else', async () => {
+    await expect(getAccessView()).resolves.toEqual({ noSubscription: false, licenceKey: 'licence.key' });
+    expect(tablesRead()).toEqual(new Set(['active_subscriptions', 'licences']));
   });
 
   it('shows a customer in grace their access', async () => {
@@ -107,9 +92,9 @@ describe('getAccessView', () => {
 });
 
 describe('getInstallView', () => {
-  it('names the GitHub account to create the token from, and reads no licence', async () => {
-    await expect(getInstallView()).resolves.toEqual({ noSubscription: false, githubLogin: 'octocat' });
-    expect(tablesRead()).toEqual(new Set(['active_subscriptions', 'github_links']));
+  it('shows a customer with Pro the install steps, and reads no licence', async () => {
+    await expect(getInstallView()).resolves.toEqual({ noSubscription: false });
+    expect(tablesRead()).toEqual(new Set(['active_subscriptions']));
   });
 
   it('shows a former customer no install steps', async () => {

@@ -1,40 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { AccessView } from '@/server/billing/pro-pages';
-import { LINK_ERROR_CODES, type LinkErrorCode } from '@/lib/link-errors';
 import { AccessPanel } from './access-panel';
 
-vi.mock('@/app/dashboard/pro/actions', () => ({ connectGithub: vi.fn(), switchGithubAccount: vi.fn() }));
-
-const view: AccessView = {
-  noSubscription: false,
-  github: { login: 'octocat', state: 'invited', invitationExpiresAt: '2026-10-25T09:00:00.000Z' },
-  licenceKey: 'licence.key',
-};
-
-const render = (linkError?: LinkErrorCode) =>
-  renderToStaticMarkup(<AccessPanel view={view} githubOrg={'tenantry-customers'} linkError={linkError} />);
+const view: AccessView = { noSubscription: false, licenceKey: 'licence.key' };
 
 describe('AccessPanel', () => {
-  it('shows the GitHub connection and the licence key', () => {
-    const html = render();
+  it('shows the licence key, and nothing about GitHub', () => {
+    const html = renderToStaticMarkup(<AccessPanel view={view} />);
 
-    expect(html).toContain('@octocat');
-    expect(html).toContain('it lapses on 25 October 2026');
     expect(html).toContain('licence.key');
-    expect(html).not.toContain('role="alert"');
-  });
-
-  it.each(LINK_ERROR_CODES)('explains why connecting GitHub failed: %s', (code) => {
-    expect(render(code)).toMatch(/role="alert"[^>]*>[^<]+/);
+    expect(html).not.toMatch(/github/i);
   });
 
   it('points a former customer to billing', () => {
     const html = renderToStaticMarkup(
-      <AccessPanel
-        view={{ noSubscription: true, customer: true, accountEmail: null, licenceKey: null }}
-        githubOrg={'tenantry-customers'}
-      />,
+      <AccessPanel view={{ noSubscription: true, customer: true, accountEmail: null, licenceKey: null }} />,
     );
 
     expect(html).toContain('No active Tenantry Pro subscription');
@@ -46,12 +27,10 @@ describe('AccessPanel', () => {
     const html = renderToStaticMarkup(
       <AccessPanel
         view={{ noSubscription: true, customer: true, accountEmail: null, licenceKey: 'kept.licence.key' }}
-        githubOrg={'tenantry-customers'}
       />,
     );
 
     expect(html).toContain('No active Tenantry Pro subscription');
     expect(html).toContain('kept.licence.key');
-    expect(html).not.toContain('@octocat');
   });
 });

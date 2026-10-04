@@ -46,23 +46,21 @@ describe('applyPaddleEvent', () => {
     deps = fakeBillingDeps();
     memory.reset();
     memory.state.emails.set('ctm_01', 'buyer@example.com');
-    memory.linkGithub('ctm_01', 'octocat');
   });
 
   it('keeps a cancelled subscription revoked when an older update is delivered after the cancellation', async () => {
     await applyPaddleEvent(delivered(created), deps);
     await applyPaddleEvent(delivered(cancelled), deps);
 
-    expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
+    expect(emailSubjects()).toEqual([WELCOME, ENDED]);
     vi.clearAllMocks();
 
     await applyPaddleEvent(delivered(earlierUpdate), deps);
 
     expect(memory.state.subscriptions.get('sub_01')?.status).toBe('canceled');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
     expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
-    expect(deps.github.grantAccess).not.toHaveBeenCalled();
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
@@ -80,8 +78,7 @@ describe('applyPaddleEvent', () => {
     );
 
     expect(memory.state.subscriptions.get('sub_01')).toBeDefined();
-    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
-    expect(deps.github.grantAccess).not.toHaveBeenCalled();
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
@@ -97,8 +94,7 @@ describe('applyPaddleEvent', () => {
     });
     await applyPaddleEvent(delivered(movedAway), deps);
 
-    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
-    expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
     expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(emailSubjects()).toEqual([ENDED]);
     vi.clearAllMocks();
@@ -117,8 +113,7 @@ describe('applyPaddleEvent', () => {
       deps,
     );
 
-    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
-    expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
@@ -151,8 +146,7 @@ describe('applyPaddleEvent', () => {
     );
 
     expect(memory.state.subscriptions.get('sub_01')?.productId).toBe('pro_02');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('active');
-    expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+    expect(memory.state.access.get('ctm_01')).toBe('active');
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
@@ -191,8 +185,6 @@ describe('applyPaddleEvent', () => {
     await applyPaddleEvent(delivered(cancelled), deps);
     await applyPaddleEvent(delivered(cancelled), deps);
 
-    expect(deps.github.grantAccess).toHaveBeenCalledOnce();
-    expect(deps.github.revokeAccess).toHaveBeenCalledOnce();
     expect(memory.state.licences).toHaveLength(1);
     expect(emailSubjects()).toEqual([WELCOME, ENDED]);
   });
@@ -219,17 +211,16 @@ describe('applyPaddleEvent', () => {
 
   it('applies the same events in order: access granted, then ended', async () => {
     await applyPaddleEvent(delivered(earlierUpdate), deps);
-    expect(deps.github.grantAccess).toHaveBeenCalledWith('octocat');
+    expect(memory.state.access.get('ctm_01')).toBe('active');
     expect(memory.licences('ctm_01')).toHaveLength(1);
 
     await applyPaddleEvent(delivered(cancelled), deps);
-    expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
     expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(emailSubjects()).toEqual([WELCOME, ENDED]);
   });
 
-  it('keeps a customer with two subscriptions in the team, with a licence, when one is cancelled', async () => {
+  it('keeps access for a customer with two subscriptions, with a licence, when one is cancelled', async () => {
     const second = { subscriptionId: 'sub_02', periodEndsAt: '2026-10-15T00:00:00Z' };
     await applyPaddleEvent(delivered(created), deps);
     await applyPaddleEvent(
@@ -246,19 +237,13 @@ describe('applyPaddleEvent', () => {
     );
 
     // Access started once, with the first subscription.
-    expect(deps.github.grantAccess).toHaveBeenCalledOnce();
     expect(emailSubjects()).toEqual([WELCOME]);
     vi.clearAllMocks();
 
     await applyPaddleEvent(delivered(cancelled), deps);
 
     expect(memory.state.subscriptions.get('sub_01')?.status).toBe('canceled');
-    expect(memory.state.access.get('ctm_01')).toEqual({
-      status: 'active',
-      githubState: 'active',
-      githubInvitedAt: null,
-    });
-    expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+    expect(memory.state.access.get('ctm_01')).toBe('active');
     expect(deps.sendEmail).not.toHaveBeenCalled();
     expect(memory.licences('ctm_01')).toHaveLength(1);
 
@@ -276,12 +261,7 @@ describe('applyPaddleEvent', () => {
       deps,
     );
 
-    expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_01')).toEqual({
-      status: 'lapsed',
-      githubState: 'none',
-      githubInvitedAt: null,
-    });
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
     expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(emailSubjects()).toEqual([ENDED]);
   });
@@ -291,7 +271,7 @@ describe('applyPaddleEvent', () => {
 
     await expect(applyPaddleEvent(delivered(earlierUpdate), deps)).rejects.toMatchObject({ code: '23503' });
     expect(memory.state.subscriptions.size).toBe(0);
-    expect(deps.github.grantAccess).not.toHaveBeenCalled();
+    expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
   describe('payment failure', () => {
@@ -326,7 +306,7 @@ describe('applyPaddleEvent', () => {
         status: 'past_due',
         graceStartedAt: '2026-10-01T00:05:00Z',
       });
-      expect(memory.state.access.get('ctm_01')?.status).toBe('grace');
+      expect(memory.state.access.get('ctm_01')).toBe('grace');
       expect(memory.licences('ctm_01')).toHaveLength(1);
 
       vi.setSystemTime(new Date('2026-10-08T00:10:00Z'));
@@ -345,8 +325,7 @@ describe('applyPaddleEvent', () => {
         deps,
       );
       expect(memory.state.subscriptions.get('sub_01')).toMatchObject({ status: 'active', graceStartedAt: null });
-      expect(memory.state.access.get('ctm_01')?.status).toBe('active');
-      expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+      expect(memory.state.access.get('ctm_01')).toBe('active');
     });
 
     it('does not restore access for a past-due event processed after grace has ended', async () => {
@@ -366,8 +345,7 @@ describe('applyPaddleEvent', () => {
         deps,
       );
 
-      expect(memory.state.access.get('ctm_01')?.status).toBe('lapsed');
-      expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
+      expect(memory.state.access.get('ctm_01')).toBe('lapsed');
     });
   });
 

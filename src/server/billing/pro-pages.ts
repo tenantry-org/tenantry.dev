@@ -3,24 +3,15 @@ import type { SubscriptionStatus } from '@paddle/paddle-node-sdk';
 import type { Tables } from '@/lib/supabase/database.types';
 import type { BillingInterval, OfferPrices } from '@/lib/public-config';
 import { getCurrentUser } from '@/server/db/current-user';
-import {
-  getCustomerId,
-  readCustomerAccess,
-  readGithubLogin,
-  readLicenceKey,
-  readSubscriptions,
-} from '@/server/db/customer-dashboard';
+import { getCustomerId, readAccessStatus, readLicenceKey, readSubscriptions } from '@/server/db/customer-dashboard';
 import { graceEndFor, isEntitled } from '@/server/billing/entitlement-policy';
-import type { AccessStatus, GithubState } from '@/server/db/billing-store';
+import type { AccessStatus } from '@/server/db/billing-store';
 import { type ServerConfig, serverConfig } from '@/server/config/server-config';
 
 /**
  * Read models for the customer's Pro pages (Access, Install and Billing). Each reads only what its page shows, with
  * the signed-in user's session (customer-dashboard.ts), so RLS guarantees a customer only ever sees their own rows.
  */
-
-/** GitHub drops an org invitation that is not accepted within 7 days; reconcile then sends a new one. */
-const INVITATION_DAYS = 7;
 
 /** Shown instead of a page that is not for the login: it has no Pro (or, for Billing, no billing account). */
 export interface NoSubscriptionView {
@@ -36,24 +27,16 @@ export interface NoSubscriptionView {
   licenceKey: string | null;
 }
 
-/** Access (/dashboard/pro), for a customer with Pro: their GitHub connection and licence key. */
+/** Access (/dashboard/pro), for a customer with Pro: their licence key. */
 export interface AccessView {
   noSubscription: false;
-  github: {
-    /** The account they connected, if any. */
-    login: string | null;
-    state: GithubState;
-    /** While `state` is 'invited': when the invitation lapses if not accepted. */
-    invitationExpiresAt: string | null;
-  };
   /** Their licence key, which does not expire; null until it is issued. */
   licenceKey: string | null;
 }
 
-/** Install (/dashboard/pro/install), for a customer with Pro: setting up the feed, with their GitHub account. */
+/** Install (/dashboard/pro/install), for a customer with Pro: setting up the package feed. */
 export interface InstallView {
   noSubscription: false;
-  githubLogin: string | null;
 }
 
 /**
@@ -88,36 +71,20 @@ export async function getAccessView(): Promise<AccessView | NoSubscriptionView> 
   if (!customerId) return noSubscription(false);
 
   // Read with the access, not after it, saving a round trip: a former customer is shown their key too.
-  const [access, licenceKey, githubLogin] = await Promise.all([
-    readCustomerAccess(customerId),
-    readLicenceKey(customerId),
-    readGithubLogin(customerId),
-  ]);
-  if (!access || !isEntitled(access.status)) return noSubscription(true, licenceKey);
+  const [status, licenceKey] = await Promise.all([readAccessStatus(customerId), readLicenceKey(customerId)]);
+  if (!status || !isEntitled(status)) return noSubscription(true, licenceKey);
 
-  const invitedAt = access.githubState === 'invited' ? access.githubInvitedAt : null;
-
-  return {
-    noSubscription: false,
-    github: {
-      login: githubLogin,
-      state: access.githubState,
-      invitationExpiresAt: invitedAt
-        ? new Date(invitedAt.getTime() + INVITATION_DAYS * 24 * 60 * 60 * 1000).toISOString()
-        : null,
-    },
-    licenceKey,
-  };
+  return { noSubscription: false, licenceKey };
 }
 
 export async function getInstallView(): Promise<InstallView | NoSubscriptionView> {
   const customerId = await getCustomerId();
   if (!customerId) return noSubscription(false);
 
-  const [access, githubLogin] = await Promise.all([readCustomerAccess(customerId), readGithubLogin(customerId)]);
-  if (!access || !isEntitled(access.status)) return noSubscription(true);
+  const status = await readAccessStatus(customerId);
+  if (!status || !isEntitled(status)) return noSubscription(true);
 
-  return { noSubscription: false, githubLogin };
+  return { noSubscription: false };
 }
 
 /**
@@ -129,7 +96,7 @@ export async function getBillingView(paddle?: ServerConfig['paddle']): Promise<B
   const customerId = await getCustomerId();
   if (!customerId) return noSubscription(false);
 
-  const [access, subscriptions] = await Promise.all([readCustomerAccess(customerId), readSubscriptions(customerId)]);
+  const [status, subscriptions] = await Promise.all([readAccessStatus(customerId), readSubscriptions(customerId)]);
   const { proProductId, prices } = paddle ?? serverConfig().paddle;
 
   // The same rule as access itself (entitlement-policy.ts), so the page and the access it describes agree.
@@ -145,11 +112,11 @@ export async function getBillingView(paddle?: ServerConfig['paddle']): Promise<B
 
   return {
     noSubscription: false,
-    access: access
+    access: status
       ? {
-          status: access.status,
+          status,
           grace:
-            access.status === 'grace' && graceEnd !== null
+            status === 'grace' && graceEnd !== null
               ? { endsAt: new Date(graceEnd).toISOString(), ended: graceEnd <= Date.now() }
               : null,
         }

@@ -1,21 +1,16 @@
 import { NoSubscription } from '@/components/dashboard/pro/no-subscription';
-import { GithubCard } from '@/components/dashboard/pro/access/github-card';
 import { LicenceCard } from '@/components/dashboard/pro/access/licence-card';
 import type { AccessView, NoSubscriptionView } from '@/server/billing/pro-pages';
-import type { LinkErrorCode } from '@/lib/link-errors';
 
 interface Props {
   view: AccessView | NoSubscriptionView;
-  githubOrg: string;
-  /** Why connecting GitHub failed, if it just did. */
-  linkError?: LinkErrorCode;
 }
 
 /**
- * Access (/dashboard/pro): the GitHub connection and the licence key. A former customer keeps their key, so it is
- * shown below the way back to Pro.
+ * Access (/dashboard/pro): the licence key. A former customer keeps their key, so it is shown below the way back to
+ * Pro.
  */
-export function AccessPanel({ view, githubOrg, linkError }: Readonly<Props>) {
+export function AccessPanel({ view }: Readonly<Props>) {
   if (view.noSubscription) {
     if (!view.licenceKey) return <NoSubscription view={view} />;
 
@@ -29,7 +24,6 @@ export function AccessPanel({ view, githubOrg, linkError }: Readonly<Props>) {
 
   return (
     <div className={'grid gap-6 lg:grid-cols-2'}>
-      <GithubCard github={view.github} githubOrg={githubOrg} linkError={linkError} />
       <LicenceCard licenceKey={view.licenceKey} />
     </div>
   );

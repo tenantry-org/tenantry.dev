@@ -94,9 +94,6 @@ async function runJob(job: Job, handlers: JobHandlers): Promise<void> {
     case 'reconcile':
       console.info(`Reconcile ${job.customerId}:`, JSON.stringify(await handlers.reconcileCustomer(job.customerId)));
       return;
-    case 'lease':
-      // A lease whose holder died without releasing it (customer-lease.ts), claimed once it expired: nothing to do.
-      return;
     default:
       return unknownKind(job);
   }

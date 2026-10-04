@@ -2,11 +2,11 @@ import 'server-only';
 import { createUserClient } from '@/server/db/user-client';
 import { getCurrentUser } from '@/server/db/current-user';
 import { confirmedEmail } from '@/server/db/customer-email';
-import type { AccessStatus, CustomerAccessRecord, GithubState } from '@/server/db/billing-store';
+import type { AccessStatus } from '@/server/db/billing-store';
 
 /**
  * Reads for the customer's dashboard, with the signed-in user's session: RLS lets a customer read only their own
- * customer, access (active_subscriptions), licence, GitHub link and subscriptions. Each Pro page reads only the rows it shows;
+ * customer, access (active_subscriptions), licence and subscriptions. Each Pro page reads only the rows it shows;
  * its read model (billing/pro-pages.ts) maps them. Rows the session may not read come back empty.
  */
 
@@ -24,23 +24,17 @@ export async function getCustomerId(): Promise<string | null> {
   return data?.customer_id ?? null;
 }
 
-/** The customer's access across their subscriptions, and their GitHub org membership. */
-export async function readCustomerAccess(customerId: string): Promise<CustomerAccessRecord | null> {
+/** The customer's access across their subscriptions, or null if it was never recorded. */
+export async function readAccessStatus(customerId: string): Promise<AccessStatus | null> {
   const supabase = await createUserClient();
   const { data } = await supabase
     .from('active_subscriptions')
-    .select('access_status,github_state,github_invited_at')
+    .select('access_status')
     .eq('customer_id', customerId)
     .maybeSingle();
 
-  return data
-    ? {
-        // active_subscriptions' check constraints allow only these.
-        status: data.access_status as AccessStatus,
-        githubState: data.github_state as GithubState,
-        githubInvitedAt: data.github_invited_at ? new Date(data.github_invited_at) : null,
-      }
-    : null;
+  // active_subscriptions' check constraint allows only these.
+  return (data?.access_status as AccessStatus | undefined) ?? null;
 }
 
 /** The customer's licence key: the newest one. Keys are kept for good, so a former customer still has theirs. */
@@ -55,18 +49,6 @@ export async function readLicenceKey(customerId: string): Promise<string | null>
     .maybeSingle();
 
   return data?.jwt ?? null;
-}
-
-/** The login of the GitHub account the customer connected. */
-export async function readGithubLogin(customerId: string): Promise<string | null> {
-  const supabase = await createUserClient();
-  const { data } = await supabase
-    .from('github_links')
-    .select('github_login')
-    .eq('customer_id', customerId)
-    .maybeSingle();
-
-  return data?.github_login ?? null;
 }
 
 /** The customer's subscriptions, as Paddle last reported them. */

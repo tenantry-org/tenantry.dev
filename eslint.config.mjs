@@ -32,7 +32,7 @@ const serviceRoleClient = {
 };
 
 // The server code is in layers, and imports point only down this list: feed (the package feed) → billing (the rules
-// and services) → jobs (the customer jobs' worker and leases) → integrations (Paddle, GitHub, email, licence signing)
+// and services) → jobs (the customer jobs' worker) → integrations (Paddle, email, licence signing)
 // and db (the Supabase clients and the modules that query the database) → config. src/lib holds isomorphic helpers and imports
 // no server code. The patterns match both the alias and relative paths (`@/server/billing/…`, `../billing/…`).
 const below = (layer, ...higher) => ({

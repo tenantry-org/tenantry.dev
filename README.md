@@ -9,26 +9,27 @@ purchase → entitlement → access pipeline for **Tenantry Pro**.
 - **Marketing + pricing** — landing page and Paddle-powered pricing for Tenantry Pro.
 - **Docs** (`/docs`) — full searchable documentation via [Fumadocs](https://fumadocs.dev), sourced
   from the `tenantry-core` and `tenantry-pro` repos (see [Docs pipeline](#docs-pipeline)).
-- **Commercial backend** — Paddle webhooks drive Supabase entitlements, an ES256 licence issuer, and
-  GitHub provisioning (org/team membership = private package-feed access).
-- **Customer portal** (`/dashboard/pro`) — Access ("Connect GitHub" and the licence key), Install (setting up the
-  private NuGet feed) and Billing (the subscriptions, with invoices and the payment method in Paddle's portal).
+- **Commercial backend** — Paddle webhooks drive Supabase entitlements and an ES256 licence issuer, and the site
+  serves Tenantry Pro's packages from its own NuGet feed, the package feed, to each customer as their entitlement
+  allows.
+- **Customer portal** (`/dashboard/pro`) — Access (the entitlement, feed tokens and the licence key), Install
+  (restoring from the package feed) and Billing (the subscriptions, with invoices and the payment method in Paddle's
+  portal).
 
 ## Architecture
 
 ```
-Paddle (merchant of record) ──webhook──▶ /api/webhook ──▶ subscriptions + payments ─▶ access, entitlement,
-                                                              licence + GitHub grant
+Paddle (merchant of record) ──webhook──▶ /api/webhook ──▶ subscriptions + payments ─▶ access, entitlement, licence
                                                               (Supabase, service role)
-customer ─▶ /dashboard/pro ─▶ Connect GitHub ─▶ github_links + team membership ─▶ private package feed
+customer ─▶ /dashboard/pro ─▶ feed tokens ─▶ dotnet restore ─▶ /feed/v3 ─▶ the releases their entitlement allows
+release workflow ─▶ PUT /feed/v3/package (publish key) ─▶ pro_releases, pro_packages + the storage bucket
 cron ─▶ /api/reconcile ─▶ recompute access and entitlement, retry what failed
 ```
 
-Pro's packages are on GitHub Packages, reached through membership of a team in the customers' GitHub org, and the
-site and Pro's docs describe that. The site now also serves its own NuGet feed (`/feed/v3/index.json`,
-`src/server/feed`), which shows each customer the releases they may use, including after a lapse those their
-perpetual licence covers. It replaces GitHub Packages, and the GitHub team provisioning goes with it, before
-subscriptions go on sale.
+The package feed (`/feed/v3/index.json`, `src/server/feed`) serves an active or in-grace subscriber every release, a
+lapsed customer the vested releases, and a lapsed customer with nothing vested nothing. Customers authenticate with
+feed tokens they create on the Access page; the licence key is never a feed credential. GitHub is only a way to sign
+in.
 
 Key code is in `src/server`, in layers whose imports point only down this list (ESLint enforces it):
 
@@ -37,12 +38,10 @@ Key code is in `src/server`, in layers whose imports point only down this list (
   `scripts/feed-e2e.sh` runs a real `dotnet restore` against it.
 - `billing/` — the rules and services: what a customer may access now and owns for good, computed from their
   subscriptions and payments (`entitlement-policy.ts`, with the Paddle behaviour it assumes in
-  `paddle-assumptions.ts`); storing that and keeping their GitHub membership, licence and emails in line with it
-  (`customer-access.ts`); applying Paddle's notifications (`apply-paddle-event.ts`); linking a GitHub account (`sync-github-link.ts`); the reconcile
-  run; and the Pro pages' read models, one per page, each reading only what its page shows (`pro-pages.ts`).
-- `jobs/` — the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order, and
-  the per-customer leases.
-- `integrations/` — Paddle, GitHub team provisioning (a GitHub App), email (Resend) and the licence issuer.
+  `paddle-assumptions.ts`); storing that and keeping their licence and emails in line with it (`customer-access.ts`);
+  applying Paddle's notifications (`apply-paddle-event.ts`); the reconcile run; and the Pro pages' read models, one per page, each reading only what its page shows (`pro-pages.ts`).
+- `jobs/` — the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order.
+- `integrations/` — Paddle, email (Resend) and the licence issuer.
 - `db/` — `createUserClient` (the signed-in user's session; RLS applies) and `createServiceRoleClient` (bypasses
   RLS), and the only modules that query the database: the billing tables' store, the customer jobs and the
   dashboard's reads. The clients are typed by `src/lib/supabase/database.types.ts`, which is generated from the
@@ -51,7 +50,7 @@ Key code is in `src/server`, in layers whose imports point only down this list (
 
 Modules in `src/server` import `server-only` (except `db/update-session.ts`, which the proxy runs), so a client
 component that pulls one in fails the build. The services that change a customer's access (`customer-access.ts`,
-`reconcile-customer.ts`, `apply-paddle-event.ts`, `sync-github-link.ts`) take what they use from the layers below as
+`reconcile-customer.ts`, `apply-paddle-event.ts`) take what they use from the layers below as
 their last argument (`billing/deps.ts`), defaulting to the real modules, so their tests pass an in-memory billing store
 and fakes instead of replacing modules; the read models are tested against a fake Supabase client. `src/lib` holds
 helpers for both sides, and `src/test` the fakes the tests share.
@@ -81,8 +80,8 @@ compiler (`tsc6`), so the build type-checks with TypeScript 6 and `pnpm typechec
 Dependabot skips aliased packages, so these two are updated by hand. Once typescript-eslint supports TypeScript 7, drop
 the aliases: `typescript` becomes TypeScript 7 itself, and `@typescript/native` goes.
 
-The local Supabase stack (`supabase start`) runs from `supabase/config.toml`. Signing in with GitHub and Connect
-GitHub need a GitHub OAuth app whose callback URL is `http://127.0.0.1:54321/auth/v1/callback`: put its client id and
+The local Supabase stack (`supabase start`) runs from `supabase/config.toml`. Signing in with GitHub needs a GitHub
+OAuth app whose callback URL is `http://127.0.0.1:54321/auth/v1/callback`: put its client id and
 secret in `.env.local` (`SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID` and `SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET`), where
 the CLI reads them, and restart the stack.
 
@@ -230,10 +229,11 @@ that dev.to organisation. Run it from the Actions tab to retry.
 
 ## Configuration
 
-See [`.env.example`](.env.example) for the full list of environment variables (Supabase, Paddle,
-GitHub App, licensing, and email). Nothing has a default: each environment sets its own. Server code reads them
+See [`.env.example`](.env.example) for the full list of environment variables (Supabase, Paddle, licensing, the
+package feed and email). Nothing has a default: each environment sets its own. Server code reads them
 through `serverConfig()` (`src/server/config/server-config.ts`), which the server validates when it starts, and the
 browser through `publicConfig()` (`src/lib/public-config.ts`): the `NEXT_PUBLIC_` variables it uses, which are
 compiled into the build, so the build checks them too and a change needs a redeploy. (`NEXT_PUBLIC_SITE_URL` is read
 by the server only.) ESLint keeps `process.env` out of other code.
-Operational runbooks (provisioning, key rotation, reconcile) are maintained privately by the maintainers.
+Operational runbooks (setting up each environment, key rotation, reconcile) are maintained privately by the
+maintainers.
