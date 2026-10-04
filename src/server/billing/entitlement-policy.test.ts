@@ -515,6 +515,50 @@ describe('edge cases', () => {
       expect(entitlement.paymentStatuses[seats.transactionId]).toBe('partially_refunded');
     });
 
+    describe('a partial refund near the end of a first annual term', () => {
+      // An annual term from 1 January 2027, the customer's first payment, partially refunded at `at`. A term cut short
+      // by an adjustment must reach the full 12 months to vest: the month-end tolerance is for Paddle's renewal dates.
+      const first = annual('2027-01-01T00:00:00Z');
+      const refundedAt = (at: string) =>
+        compute({
+          payments: [first],
+          adjustments: [adjustment(first, 'refund', at, { type: 'partial', itemTypes: ['partial'] })],
+          now: '2028-02-01T00:00:00Z',
+        });
+
+      it.each(['2027-06-01T00:00:00Z', '2027-12-28T00:00:00Z', '2027-12-29T00:00:00Z', '2027-12-31T23:00:00Z'])(
+        'gives no perpetual rights for a refund approved on %s',
+        (at) => {
+          const entitlement = refundedAt(at);
+
+          expect(entitlement.vestedThrough).toBeNull();
+          expect(entitlement.grants).toEqual([
+            expect.objectContaining({ kind: 'annual_term', status: 'withdrawn', withdrawnReason: 'refund' }),
+          ]);
+        },
+      );
+
+      it('vests the served 12 months, but not the grant, for a refund approved exactly at the term end', () => {
+        const entitlement = refundedAt('2028-01-01T00:00:00Z');
+
+        expect(vested(entitlement)).toBe('2028-01-01T00:00:00.000Z');
+        expect(entitlement.grants).toEqual([
+          expect.objectContaining({ kind: 'qualifying_run', status: 'confirmed' }),
+          expect.objectContaining({ kind: 'annual_term', status: 'withdrawn' }),
+        ]);
+      });
+
+      it('gives no perpetual rights to a term whose subscription was cancelled in its last days', () => {
+        const entitlement = compute({
+          payments: [first],
+          now: '2028-02-01T00:00:00Z',
+          endedAt: '2027-12-30T00:00:00Z',
+        });
+
+        expect(entitlement.vestedThrough).toBeNull();
+      });
+    });
+
     it('still drops a term refunded in full or charged back', () => {
       for (const action of ['refund', 'chargeback']) {
         const full = adjustment(term, action, '2027-10-01T00:00:00Z');

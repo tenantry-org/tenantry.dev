@@ -456,14 +456,19 @@ function effectOf(adjustment: PaymentAdjustment): Effect | null {
 }
 
 // When the run reaches 12 months, or null if its periods do not get there: 12 calendar months after its start, or the
-// end of the first period that gets within the month-end tolerance of that, if sooner.
+// end of the first period that gets within the month-end tolerance of that, if sooner. The tolerance is for Paddle's
+// month-end renewal dates (paddle-assumptions.ts), so only a period that ends where it was billed to may use it: one cut
+// short, by an adjustment or by its subscription ending, must reach the full 12 months.
 function runVestsAt(run: Run): Date | null {
   const twelveMonths = addMonths(run.startedAt, 12).getTime();
   const enough = twelveMonths - MONTH_END_TOLERANCE_MS;
-  if (run.paidThrough.getTime() < enough) return null;
 
-  const ends = run.periods.map((p) => p.endsAt.getTime()).filter((end) => end >= enough);
-  return new Date(Math.min(twelveMonths, ...ends));
+  const ends = run.periods.flatMap((period) => {
+    const end = period.endsAt.getTime();
+    const cut = end < period.payment.periodEndsAt.getTime();
+    return end >= (cut ? twelveMonths : enough) ? [end] : [];
+  });
+  return ends.length === 0 ? null : new Date(Math.min(twelveMonths, ...ends));
 }
 
 function withdraw(grant: Grant, reason: WithdrawnReason): Grant {
