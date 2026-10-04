@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeedCustomer, FeedPackage } from '@/server/db/package-feed';
 import type { FeedDeps, FeedStore } from './deps';
 import { hashFeedToken } from './feed-tokens';
-import { DOWNLOAD_URL_SECONDS, handleFeedRequest } from './nuget-feed';
+import { DOWNLOAD_URL_SECONDS, handleFeedRequest, serveFeed } from './nuget-feed';
 
 // The feed's resources against an in-memory store: what each customer sees, the shape of each answer as the NuGet
 // server API documents it (https://learn.microsoft.com/en-us/nuget/api/overview), and the headers that keep one
@@ -331,6 +331,28 @@ describe('caching', () => {
   ])('keeps %s out of shared caches, varying by credentials', async (path, customer) => {
     const response = await get(path, customer);
 
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('vary')).toBe('Authorization');
+  });
+});
+
+describe('serveFeed', () => {
+  it('answers a failure with 500, kept out of shared caches like every other answer', async () => {
+    store.listFeedPackages.mockRejectedValue(new Error('database unavailable'));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const response = await serveFeed(() => get('flat/tenantry.pro/index.json', 'active'));
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('vary')).toBe('Authorization');
+    expect(await response.text()).not.toContain('database unavailable');
+  });
+
+  it('adds the headers to an answer that lacks them', async () => {
+    const response = await serveFeed(async () => new Response('Not found.', { status: 404 }));
+
+    expect(response.status).toBe(404);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('vary')).toBe('Authorization');
   });

@@ -227,6 +227,23 @@ function search(base: string, packages: FeedPackage[], url: URL) {
   };
 }
 
+/**
+ * Runs a feed handler and makes sure its answer, whatever it is, stays out of shared caches: a failure becomes a 500
+ * without its details, and every answer carries PRIVATE. The route wraps each method in it.
+ */
+export async function serveFeed(handle: () => Promise<Response>): Promise<Response> {
+  let response: Response;
+  try {
+    response = await handle();
+  } catch (error) {
+    console.error('Package feed: the request failed:', error);
+    response = text(500, 'The feed failed to answer. Try again shortly.');
+  }
+
+  for (const [name, value] of Object.entries(PRIVATE)) response.headers.set(name, value);
+  return response;
+}
+
 // Each customer's answers differ, and the token is in the request: nothing may be cached for another request.
 const PRIVATE = { 'Cache-Control': 'private, no-store', Vary: 'Authorization' };
 
