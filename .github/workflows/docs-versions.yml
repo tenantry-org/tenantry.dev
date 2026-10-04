@@ -37,10 +37,12 @@ jobs:
         run: |
           # Production deploys a commit only once the test and audit workflows pass on it (Vercel Deployment Checks),
           # and a push made with this token starts no workflow, so this job runs both on its own commits. If that
-          # failed last time, master's head is still this job's commit without those runs, and it runs them now.
+          # failed last time, master's head is still this job's commit without those runs, and it runs them now. The
+          # sandbox follows production (staging is master): a run that pushed master but not staging is caught up the
+          # same way.
           bot='41898282+github-actions[bot]@users.noreply.github.com'
           run_on_master() {
-            for attempt in 1 2 3; do
+            for _ in 1 2 3; do
               gh workflow run "$1" --ref master && return 0
               sleep 10
             done
@@ -53,20 +55,25 @@ jobs:
               fi
             done
           }
+          follow_master() {
+            staging="$(git ls-remote origin refs/heads/staging | cut -f1)"
+            if [ "$staging" != "$(git rev-parse HEAD)" ]; then
+              git push --force-with-lease="staging:$staging" origin HEAD:staging
+            fi
+          }
           if git diff --quiet -- docs-versions.json newest-release.json; then
             echo "No change."
             if [ "$(git log -1 --format=%ae)" = "$bot" ]; then
               check_master
+              follow_master
             fi
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email "$bot"
           git commit -q -m 'Docs: publish the docs of the latest releases' -m "$(cat docs-versions.json)" -- docs-versions.json newest-release.json
-          staging="$(git ls-remote origin refs/heads/staging | cut -f1)"
           git push origin HEAD:master
           check_master
-          # The sandbox follows production (staging is master).
-          git push --force-with-lease="staging:$staging" origin HEAD:staging
+          follow_master
         env:
           GH_TOKEN: ${{ github.token }}

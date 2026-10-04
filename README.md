@@ -105,35 +105,37 @@ still relative after rewriting (`scripts/docs-links.mjs`).
 Releasing Core or Pro needs no edit to the site. The owner pushes a signed `v*` tag, and the repository's release
 workflow publishes the packages; Pro's also publishes its docs to tenantry-pro-docs under the same tag. The
 `docs-versions` workflow runs hourly, at 23 minutes past, and reads both repositories' tags
-(`scripts/docs-versions-update.mjs`). A Core tag counts once NuGet lists its version, since Core is tagged before its
-release runs; pre-release tags never count. A line is listed once both Core and Pro have a release in it, with the
-newest release of each, so a new minor released by Core first stays off the site until Pro's release, and the previous
-line is shown meanwhile. Only the newest line is shown until a release has been sold (`FIRST_SOLD_RELEASE` in
-`scripts/docs-versions.mjs`).
+(`scripts/docs-versions-update.mjs`). A Core tag counts once NuGet lists its version (Tenantry.Core's registration),
+since Core is tagged before its release runs; pre-release tags never count. To take a Core release back, unlist it on
+NuGet and the next run drops it; a Pro release is dropped by deleting its tag from tenantry-pro-docs. A line is listed
+once both Core and Pro have a release in it, with the newest release of each, so a new minor released by Core first
+stays off the site until Pro's release, and the previous line is shown meanwhile. Only the newest line is shown until a
+release has been sold (`FIRST_SOLD_RELEASE` in `scripts/docs-versions.mjs`).
 
 The same run reads what the site says about the newest release from the release itself and writes it to
-[`newest-release.json`](newest-release.json): the .NET versions Core's package targets, the number of samples, and the
-setup snippets of Pro's installation guide, which the Pro access page shows with the environment's GitHub org. The
-home, Pro and comparison pages and the portal take these from the file, and the version badge and the docs from
-`docs-versions.json`. When either file changes, the workflow commits both to master and staging and runs the test and
-audit workflows on the commit, since its own pushes start none. Production deploys the commit once they pass. A
-release is live at the first run after its packages are published, so within the hour, plus the few minutes the checks
-and the build take. Run the workflow from the Actions tab to publish sooner.
+[`newest-release.json`](newest-release.json): the .NET versions Core's package targets, the number of sample folders,
+and the setup snippets of Pro's installation guide, which the Pro access page shows with the environment's GitHub org.
+The snippets must still hold the feed, the package patterns, the environment variables and the licence key's setting
+that the portal's own text names (`scripts/install-snippets.mjs`). The home, Pro and comparison pages and the portal
+take these from the file, and the version badge and the docs from `docs-versions.json`. When either file changes, the
+workflow commits both to master and staging and runs the test and audit workflows on the commit, since its own pushes
+start none. Production deploys the commit once they pass. A run that finds nothing new but sees its own commit at
+master's head runs those workflows if they never ran on it, and brings staging up to it. A release is live at the first
+run after its packages are published, so within the hour, plus the few minutes the checks and the build take. Run the
+workflow from the Actions tab to publish sooner.
 
 A release whose tag has no `docs` folder, or whose `CHANGELOG.md` has no section for it, is left out with a warning on
-the workflow run, and its line keeps the release before it. A release build fails before deploying, and production
-keeps the last deployment, if a listed tag cannot be read or its docs are incomplete. The tests check the portal's
-snippets against the names the portal's own text gives (the feed, the packages, the environment variables and the
-licence key's setting): if a Pro release renames one, the test workflow fails on master and production waits until
-that text is changed to match. The code samples on the home and Pro pages are not release data: when a minor release
-changes the API they show, they are updated by hand.
+the workflow run, and its line keeps the release before it. So is a release of the newest line that does not give the
+facts above: a nuspec without target frameworks, no sample folder, or an installation guide without those snippets. A
+release build fails before deploying, and production keeps the last deployment, if a listed tag cannot be read or its
+docs are incomplete. The code samples on the home and Pro pages are not release data: when a minor release changes the
+API they show, they are updated by hand.
 
 If a release has not reached the site after an hour, check in this order: NuGet lists the Core version
-(`https://api.nuget.org/v3-flatcontainer/tenantry.core/index.json`), or tenantry-pro-docs has the Pro tag (Pro's
-publish-docs job may need a re-run); the latest `docs-versions` run, whose warnings name any release it left out and
-whose failure means it published nothing; the test and audit runs on its commit on master; then the Vercel
-deployment. `pnpm docs:update` does the same as the workflow locally, and `pnpm docs:check` fails unless both files
-match the releases.
+(`https://www.nuget.org/packages/Tenantry.Core`), or tenantry-pro-docs has the Pro tag (Pro's publish-docs job may need
+a re-run); the latest `docs-versions` run, whose warnings name any release it left out and whose failure means it
+published nothing; the test and audit runs on its commit on master; then the Vercel deployment. `pnpm docs:update` does
+the same as the workflow locally, and `pnpm docs:check` fails unless both files match the releases.
 
 To preview unreleased docs locally, set an override, for example `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or
 `CORE_DOCS_DIR`); it replaces the newest version's docs. Vercel and CI builds refuse overrides.
