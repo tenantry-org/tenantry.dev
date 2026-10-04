@@ -59,7 +59,7 @@ export default function EulaPage() {
         subscription ends and no billing period follows within the hour, or a renewal is not paid; the next billing
         period then starts a new qualifying period from zero. Money returned does not by itself break a qualifying
         period: a billing period of which part or all of the payment was returned, or for which nothing was charged,
-        continues it, and adds only its paid period, if any. But a full refund of your subscription&apos;s current
+        continues it, and adds only its paid period, if any. But a full refund of your subscription&apos;s latest paid
         billing period, or a chargeback of any of its payments, cancels the subscription at once (refund policy, section
         4); that is the subscription ending, so a new subscription more than one hour later starts a new qualifying
         period. If a chargeback is reversed, the subscription stays cancelled. A qualifying period starts at the start

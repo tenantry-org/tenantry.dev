@@ -430,7 +430,7 @@ describe('applyPaddleEvent', () => {
 
       expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
       expect(deps.alertOperator).toHaveBeenCalledWith(
-        'Paddle refund of an earlier billing period for customer ctm_01',
+        'Paddle refund of an earlier paid billing period for customer ctm_01',
         expect.stringContaining('was not cancelled'),
       );
     });
@@ -487,7 +487,7 @@ describe('applyPaddleEvent', () => {
 
       expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
       expect(deps.alertOperator).toHaveBeenCalledWith(
-        'Paddle refund of an earlier billing period for customer ctm_01',
+        'Paddle refund of an earlier paid billing period for customer ctm_01',
         expect.stringContaining('txn_unknown'),
       );
     });
