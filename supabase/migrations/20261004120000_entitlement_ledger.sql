@@ -14,6 +14,17 @@
 --
 -- Licences are no longer revoked: a key cannot be revoked offline, and a lapsed customer keeps the key they were
 -- given, so the revoked flag goes.
+--
+-- What this migration drops, and what follows:
+--   entitlements          its period end and grace start move to subscriptions (backfilled below)
+--   customer_access       its access status and GitHub state move to active_subscriptions (backfilled below; revoked
+--                         becomes lapsed)
+--   set_customer_access   replaced by set_customer_entitlement
+--   licences.revoked      every key stays, so keys revoked before this migration become visible on their customer's
+--                         dashboard again (none had been issued when it was written)
+-- There is no down migration: going back means restoring a backup taken before it. Payments made before it are not in
+-- the ledger; reconcile records the completed ones Paddle lists for the last 90 days (paddle-assumptions.ts).
+-- supabase/migration-tests/20261004120000_entitlement_ledger tests it against rows of the schema before it.
 
 -- ---------------------------------------------------------------------------------------------------------------------
 -- subscriptions: as Paddle's newest event left them, now with what entitlements held per subscription.

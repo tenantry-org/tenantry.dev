@@ -24,10 +24,11 @@ customer ─▶ /dashboard/pro ─▶ Connect GitHub ─▶ github_links + team 
 cron ─▶ /api/reconcile ─▶ recompute access and entitlement, retry what failed
 ```
 
-The package feed is GitHub Packages, reached through membership of a team in the customers' GitHub org. The
-subscription system has been built and tested with it, and the site and Pro's docs describe it. A private Tenantry
-feed replaces it before subscriptions go on sale, so that a lapsed subscriber can still restore the versions released
-while they subscribed.
+Pro's packages are on GitHub Packages, reached through membership of a team in the customers' GitHub org, and the
+site and Pro's docs describe that. The site now also serves its own NuGet feed (`/feed/v3/index.json`,
+`src/server/feed`), which shows each customer the releases they may use, including after a lapse those their
+perpetual licence covers. It replaces GitHub Packages, and the GitHub team provisioning goes with it, before
+subscriptions go on sale.
 
 Key code is in `src/server`, in layers whose imports point only down this list (ESLint enforces it):
 
@@ -57,7 +58,8 @@ helpers for both sides, and `src/test` the fakes the tests share.
 
 The database schema, with its RLS policies and functions, starts with
 `supabase/migrations/20261002120000_baseline.sql`; later changes are migrations after it. Their tests are in
-`supabase/tests/database/`.
+`supabase/tests/database/`, and a migration that moves data is tested against rows of the schema before it in
+`supabase/migration-tests/` (`pnpm test:migrations`).
 
 ## Develop
 
