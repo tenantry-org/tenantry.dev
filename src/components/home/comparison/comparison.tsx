@@ -1,9 +1,11 @@
+import type { ReactNode } from 'react';
+
 // Checked in October 2026 against the documents in SOURCES (Finbuckle.MultiTenant 10, ABP's latest docs) and against
 // Tenantry Core 0.6 and Pro 0.6. Check them again when any of them releases a major version. A row whose Finbuckle or
 // ABP cell the sources do not support is left out, not filled in.
 const PROJECTS = ['Your own query filters', 'Finbuckle.MultiTenant', 'ABP', 'Tenantry'] as const;
 
-const ROWS: { label: string; cells: [string, string, string, string]; fullOnly?: boolean }[] = [
+const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]; fullOnly?: boolean }[] = [
   {
     label: 'What your DbContext needs',
     cells: [
@@ -49,7 +51,18 @@ const ROWS: { label: string; cells: [string, string, string, string]; fullOnly?:
     label: 'Licence',
     cells: [
       'Yours',
-      'Apache-2.0',
+      <>
+        Apache-2.0. Its{' '}
+        <a
+          href={'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/main/README.md#open-source-maintenance-fee'}
+          target={'_blank'}
+          rel={'noopener noreferrer'}
+          className={'text-link hover:underline'}
+        >
+          README
+        </a>{' '}
+        says that using its releases to generate revenue requires paying the Open Source Maintenance Fee.
+      </>,
       'A commercial ABP licence for the SaaS module',
       'Core Apache-2.0; Pro a subscription',
     ],
