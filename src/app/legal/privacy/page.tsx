@@ -17,8 +17,8 @@ export default function PrivacyPage() {
           <strong>Account data:</strong> email address and authentication identifiers (via Supabase Auth).
         </li>
         <li>
-          <strong>GitHub identity:</strong> when you connect GitHub, your GitHub username and numeric id, used solely to
-          give you access to the private package feed.
+          <strong>GitHub identity:</strong> when you sign in with GitHub, the identifiers GitHub passes to Supabase
+          Auth, used only to sign you in.
         </li>
         <li>
           <strong>Billing data:</strong> processed by Paddle.com as merchant of record. We receive subscription status,
@@ -49,9 +49,9 @@ export default function PrivacyPage() {
       <h2>3. Processors</h2>
       <p>
         We share data with sub-processors that operate the Services on our behalf, each under its own terms: Paddle
-        (billing, as merchant of record), Supabase (authentication and database), GitHub (package-feed access), Vercel
-        (hosting, Web Analytics and Speed Insights) and Resend (email). Some of them process data outside the UK and the
-        EEA, under appropriate safeguards such as standard contractual clauses.
+        (billing, as merchant of record), Supabase (authentication and database), GitHub (sign-in, if you use it),
+        Vercel (hosting, Web Analytics and Speed Insights) and Resend (email). Some of them process data outside the UK
+        and the EEA, under appropriate safeguards such as standard contractual clauses.
       </p>
 
       <h2>4. Cookies and analytics</h2>
