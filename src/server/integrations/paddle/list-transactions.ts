@@ -21,6 +21,11 @@ export interface PaddleTransaction {
 
 /** How many subscription ids one list request filters by. */
 const SUBSCRIPTIONS_PER_REQUEST = 20;
+/**
+ * How many pages of 100 one request may take: far more than a few subscriptions' 90 days of payments, so reaching it
+ * means something is wrong (a collection that never ends), and the listing stops there.
+ */
+const MAX_PAGES = 20;
 
 /**
  * The completed transactions of these subscriptions billed since `billedSince`, every page of them. Reconcile records
@@ -40,9 +45,14 @@ export async function listCompletedTransactions(
       'billedAt[GTE]': billedSince.toISOString(),
       perPage: 100,
     });
+    let pages = 0;
     do {
       transactions.push(...(await collection.next()));
-    } while (collection.hasMore);
+      pages++;
+    } while (collection.hasMore && pages < MAX_PAGES);
+    if (collection.hasMore) {
+      console.warn(`Paddle: listing transactions stopped after ${MAX_PAGES} pages with more to come.`);
+    }
   }
 
   return transactions;

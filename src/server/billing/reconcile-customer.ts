@@ -153,7 +153,10 @@ async function recoverPayments(customerId: string, deps: BillingDeps): Promise<n
   const known = new Set((await store.listPayments(customerId)).map((payment) => payment.transactionId));
   const recovered: string[] = [];
   for (const transaction of listed) {
-    if (known.has(transaction.id) || transaction.customerId !== customerId) continue;
+    // Only a completed transaction is a payment, whatever the listing returned; and each is recorded once.
+    if (transaction.status !== 'completed' || transaction.customerId !== customerId) continue;
+    if (known.has(transaction.id)) continue;
+    known.add(transaction.id);
     if (await recordCompletedTransaction(transaction, transaction.updatedAt, deps)) recovered.push(transaction.id);
   }
 

@@ -140,6 +140,24 @@ describe('reconcileCustomer', () => {
       expect(deps.listCompletedTransactions).not.toHaveBeenCalled();
     });
 
+    it('records only completed transactions, each once, however Paddle lists them', async () => {
+      await startAccess();
+      const october = listed('txn_october', '2026-10-01T00:00:00Z', '2026-11-01T00:00:00Z');
+      deps.listCompletedTransactions.mockResolvedValue([
+        { ...listed('txn_billed', '2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z'), status: 'billed' },
+        { ...listed('txn_past_due', '2026-09-01T00:00:00Z', '2026-10-01T00:00:00Z'), status: 'past_due' },
+        october,
+        october,
+      ]);
+
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ paymentsRecovered: 1 });
+      expect([...memory.state.payments.keys()]).toEqual(['txn_october']);
+      expect(deps.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Recovered 1 payment for customer ctm_1',
+        expect.not.stringContaining('txn_billed'),
+      );
+    });
+
     it('carries on without Paddle: grace still ends, and the operator is alerted once, not for every customer', async () => {
       await startAccess();
       await record({ status: 'past_due', graceStartedAt: new Date('2026-10-01T00:00:00Z') });

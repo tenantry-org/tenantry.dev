@@ -31,4 +31,16 @@ describe('listCompletedTransactions', () => {
     expect(list.mock.calls[1]).toEqual([expect.objectContaining({ subscriptionId: subscriptions.slice(20) })]);
     expect(transactions.map((transaction) => transaction.id)).toEqual(['txn_1', 'txn_2', 'txn_1', 'txn_2']);
   });
+
+  it('stops after a bounded number of pages, even if Paddle always says there are more', async () => {
+    const next = vi.fn(async () => [{ id: 'txn_again' }]);
+    const list = vi.fn(() => ({ hasMore: true, next }));
+    const paddle = { transactions: { list } } as unknown as Parameters<typeof listCompletedTransactions>[2];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await listCompletedTransactions(['sub_1'], new Date('2026-07-01T00:00:00Z'), paddle);
+
+    expect(next).toHaveBeenCalledTimes(20);
+    expect(warn).toHaveBeenCalledOnce();
+  });
 });
