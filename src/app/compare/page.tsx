@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 const NOTES = [
   {
     title: 'Writes',
-    text: 'Tenantry filters ExecuteUpdate and ExecuteDelete to the current tenant, and an ExecuteUpdate cannot set TenantId. With no current tenant, its filter matches nothing and writes to tenant-owned entities are rejected.',
+    text: 'Tenantry filters ExecuteUpdate and ExecuteDelete to the current tenant, and an ExecuteUpdate cannot set TenantId. With no current tenant, its filter matches nothing and, by default, writes to tenant-owned entities are rejected.',
   },
   {
     title: 'A database per tenant',

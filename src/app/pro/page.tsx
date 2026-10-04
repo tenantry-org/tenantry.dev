@@ -43,7 +43,7 @@ builder.Services.AddScoped<IAuditStore, AuditTableStore>();                     
   },
   {
     title: 'Onboard and offboard tenants',
-    text: 'One call onboards a tenant: it creates the tenant’s database or schema and migrates it, if the tenant has one, then runs your seeders, and its result reports each step. With a shared database it runs only your seeders and steps. To retry a failed onboarding, run it again: every step runs again, and Tenantry’s own are safe to repeat, so write your seeders to be too. Offboarding refuses a tenant that is still active, runs your export steps, then deletes the tenant’s rows from every tenant-owned table of a shared database in one transaction, or drops its database or schema.',
+    text: 'One call onboards a tenant: it creates the tenant’s database or schema and migrates it, if the tenant has one, then runs your seeders, and its result reports each step. With a shared database it runs only your seeders and steps. To retry a failed onboarding, run it again: every step runs again, and Tenantry’s own are safe to repeat, so write your seeders to be too. Offboarding refuses a tenant that is still active and runs your export steps. With the step for it added, it then deletes the tenant’s rows from every tenant-owned table of a shared database in one transaction, or drops its database or schema.',
     caption: 'TenantOnboarding.cs',
     code: `tenant.UsePro(pro => pro
     .AddSeeder<DefaultDataSeeder>()               // your seeder, last
