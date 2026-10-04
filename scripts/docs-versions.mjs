@@ -21,6 +21,16 @@ export const RELEASE_TAG = /^v(\d+)\.(\d+)\.\d+(-[0-9A-Za-z.-]+)?$/;
 const STABLE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 export const CONFIG_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs-versions.json');
 
+/**
+ * The first release that was on sale, such as `v0.6.1`, or null while Tenantry Pro is not on sale. The site shows
+ * nothing older: no docs of an earlier release line, and no changelog entry of an earlier release. While it is null
+ * no release has been sold, so the site shows only the newest release line and, in its changelog, only that line's
+ * newest release. Set it once, to the release that is current when checkout opens.
+ *
+ * @type {string | null}
+ */
+export const FIRST_SOLD_RELEASE = null;
+
 /** The release line a tag belongs to: v0.4.1 → 0.4, v1.2.3 → 1. */
 export function lineOf(tag) {
   const match = RELEASE_TAG.exec(tag ?? '');
@@ -61,8 +71,8 @@ export function compareLines(a, b) {
   return aMajor - bMajor || aMinor - bMinor;
 }
 
-// Two stable tags by version: v0.4.10 is after v0.4.2.
-function compareReleases(a, b) {
+/** Two stable tags by version: v0.4.10 is after v0.4.2. */
+export function compareReleases(a, b) {
   const [, ...aParts] = STABLE_TAG.exec(a).map(Number);
   const [, ...bParts] = STABLE_TAG.exec(b).map(Number);
   return aParts[0] - bParts[0] || aParts[1] - bParts[1] || aParts[2] - bParts[2];
@@ -91,8 +101,14 @@ export function publishedTags(tags, publishedVersions) {
   return tags.filter((tag) => tag.startsWith('v') && published.has(tag.slice(1).toLowerCase()));
 }
 
-/** The versions to publish, given each group's tags: every line both groups released, the newest patch of each. */
-export function resolveVersions(tagsByGroup) {
+/**
+ * The versions to publish, given each group's tags: every line both groups released, the newest patch of each, from
+ * the line of the first release sold (`firstSold`) on. With none sold yet (null), only the newest line.
+ *
+ * @param {Record<string, string[]>} tagsByGroup
+ * @param {string | null} [firstSold]
+ */
+export function resolveVersions(tagsByGroup, firstSold = FIRST_SOLD_RELEASE) {
   const newest = {};
   for (const group of GROUPS) {
     newest[group] = new Map();
@@ -104,8 +120,12 @@ export function resolveVersions(tagsByGroup) {
     }
   }
 
-  return [...newest.core.keys()]
+  const versions = [...newest.core.keys()]
     .filter((line) => newest.pro.has(line))
     .sort((a, b) => compareLines(b, a))
     .map((line) => ({ version: line, core: newest.core.get(line), pro: newest.pro.get(line) }));
+
+  return firstSold === null
+    ? versions.slice(0, 1)
+    : versions.filter((entry) => compareLines(entry.version, lineOf(firstSold)) >= 0);
 }

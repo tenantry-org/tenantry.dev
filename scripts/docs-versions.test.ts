@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { lineOf, publishedTags, resolveVersions, versionProblems } from './docs-versions.mjs';
 
 const v04 = { version: '0.4', core: 'v0.4.0', pro: 'v0.4.0' };
+// A first sale older than every release: no line is hidden.
+const ALL = 'v0.1.0';
 
 describe('docs versions', () => {
   it('reads a tag’s release line', () => {
@@ -42,10 +44,13 @@ describe('docs versions', () => {
 
   it('publishes each line both groups released, with the newest stable patch of each', () => {
     expect(
-      resolveVersions({
-        core: ['v0.3.0-alpha.1', 'v0.4.0', 'v0.4.2', 'v0.4.10', 'v0.5.0', 'v0.6.0-rc.1', 'not-a-release'],
-        pro: ['v0.4.0', 'v0.4.1', 'v0.5.0', 'v0.5.1', 'v0.6.0-rc.1'],
-      }),
+      resolveVersions(
+        {
+          core: ['v0.3.0-alpha.1', 'v0.4.0', 'v0.4.2', 'v0.4.10', 'v0.5.0', 'v0.6.0-rc.1', 'not-a-release'],
+          pro: ['v0.4.0', 'v0.4.1', 'v0.5.0', 'v0.5.1', 'v0.6.0-rc.1'],
+        },
+        ALL,
+      ),
     ).toEqual([
       { version: '0.5', core: 'v0.5.0', pro: 'v0.5.1' },
       { version: '0.4', core: 'v0.4.10', pro: 'v0.4.1' },
@@ -53,27 +58,44 @@ describe('docs versions', () => {
   });
 
   it('waits for both groups before publishing a new line', () => {
-    expect(resolveVersions({ core: ['v0.4.0', 'v0.5.0'], pro: ['v0.4.0'] })).toEqual([v04]);
-    expect(resolveVersions({ core: [], pro: ['v0.4.0'] })).toEqual([]);
+    expect(resolveVersions({ core: ['v0.4.0', 'v0.5.0'], pro: ['v0.4.0'] }, ALL)).toEqual([v04]);
+    expect(resolveVersions({ core: [], pro: ['v0.4.0'] }, ALL)).toEqual([]);
   });
 
   it('orders lines numerically, newest first', () => {
     expect(
-      resolveVersions({ core: ['v0.9.0', 'v0.10.0', 'v1.0.0'], pro: ['v0.9.0', 'v0.10.0', 'v1.0.0'] }).map(
+      resolveVersions({ core: ['v0.9.0', 'v0.10.0', 'v1.0.0'], pro: ['v0.9.0', 'v0.10.0', 'v1.0.0'] }, ALL).map(
         (v) => v.version,
       ),
     ).toEqual(['1', '0.10', '0.9']);
   });
 
   it('publishes one line per major from 1.0, with its newest release', () => {
-    const versions = resolveVersions({
-      core: ['v0.5.6', 'v1.0.1', 'v1.2.0', 'v1.10.0', 'v2.0.0-rc.1'],
-      pro: ['v0.5.0', 'v1.0.0', 'v1.1.3', 'v1.1.12'],
-    });
+    const versions = resolveVersions(
+      {
+        core: ['v0.5.6', 'v1.0.1', 'v1.2.0', 'v1.10.0', 'v2.0.0-rc.1'],
+        pro: ['v0.5.0', 'v1.0.0', 'v1.1.3', 'v1.1.12'],
+      },
+      ALL,
+    );
     expect(versions).toEqual([
       { version: '1', core: 'v1.10.0', pro: 'v1.1.12' },
       { version: '0.5', core: 'v0.5.6', pro: 'v0.5.0' },
     ]);
     expect(versionProblems(versions)).toEqual([]);
+  });
+
+  it('publishes only the newest line while no release has been sold', () => {
+    const tags = { core: ['v0.4.0', 'v0.5.0', 'v0.6.0', 'v0.6.1'], pro: ['v0.4.0', 'v0.5.0', 'v0.6.1'] };
+    expect(resolveVersions(tags, null)).toEqual([{ version: '0.6', core: 'v0.6.1', pro: 'v0.6.1' }]);
+    expect(resolveVersions({ core: [], pro: [] }, null)).toEqual([]);
+  });
+
+  it('publishes the line of the first release sold and every later one, and none before it', () => {
+    const tags = {
+      core: ['v0.5.0', 'v0.6.0', 'v0.6.1', 'v0.7.0', 'v1.0.0'],
+      pro: ['v0.5.0', 'v0.6.1', 'v0.7.2', 'v1.0.0'],
+    };
+    expect(resolveVersions(tags, 'v0.6.1').map((v) => v.version)).toEqual(['1', '0.7', '0.6']);
   });
 });
