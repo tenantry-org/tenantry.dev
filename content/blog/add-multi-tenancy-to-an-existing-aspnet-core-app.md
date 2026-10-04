@@ -197,7 +197,8 @@ row: EF Core throws `DbUpdateConcurrencyException`, and Globex's order is unchan
 
 The isolation is in EF Core, not in the database:
 
-- Raw SQL (`FromSql`, `SqlQuery`, `ExecuteSql`) is not seen. Add the tenant to it yourself.
+- SQL you send yourself with `SqlQuery` or `ExecuteSql` is not seen. Add the tenant to it yourself. `FromSql` on a
+  tenant entity is filtered like any other query on it.
 - `IgnoreQueryFilters()` turns the tenant filter off for that query, for administrators' reports. On EF Core 10,
   `IgnoreQueryFilters([TenantryQueryFilters.Tenant])` keeps your other filters.
 - A context whose options do not call `UseTenantry()` is not isolated.
