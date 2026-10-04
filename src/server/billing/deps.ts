@@ -47,7 +47,11 @@ export const defaultBillingDeps: BillingDeps = {
   listAdjustments: (subscriptionIds) => listAdjustments(subscriptionIds),
 };
 
-/** The prices Pro is offered at (PADDLE_PRICE_MONTHLY and PADDLE_PRICE_YEARLY): only a payment at one of them counts. */
-export function offerPriceIds(deps: Pick<BillingDeps, 'config'>): string[] {
-  return Object.values(deps.config.paddle.prices);
+/**
+ * Every price Pro has been offered at: only a payment at one of them counts. The configured PADDLE_PRICE_MONTHLY and
+ * PADDLE_PRICE_YEARLY are added first, so changing them adds the new prices and keeps the old ones counting.
+ */
+export async function offeredPriceIds(deps: Pick<BillingDeps, 'config' | 'store'>): Promise<string[]> {
+  await deps.store.recordOfferedPrices(deps.config.paddle.prices);
+  return deps.store.listOfferedPriceIds();
 }

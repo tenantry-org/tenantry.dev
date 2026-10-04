@@ -9,7 +9,7 @@ import {
 } from '@/server/integrations/email/templates';
 import { errorMessage } from '@/lib/errors';
 import { computeEntitlement, isEntitled } from '@/server/billing/entitlement-policy';
-import { type BillingDeps, defaultBillingDeps, offerPriceIds } from '@/server/billing/deps';
+import { type BillingDeps, defaultBillingDeps, offeredPriceIds } from '@/server/billing/deps';
 
 /**
  * Brings a customer's stored state, and what follows from it, in line with what Paddle has told us. Every Paddle event
@@ -57,13 +57,14 @@ export async function syncCustomer(
   deps: BillingDeps = defaultBillingDeps,
   now: Date = new Date(),
 ): Promise<CustomerSync> {
-  const [subscriptions, payments, adjustments, email, previousGrants, isTest] = await Promise.all([
+  const [subscriptions, payments, adjustments, email, previousGrants, isTest, offerPriceIds] = await Promise.all([
     deps.store.listSubscriptions(customerId),
     deps.store.listPayments(customerId),
     deps.store.listPaymentAdjustments(customerId),
     deps.store.getCustomerEmail(customerId),
     deps.store.listGrants(customerId),
     deps.store.isTestCustomer(customerId),
+    offeredPriceIds(deps),
   ]);
   // A test customer (customers.is_test) is kept by the operator for checks: nobody is emailed or alerted about it.
   if (isTest) deps = { ...deps, sendEmail: async () => false, alertOperator: async () => undefined };
@@ -73,7 +74,7 @@ export async function syncCustomer(
     payments,
     adjustments,
     proProductId: deps.config.paddle.proProductId,
-    offerPriceIds: offerPriceIds(deps),
+    offerPriceIds,
     now,
   });
   const entitled = isEntitled(entitlement.access.status);

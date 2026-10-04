@@ -335,13 +335,13 @@ describe('vesting emails', () => {
   const subjects = () => deps.sendEmail.mock.calls.map(([message]) => message.subject);
   const alerts = () => deps.alertOperator.mock.calls.map(([subject]) => subject);
 
-  async function pay(transactionId: string, startsAt: string, endsAt: string, interval = 'month') {
+  async function pay(transactionId: string, startsAt: string, endsAt: string, interval = 'month', priceId?: string) {
     await memory.store.recordPayment({
       transactionId,
       customerId: 'ctm_1',
       subscriptionId: 'sub_1',
       origin: 'subscription_recurring',
-      priceId: interval === 'year' ? 'pri_01year' : 'pri_01month',
+      priceId: priceId ?? (interval === 'year' ? 'pri_01year' : 'pri_01month'),
       billingInterval: interval,
       billingFrequency: 1,
       periodStartsAt: startsAt,
@@ -356,6 +356,28 @@ describe('vesting emails', () => {
   }
 
   const month = (n: number) => new Date(Date.UTC(2026, n, 1)).toISOString();
+
+  it('loses nothing when the offer prices change: time paid at an earlier price still counts, renewals included', async () => {
+    memory.subscribe('ctm_1');
+    for (let n = 0; n < 12; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+    await syncCustomer('ctm_1', deps, new Date('2027-01-01T01:00:00Z'));
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-01-01T00:00:00Z'));
+
+    // New prices are configured; a subscriber on the old monthly price renews at it.
+    deps.config = testServerConfig({
+      paddle: { ...testServerConfig().paddle, prices: { month: 'pri_02month', year: 'pri_02year' } },
+    });
+    await pay('txn_12', month(12), month(13));
+    await syncCustomer('ctm_1', deps, new Date('2027-02-01T00:00:00Z'));
+
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-02-01T00:00:00Z'));
+    expect([...memory.state.offeredPrices.keys()].sort()).toEqual([
+      'pri_01month',
+      'pri_01year',
+      'pri_02month',
+      'pri_02year',
+    ]);
+  });
 
   it('tells the customer once when a qualifying period vests, not as the vested-through date moves on', async () => {
     memory.subscribe('ctm_1');

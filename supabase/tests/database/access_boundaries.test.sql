@@ -9,7 +9,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(46);
+select plan(48);
 
 -- Structure: holds for every table and function, not only the ones listed below.
 select is_empty(
@@ -56,6 +56,7 @@ insert into public.payments (
     now(), now());
 insert into public.payment_adjustments (adjustment_id, transaction_id, customer_id, action, type, status, last_event_at)
 values ('adj_alice', 'txn_alice', 'ctm_alice', 'refund', 'partial', 'approved', now());
+insert into public.offered_prices (price_id, billing_interval) values ('pri_1', 'month');
 insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at) values
   ('ctm_alice', 'qualifying_run', '2026-01-01', '2027-01-01', 'confirmed', now()),
   ('ctm_bob', 'qualifying_run', '2026-01-01', '2027-01-01', 'confirmed', now());
@@ -123,6 +124,10 @@ select throws_ok(
     values ('txn_forged', 'ctm_alice', 'sub_alice', 'web', 'pri_1', 'year', 1, now(), now() + interval '1 year', 1, 0,
       1, 'GBP', now(), now())$$,
   '42501', null, 'she cannot record a payment');
+select is((select count(*)::int from public.offered_prices), 0, 'she cannot see the offered prices');
+select throws_ok(
+  $$insert into public.offered_prices (price_id, billing_interval) values ('pri_mine', 'year')$$,
+  '42501', null, 'she cannot add a price that would count towards vesting');
 select throws_ok(
   $$insert into public.licences (customer_id, jwt) values ('ctm_alice', 'forged')$$,
   '42501', null, 'she cannot add a licence');

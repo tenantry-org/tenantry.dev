@@ -44,6 +44,8 @@ const state = {
   entitlementStates: new Map<string, Entitlement>(),
   /** The customers marked as test customers (customers.is_test). */
   testCustomers: new Set<string>(),
+  /** Every price Pro was offered at (offered_prices), by price id, with its interval. */
+  offeredPrices: new Map<string, string>(),
 };
 
 /** The customer's licences, oldest first. */
@@ -66,6 +68,7 @@ export const memory = {
     state.adjustments.clear();
     state.entitlementStates.clear();
     state.testCustomers.clear();
+    state.offeredPrices.clear();
   },
 
   /**
@@ -99,6 +102,17 @@ export const memory = {
 
     async isTestCustomer(customerId: string) {
       return state.testCustomers.has(customerId);
+    },
+
+    // As record_offered_prices does: adds any price not yet recorded, never removes or changes one.
+    async recordOfferedPrices(prices: Record<string, string>) {
+      for (const [interval, priceId] of Object.entries(prices)) {
+        if (!state.offeredPrices.has(priceId)) state.offeredPrices.set(priceId, interval);
+      }
+    },
+
+    async listOfferedPriceIds() {
+      return [...state.offeredPrices.keys()];
     },
 
     async recordCustomerEvent(event: { customerId: string; email: string; occurredAt: string }) {

@@ -4,6 +4,7 @@ import type { PaddleEventJson } from '@/server/db/customer-jobs';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
 import { adjustmentEvent, customerEvent, subscriptionEvent, transactionEvent } from '@/test/paddle-events';
 import { memory } from '@/test/memory-billing-store';
+import { testServerConfig } from '@/test/server-config';
 import { syncCustomer } from './customer-access';
 import { applyPaddleEvent } from './apply-paddle-event';
 
@@ -549,6 +550,23 @@ describe('applyPaddleEvent', () => {
       vi.setSystemTime(new Date('2028-01-02T00:00:00Z'));
       await syncCustomer('ctm_01', deps);
       expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toBeNull();
+    });
+
+    it('counts a renewal at a price offered before the prices changed, without alerting', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      await applyPaddleEvent(delivered(created), deps);
+      await applyPaddleEvent(delivered(year[0]), deps);
+      deps.config = testServerConfig({
+        paddle: { ...testServerConfig().paddle, prices: { month: 'pri_02month', year: 'pri_02year' } },
+      });
+      vi.clearAllMocks();
+
+      for (const event of year.slice(1)) await applyPaddleEvent(delivered(event), deps);
+      vi.setSystemTime(new Date('2028-01-01T04:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toEqual(new Date('2028-01-01T00:00:00Z'));
+      expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
     it('fails a payment whose customer is not recorded yet, so the worker retries it', async () => {

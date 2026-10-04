@@ -15,7 +15,7 @@ import type { PaddleTransaction } from '@/server/integrations/paddle/list-transa
 import type { PaddleAdjustment } from '@/server/integrations/paddle/list-adjustments';
 import { subscriptionEndedAt } from '@/server/billing/paddle-assumptions';
 import { normaliseEmail } from '@/server/db/customer-email';
-import { type BillingDeps, defaultBillingDeps, offerPriceIds } from '@/server/billing/deps';
+import { type BillingDeps, defaultBillingDeps, offeredPriceIds } from '@/server/billing/deps';
 
 // Structural view of the bits of SubscriptionNotification this handler needs.
 interface SubscriptionEventData {
@@ -166,13 +166,13 @@ export async function recordCompletedTransaction(
     occurredAt,
   });
 
-  if (!offerPriceIds(deps).includes(price.id)) {
+  if (!(await offeredPriceIds(deps)).includes(price.id)) {
     await deps.alertOperator(
       `Pro payment at a price not offered, for customer ${data.customerId}`,
       `Transaction ${data.id} (${data.origin}) on subscription ${data.subscriptionId} paid price ${price.id}, which ` +
-        'is neither PADDLE_PRICE_MONTHLY nor PADDLE_PRICE_YEARLY. It is recorded but counts for nothing towards ' +
-        'vesting and grants no annual term. Check how the price was sold; if the time should count, add an operator ' +
-        'grant.',
+        'Pro has never been offered at (offered_prices: every PADDLE_PRICE_MONTHLY and _YEARLY the site has been ' +
+        'configured with). It is recorded but counts for nothing towards vesting and grants no annual term. Check how ' +
+        'the price was sold; if it is a Pro offer price, add it to offered_prices and reconcile the customer.',
     );
   }
 

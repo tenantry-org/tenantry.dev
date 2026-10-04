@@ -35,14 +35,15 @@ export default function EulaPage() {
       <p>
         Vesting follows the money you keep: paid time adds up across consecutive billing periods and vests at 12 months,
         and money returned to you takes away the time it paid for. Each payment for a billing period of any of your
-        Tenantry Pro subscriptions, at the monthly or yearly price offered on this site, gives a paid period: the part
-        of that billing period that the money kept from the payment pays for, counted from the start of the billing
-        period. A payment kept in full gives the whole billing period, even if the subscription was cancelled or paused
-        before the period ended. If part of a payment has been returned to you, the paid period is the same share of the
-        billing period as the share of the payment you kept: if half of a month&apos;s payment is refunded, the paid
-        period is the first half of that month. A payment of which everything has been returned, or for which nothing
-        was charged (a trial, or a period discounted to zero), gives no paid period. Amounts are compared before tax. A
-        discount does not count as money returned, so a discounted payment that you keep gives the whole billing period.
+        Tenantry Pro subscriptions, at a monthly or yearly price offered on this site at the time you subscribed, gives
+        a paid period: the part of that billing period that the money kept from the payment pays for, counted from the
+        start of the billing period. A payment kept in full gives the whole billing period, even if the subscription was
+        cancelled or paused before the period ended. If part of a payment has been returned to you, the paid period is
+        the same share of the billing period as the share of the payment you kept: if half of a month&apos;s payment is
+        refunded, the paid period is the first half of that month. A payment of which everything has been returned, or
+        for which nothing was charged (a trial, or a period discounted to zero), gives no paid period. Amounts are
+        compared before tax. A discount does not count as money returned, so a discounted payment that you keep gives
+        the whole billing period.
       </p>
       <p>
         Money is returned to you by a refund, a credit or a chargeback once it has been approved. A correction of tax
@@ -52,15 +53,14 @@ export default function EulaPage() {
         time, and a reversal restores it.
       </p>
       <p>
-        A qualifying period is a series of billing periods, at the monthly or yearly price, in which each billing period
-        starts no more than one hour after the end of the billing periods before it. A billing period whose subscription
-        ended before the period did reaches only to when the subscription ended, though its paid period still counts in
-        full. A gap of more than one hour breaks a qualifying period, for example when your subscription ends and no
-        billing period follows within the hour, or a renewal is not paid; the next billing period then starts a new
-        qualifying period from zero. Returning money does not break a qualifying period: a billing period of which part
-        or all of the payment was returned, or for which nothing was charged, continues it, and adds only its paid
-        period, if any. A qualifying period starts at the start of its first billing period for which something was
-        charged.
+        A qualifying period is a series of billing periods, at such a price, in which each billing period starts no more
+        than one hour after the end of the billing periods before it. A billing period whose subscription ended before
+        the period did reaches only to when the subscription ended, though its paid period still counts in full. A gap
+        of more than one hour breaks a qualifying period, for example when your subscription ends and no billing period
+        follows within the hour, or a renewal is not paid; the next billing period then starts a new qualifying period
+        from zero. Returning money does not break a qualifying period: a billing period of which part or all of the
+        payment was returned, or for which nothing was charged, continues it, and adds only its paid period, if any. A
+        qualifying period starts at the start of its first billing period for which something was charged.
       </p>
       <p>
         The paid time of a qualifying period is the total length of its paid periods, counting any time in which they
@@ -75,8 +75,8 @@ export default function EulaPage() {
         end of the thirteenth month.
       </p>
       <p>
-        When you pay the yearly price for an annual billing period (an &quot;annual term&quot;), Tenantry grants you at
-        once, on condition that you keep the whole payment, that every release whose release date is on or before the
+        When you pay such a yearly price for an annual billing period (an &quot;annual term&quot;), Tenantry grants you
+        at once, on condition that you keep the whole payment, that every release whose release date is on or before the
         end of the term is vested (the &quot;term&apos;s grant&quot;). The term&apos;s grant is confirmed when the term
         ends, and the end of the term is then a vested-through date. Any refund, credit or chargeback of the payment
         withdraws the term&apos;s grant, at any time, including after the term has ended. The part of the term that the

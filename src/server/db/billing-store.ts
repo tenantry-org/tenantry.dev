@@ -3,6 +3,7 @@ import type { SubscriptionStatus } from '@paddle/paddle-node-sdk';
 import { createServiceRoleClient } from '@/server/db/service-role-client';
 import { chargedBeforeTax } from '@/server/db/payment-amounts';
 import type { Json } from '@/lib/supabase/database.types';
+import type { OfferPrices } from '@/lib/public-config';
 
 /**
  * Service-role data access for the commercial tables: customers and subscriptions (as Paddle's events left them), the
@@ -127,6 +128,30 @@ export async function getCustomerEmail(customerId: string): Promise<string | nul
   if (error) throw error;
 
   return data?.email ?? null;
+}
+
+/**
+ * Adds the configured offer prices to every price Pro has been offered at (offered_prices), if not there yet. Never
+ * removes or changes one, so a price that is no longer offered still counts for the subscribers who pay it.
+ */
+export async function recordOfferedPrices(prices: OfferPrices): Promise<void> {
+  const supabase = createServiceRoleClient();
+  const rows = Object.entries(prices).map(([interval, priceId]) => ({ price_id: priceId, billing_interval: interval }));
+  const { error } = await supabase
+    .from('offered_prices')
+    .upsert(rows, { onConflict: 'price_id', ignoreDuplicates: true });
+
+  if (error) throw error;
+}
+
+/** Every price Pro has been offered at: a payment counts towards vesting only at one of them. */
+export async function listOfferedPriceIds(): Promise<string[]> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.from('offered_prices').select('price_id');
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => row.price_id);
 }
 
 /** Whether the customer is a test customer the operator keeps for checks (customers.is_test). */
