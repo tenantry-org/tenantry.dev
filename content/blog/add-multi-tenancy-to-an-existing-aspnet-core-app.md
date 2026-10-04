@@ -2,6 +2,7 @@
 title: Add multi-tenancy to an existing ASP.NET Core application
 description: Keep your organisations table as the tenant registry, resolve the tenant on each request, and isolate EF Core data with one call on the DbContext you already have.
 date: 2026-10-03
+updated: 2026-10-04
 author: Oliver McNally
 versions: Tenantry 0.6, .NET 10, EF Core 10 and PostgreSQL 16
 tags: [dotnet, aspnetcore, efcore, multitenancy]

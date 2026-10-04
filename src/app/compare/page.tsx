@@ -28,7 +28,7 @@ const NOTES = [
   },
   {
     title: 'What Tenantry does not do',
-    text: 'Tenantry is a library, not an application framework: there is no tenant management UI, as ABP’s Tenant Management module has. It builds in one tenant store, which holds tenants in memory. It adds TenantId to no key or index, where Finbuckle can, with AdjustUniqueIndexes(), so declare per-tenant unique indexes yourself. When a resolver’s identifier names no tenant, Tenantry does not try the next resolver, as Finbuckle does. The isolation is in EF Core, not the database: raw SQL and IgnoreQueryFilters() are not isolated.',
+    text: 'Tenantry is a library, not an application framework: there is no tenant management UI, as ABP’s Tenant Management module has. It builds in one tenant store, which holds tenants in memory. It adds TenantId to no key or index, where Finbuckle can, with AdjustUniqueIndexes(), so declare per-tenant unique indexes yourself. When a resolver’s identifier names no tenant, Tenantry does not try the next resolver, as Finbuckle does. The isolation is in EF Core, not the database: FromSql on a tenant entity is filtered like any other query on it; SQL sent with SqlQuery or ExecuteSql, and queries with IgnoreQueryFilters(), are not isolated.',
   },
   {
     title: '.NET versions',
