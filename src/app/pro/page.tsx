@@ -14,11 +14,11 @@ export const metadata: Metadata = {
   alternates: { canonical: '/pro' },
 };
 
-// From Tenantry Pro's guides (tenant lifecycle, migrations, Hangfire), shortened; each compiles against Pro 0.5.
+// From Tenantry Pro's guides (tenant lifecycle, migrations, Hangfire), shortened; each compiles against Pro 0.6.
 const WORKFLOWS = [
   {
     title: 'Onboard and offboard tenants',
-    text: 'One call creates the tenant’s database or schema, migrates it and runs your seeders. The result reports each step, and every built-in step is safe to repeat, so you retry a failed onboarding by running it again. Offboarding runs your export steps, then can drop the tenant’s database or schema, or delete its rows from a shared database.',
+    text: 'One call creates the tenant’s database or schema, migrates it and runs your seeders, and its result reports each step. To retry a failed onboarding, run it again: every step runs again, and Tenantry’s own are safe to repeat, so write your seeders to be too. Offboarding runs your export steps, then can drop the tenant’s database or schema, or delete its rows from a shared database.',
     caption: 'TenantOnboarding.cs',
     code: `tenant.UsePro(pro => pro
     .AddSeeder<DefaultDataSeeder>()               // your seeder, last
@@ -32,7 +32,7 @@ if (result.Succeeded)
   },
   {
     title: 'Keep every tenant database migrated',
-    text: 'Run migrate-tenants as a deployment step. It applies pending migrations to every tenant database or schema. One failure doesn’t stop the rest, and the step exits non-zero so the release waits. You can also read where each database stands without migrating.',
+    text: 'Run migrate-tenants as a deployment step. It applies pending migrations to every tenant database or schema. If one fails, the others still run, and the step exits non-zero, which stops the release. You can also read where each database stands without migrating.',
     caption: 'Program.cs',
     code: `await using var app = builder.Build();
 
@@ -55,7 +55,7 @@ builder.Services.AddHangfire((sp, config) => config
     .UseTenantry(sp));
 
 // Runs as the current tenant, or as the one you name:
-jobs.ForTenant(tenantId).Enqueue<ReportJob>(job => job.Execute());`,
+jobs.WithTenant(tenantId).Enqueue<ReportJob>(job => job.Execute());`,
     link: { label: 'Background jobs', href: '/docs/pro/background-jobs' },
   },
 ];
