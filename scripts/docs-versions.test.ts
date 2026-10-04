@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { lineOf, publishedTags, resolveVersions, versionProblems } from './docs-versions.mjs';
+import {
+  checkFirstSold,
+  lineOf,
+  oldestReleaseShown,
+  publishedTags,
+  resolveVersions,
+  versionProblems,
+} from './docs-versions.mjs';
 
 const v04 = { version: '0.4', core: 'v0.4.0', pro: 'v0.4.0' };
 // A first sale older than every release: no line is hidden.
@@ -26,6 +33,9 @@ describe('docs versions', () => {
     ]);
     expect(versionProblems([{ version: '0.4', core: 'v0.4.0', pro: 'v0.5.0' }])).toEqual([
       "0.4's pro tag v0.5.0 is not a 0.4 release.",
+    ]);
+    expect(versionProblems([{ version: '0.4', core: 'v0.4.0', pro: 'v0.4.0-rc.1' }])).toEqual([
+      "0.4's pro tag v0.4.0-rc.1 is not a release tag (vX.Y.Z).",
     ]);
     expect(versionProblems([v04, v04])).toEqual(['0.4 is listed twice.', '0.4 is out of order (newest first).']);
     expect(versionProblems([{ version: '1.0', core: 'v1.0.0', pro: 'v1.0.0' }])).toEqual([
@@ -97,5 +107,26 @@ describe('docs versions', () => {
       pro: ['v0.5.0', 'v0.6.1', 'v0.7.2', 'v1.0.0'],
     };
     expect(resolveVersions(tags, 'v0.6.1').map((v) => v.version)).toEqual(['1', '0.7', '0.6']);
+  });
+
+  it('accepts no first sale, or a release tag, and refuses anything else with the reason', () => {
+    expect(checkFirstSold(null)).toBeNull();
+    expect(checkFirstSold('v0.6.1')).toBe('v0.6.1');
+    for (const value of ['0.6.1', 'v0.6.1-rc.1', 'v0.6', '']) {
+      expect(() => checkFirstSold(value)).toThrow(/FIRST_SOLD_RELEASE is .*: set it to null, or to a release tag/);
+      expect(() => resolveVersions({ core: ['v0.6.1'], pro: ['v0.6.1'] }, value)).toThrow(/FIRST_SOLD_RELEASE/);
+      expect(() => oldestReleaseShown('v0.6.1', value)).toThrow(/FIRST_SOLD_RELEASE/);
+    }
+  });
+
+  it('publishes nothing while no line at or after the first release sold has both releases', () => {
+    expect(resolveVersions({ core: ['v0.6.0', 'v0.7.0'], pro: ['v0.6.0'] }, 'v0.7.0')).toEqual([]);
+  });
+
+  it('starts a changelog at the first release sold, or at the release its docs are of when that is older', () => {
+    expect(oldestReleaseShown('v0.6.2', null)).toBe('v0.6.2');
+    expect(oldestReleaseShown('v0.6.2', 'v0.6.1')).toBe('v0.6.1');
+    expect(oldestReleaseShown('v0.6.0', 'v0.6.1')).toBe('v0.6.0');
+    expect(oldestReleaseShown('v0.7.3', 'v0.6.1')).toBe('v0.6.1');
   });
 });

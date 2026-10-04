@@ -30,7 +30,7 @@ import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { changelogPage } from './docs-changelog.mjs';
 import { brokenDocsLinks, linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
-import { basePath, compareLines, FIRST_SOLD_RELEASE, readVersions, versionProblems } from './docs-versions.mjs';
+import { basePath, compareLines, oldestReleaseShown, readVersions, versionProblems } from './docs-versions.mjs';
 import { fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -226,8 +226,8 @@ function syncChangelog(source, outDir, group, linkSource, context) {
     product: group.title,
     line: context.version,
     fullChangelog: `${linkSource.repository}/blob/${linkSource.ref}/CHANGELOG.md`,
-    // Nothing older than the first release sold; with none sold yet, only the release the docs are of.
-    from: FIRST_SOLD_RELEASE ?? context.tags[group.name],
+    // Nothing older than the first release sold, nor than the release the docs are of when that is older.
+    from: oldestReleaseShown(context.tags[group.name]),
   });
   const content = toFrontmatter(page, group.name, linkSource, '', context);
   for (const link of relativeLinks(content)) brokenLinks.push(`${context.version} ${group.name}/CHANGELOG.md: ${link}`);

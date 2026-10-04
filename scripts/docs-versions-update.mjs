@@ -12,7 +12,15 @@
 import { execFileSync } from 'child_process';
 import { isDeepStrictEqual } from 'util';
 import { REPOSITORIES } from './docs-sources.mjs';
-import { GROUPS, publishedTags, readVersions, resolveVersions, writeVersions } from './docs-versions.mjs';
+import {
+  FIRST_SOLD_RELEASE,
+  GROUPS,
+  lineOf,
+  publishedTags,
+  readVersions,
+  resolveVersions,
+  writeVersions,
+} from './docs-versions.mjs';
 
 function tags(group) {
   const options = { encoding: 'utf8' };
@@ -39,7 +47,12 @@ const expected = resolveVersions(
   Object.fromEntries(await Promise.all(GROUPS.map(async (group) => [group, await releasedTags(group)]))),
 );
 if (expected.length === 0) {
-  console.error('docs-versions: no release line has both a Core and a Pro release.');
+  console.error(
+    FIRST_SOLD_RELEASE === null
+      ? 'docs-versions: no release line has both a Core and a Pro release.'
+      : `docs-versions: no release line from ${lineOf(FIRST_SOLD_RELEASE)} on (FIRST_SOLD_RELEASE is ${FIRST_SOLD_RELEASE}) ` +
+          'has both a Core and a Pro release yet.',
+  );
   process.exit(1);
 }
 

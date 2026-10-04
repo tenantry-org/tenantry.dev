@@ -5,8 +5,9 @@ import { compareReleases, lineOf } from './docs-versions.mjs';
  * its patches, with the steps to update from 0.4) without the Keep a Changelog preamble, under a title and a
  * one-line introduction, and a link to the full changelog for earlier releases. Ready for sync-docs' frontmatter and
  * link rewriting.
- *   - With `from`, a release before it is left out, and so is the link when every earlier release is before it: the
- *     site shows nothing of a release older than the first one sold (FIRST_SOLD_RELEASE in docs-versions.mjs).
+ *   - With `from`, a release before it, or a pre-release of it, is left out, and so is the link when every earlier
+ *     release is: the site shows nothing of a release older than the first one sold (oldestReleaseShown in
+ *     docs-versions.mjs).
  *   - An empty `## [Unreleased]` section (a release tag's) is dropped; one with entries (a local preview of a
  *     repository's master) stays.
  *   - `## [0.5.0] - 2026-10-03` becomes `## 0.5.0 - 2026-10-03`: the brackets are for reference links the changelogs
@@ -33,9 +34,14 @@ export function changelogPage(markdown, { product, line, fullChangelog, from }) 
     const version = versionOfSection(section);
     return version === undefined ? null : lineOf(`v${version}`);
   };
-  // A pre-release compares as the release it leads to, so it is hidden with it.
-  const shown = (section) =>
-    !from || compareReleases(`v${/^\d+\.\d+\.\d+/.exec(versionOfSection(section))[0]}`, from) >= 0;
+  // A pre-release comes before its release, so `from` and later releases are shown, and only the pre-releases of
+  // releases after `from`.
+  const shown = (section) => {
+    if (!from) return true;
+    const [release, preRelease] = /^(\d+\.\d+\.\d+)(-.*)?/.exec(versionOfSection(section)).slice(1);
+    const order = compareReleases(`v${release}`, from);
+    return preRelease ? order > 0 : order >= 0;
+  };
   const unreleased = ([heading, ...rest]) =>
     /^## \[?unreleased\]?\s*$/i.test(heading) && rest.some((text) => text.trim());
 

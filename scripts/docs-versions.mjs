@@ -31,6 +31,25 @@ export const CONFIG_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..'
  */
 export const FIRST_SOLD_RELEASE = null;
 
+/** The first release sold, checked: null, or a release tag without a pre-release suffix, such as `v0.6.1`. */
+export function checkFirstSold(firstSold) {
+  if (firstSold === null || STABLE_TAG.test(firstSold ?? '')) return firstSold;
+  throw new Error(
+    `FIRST_SOLD_RELEASE is ${JSON.stringify(firstSold)}: set it to null, or to a release tag such as v0.6.1, ` +
+      'with its v and without a pre-release suffix.',
+  );
+}
+
+/**
+ * The oldest release a docs version's changelog shows, given the release its docs are of (`tag`): the first release
+ * sold, or the docs' own release when that is older or none has been sold. A line whose product released only
+ * before the first sale still shows the release its docs describe.
+ */
+export function oldestReleaseShown(tag, firstSold = FIRST_SOLD_RELEASE) {
+  checkFirstSold(firstSold);
+  return firstSold !== null && compareReleases(firstSold, tag) < 0 ? firstSold : tag;
+}
+
 /** The release line a tag belongs to: v0.4.1 → 0.4, v1.2.3 → 1. */
 export function lineOf(tag) {
   const match = RELEASE_TAG.exec(tag ?? '');
@@ -59,6 +78,7 @@ export function versionProblems(versions) {
     for (const group of GROUPS) {
       const tag = entry[group];
       if (!tag) problems.push(`${version} has no ${group} tag.`);
+      else if (!STABLE_TAG.test(tag)) problems.push(`${version}'s ${group} tag ${tag} is not a release tag (vX.Y.Z).`);
       else if (lineOf(tag) !== version) problems.push(`${version}'s ${group} tag ${tag} is not a ${version} release.`);
     }
   }
@@ -109,6 +129,7 @@ export function publishedTags(tags, publishedVersions) {
  * @param {string | null} [firstSold]
  */
 export function resolveVersions(tagsByGroup, firstSold = FIRST_SOLD_RELEASE) {
+  checkFirstSold(firstSold);
   const newest = {};
   for (const group of GROUPS) {
     newest[group] = new Map();
