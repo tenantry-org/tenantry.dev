@@ -31,12 +31,13 @@ export default function RefundsPage() {
 
       <h2>4. Effect on access and vesting</h2>
       <p>
-        The terms used here (subscription, paid period, qualifying period, 12 consecutive paid months, annual term, the
-        term&apos;s grant, vested releases, vested-through date) are defined in the <a href="/legal/eula">EULA</a>,
-        section 2. Vesting follows the money you keep: a refund, a credit or a chargeback of a payment takes away the
-        time that money paid for, and any vesting that relied on it, whenever it is approved, as that section sets out.
-        For example, a refund of half a month&apos;s payment leaves the first half of that month as a paid period, and
-        any refund of an annual term withdraws the term&apos;s grant.
+        The terms used here (subscription, paid period, qualifying period, 12 paid months, annual term, the term&apos;s
+        grant, vested releases, vested-through date) are defined in the <a href="/legal/eula">EULA</a>, section 2.
+        Vesting follows the money you keep: a refund, a credit or a chargeback of a payment takes away the time that
+        money paid for, and any vesting that relied on it, whenever it is approved, as that section sets out. For
+        example, a refund of half a month&apos;s payment leaves the first half of that month as a paid period: the
+        qualifying period continues, and reaches 12 paid months half a month later than it would have. Any refund of an
+        annual term withdraws the term&apos;s grant.
       </p>
       <p>
         When a full refund is approved, or a payment is charged back, your subscription is cancelled immediately, and it

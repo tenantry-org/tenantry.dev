@@ -176,7 +176,7 @@ export function BillingCard({ entitlement, subscriptions }: Readonly<Props>) {
         description={
           confirming?.kind === 'keep'
             ? 'The scheduled cancellation is removed, and the subscription renews as normal.'
-            : 'Your subscription runs to the end of the period you have paid for. After that, you stay licensed to use only the vested releases, which 12 consecutive paid months, or an annual term whose payment you keep in full, give you, and the package feed serves you only those, or nothing if none are vested. Your licence key keeps working either way. Paddle asks you to confirm on the next page.'
+            : 'Your subscription runs to the end of the period you have paid for. After that, you stay licensed to use only the vested releases, which 12 paid months, or an annual term whose payment you keep in full, give you, and the package feed serves you only those, or nothing if none are vested. Your licence key keeps working either way. Paddle asks you to confirm on the next page.'
         }
         confirmLabel={confirming?.kind === 'keep' ? 'Keep subscription' : 'Continue to cancel'}
         destructive={confirming?.kind === 'cancel'}

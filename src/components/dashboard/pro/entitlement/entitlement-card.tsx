@@ -118,10 +118,11 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
   return (
     <p>
       Qualifying period: <span className={'font-medium text-foreground'}>{qualifying.monthsPaid} of 12</span> paid
-      months. If your subscription continues to {formatDate(qualifying.vestsAt)}, the releases published up to then
-      become vested. If it ends before then, the qualifying period starts again from your next subscription. A refund,
-      credit or chargeback of a payment takes away the time that money paid for, and the qualifying period then starts
-      again after it.
+      months. If your subscription continues, 12 paid months are reached on {formatDate(qualifying.vestsAt)}, and your
+      releases then start to vest: those published up to your vested-through date, which is the start of your qualifying
+      period plus the paid time served. If your subscription ends before then, the qualifying period starts again from
+      your next subscription. A refund, credit or chargeback of a payment takes away the time that money paid for, so 12
+      paid months are reached later.
     </p>
   );
 }

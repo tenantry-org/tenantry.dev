@@ -56,7 +56,7 @@ export function PriceCards({ option, prices }: Props) {
             <Link href={'/legal/refunds'} className={'hover:underline'}>
               14-day refund
             </Link>{' '}
-            · Cancel any time · Keep the releases to date after 12 consecutive paid months
+            · Cancel any time · Keep vested releases after 12 paid months
           </p>
         </div>
         <div className={'border-t border-border bg-surface px-8 py-6 text-sm'}>

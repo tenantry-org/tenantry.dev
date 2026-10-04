@@ -14,7 +14,8 @@
  *   refund <email>                 an approved full refund of the newest rehearsal payment, now: it takes away the time
  *                                  that payment paid for, and any vesting that relied on it
  *   partial <email> [percent]      an approved refund of part of the newest rehearsal payment (50% unless given): the
- *                                  payment then counts for the share of its period the money kept pays for
+ *                                  payment then counts for the share of its period the money kept pays for; the
+ *                                  qualifying period continues, and reaches 12 paid months that much later
  *   chargeback <email>             an approved chargeback of the newest rehearsal payment, now: like a full refund
  *   grant <email> <date> <note>    an operator grant vesting the releases published up to <date> (ISO 8601)
  *   undo <email>                   deletes every row this script wrote for the customer

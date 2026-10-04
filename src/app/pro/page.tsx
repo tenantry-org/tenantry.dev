@@ -113,7 +113,7 @@ const nextMinor = minor === undefined ? `${major + 1}` : `${major}.${minor + 1}`
 const QUESTIONS = [
   {
     question: 'What does the subscription include?',
-    answer: `Every Tenantry Pro release while you subscribe, from the package feed (a private NuGet feed run by Tenantry), a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. After 12 consecutive paid months, or an annual term whose payment you keep in full, the releases published up to then are vested: they stay licensed to you after the subscription ends. One price for your whole company, billed monthly or yearly.`,
+    answer: `Every Tenantry Pro release while you subscribe, from the package feed (a private NuGet feed run by Tenantry), a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. After 12 months of paid time across consecutive billing periods, or an annual term whose payment you keep in full, releases become vested: they stay licensed to you after the subscription ends. One price for your whole company, billed monthly or yearly.`,
   },
   {
     question: 'How does my team install it, locally and in CI?',
@@ -146,7 +146,7 @@ const QUESTIONS = [
   {
     question: 'What happens when the subscription ends?',
     answer:
-      'You keep the vested releases: every release published up to your vested-through date, which 12 consecutive paid months, or an annual term whose payment you keep in full, give you, as the EULA sets out. Releases published after that date stop being licensed to you, and if nothing is vested, so do all of them. The package feed then serves you only the vested releases, or nothing. Ending a subscription never takes vested releases away; only money returned to you, by a refund, credit or chargeback, can. Your application keeps starting with the licence key either way, since the key does not enforce the subscription. Each Pro version runs on one Core minor version (Pro 0.6 on Core 0.6.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Until 1.0, security fixes are released as a patch to the latest two Pro minor versions. A security patch is vested when the first release of the minor version it patches is, so the package feed serves it to you.',
+      'You keep the vested releases: every release published up to your vested-through date, which 12 paid months, or an annual term whose payment you keep in full, give you, as the EULA sets out. Releases published after that date stop being licensed to you, and if nothing is vested, so do all of them. The package feed then serves you only the vested releases, or nothing. Ending a subscription never takes vested releases away; only money returned to you, by a refund, credit or chargeback, can. Your application keeps starting with the licence key either way, since the key does not enforce the subscription. Each Pro version runs on one Core minor version (Pro 0.6 on Core 0.6.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Until 1.0, security fixes are released as a patch to the latest two Pro minor versions. A security patch is vested when the first release of the minor version it patches is, so the package feed serves it to you.',
     link: { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
   },
   {

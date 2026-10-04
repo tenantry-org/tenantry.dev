@@ -494,7 +494,9 @@ output="$(rehearse vested)"
 check 'scripts/rehearse.mjs backdates 12 paid months, and reconcile vests them through the time served' \
   'vested_on_or_after_anchor' "$output"
 output="$(rehearse partial)"
-check 'a refund of half of the newest of them takes the vesting away' '[[ "$(vested_of)" == none ]]' "$output"
+# Half a month is no longer counted, and the real payment has served only a day of it back.
+check 'a refund of half of the newest of them puts 12 paid months half a month later, so nothing is vested yet' \
+  '[[ "$(vested_of)" == none ]]' "$output"
 output="$(rehearse undo)"
 output="$(rehearse vested)"
 check 'vesting again after undo' 'vested_on_or_after_anchor' "$output"
