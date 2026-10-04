@@ -3,7 +3,7 @@ title: Running EF Core migrations across tenant databases
 description: With a database per tenant, every release has to migrate every tenant's database. What a hand-written loop gets wrong, and how Tenantry Pro runs it as a deployment step.
 date: 2026-10-03
 author: Oliver McNally
-versions: Tenantry 0.5, .NET 10 and EF Core 10
+versions: Tenantry 0.6, .NET 10 and EF Core 10
 tags: [dotnet, efcore, multitenancy, devops]
 next:
   label: Read the tenant migrations guide
@@ -116,7 +116,7 @@ above) migrates several at once, which helps most when tenant databases are spre
 The runner also reads the status without changing anything, and without a licence check:
 
 ```csharp
-var status = await migrations.GetStatusAsync(ct);
+var status = await migrations.GetStatusAsync(cancellationToken: ct);
 var behind = status
     .Where(entry => !entry.IsUpToDate)
     .Select(entry => $"{entry.Database}: {entry.Error?.Message ?? $"{entry.PendingMigrations.Count} pending"}");
@@ -143,9 +143,10 @@ operations.
   support it, but two runs at once still both work through every tenant, and with EF Core 8, or PostgreSQL with
   EF Core 10, they can race on the same migration. Run it once, as a deployment step, rather than at startup on every replica.
 - **It applies migrations; it does not write them.** Generate them with `dotnet ef migrations add` as before.
-- **`MigrateAsync` creates a database that does not exist**, so a wrong connection string gets a new, empty database
-  rather than an error. Create tenant databases with provisioning, and check the connection strings your store
-  produces.
+- **A run does not create a missing database.** EF Core's `MigrateAsync` creates a database that does not exist, so
+  in the loop above a wrong connection string gets a new, empty database. The runner reports that tenant's database
+  as failed and migrates the others; with a schema per tenant, the same goes for a missing schema. Create tenant
+  databases with provisioning, and set `CreateMissingDatabases` for development, where they do not exist yet.
 - **Migrations are not Native AOT compatible**, here as in EF Core.
 
 The [tenant migrations guide](/docs/pro/migration-orchestration) has the rest, including running at startup for a
