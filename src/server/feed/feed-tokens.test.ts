@@ -69,6 +69,34 @@ describe('reading a package', () => {
     }
   });
 
+  describe('an archive that inflates beyond the limits', () => {
+    const nuspecName = (name: string) => name.endsWith('.nuspec');
+
+    it('refuses a nuspec that inflates past 1 MB, without inflating all of it', () => {
+      const huge = zip({ 'Tenantry.Pro.nuspec': 'x'.repeat(5 * 1024 * 1024) });
+      expect(() => readRootFiles(huge, nuspecName)).toThrow('larger than');
+
+      // The same, with headers that claim it is small: inflation stops at the limit all the same.
+      const lying = zip({ 'Tenantry.Pro.nuspec': 'x'.repeat(5 * 1024 * 1024) }, { declaredSize: 100 });
+      expect(() => readRootFiles(lying, nuspecName)).toThrow('larger than');
+    });
+
+    it('refuses a package whose files inflate past 32 MB in all', () => {
+      const bomb = zip({
+        'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', '1.0.0'),
+        'lib/net9.0/a.dll': '\0'.repeat(20 * 1024 * 1024),
+        'lib/net9.0/b.dll': '\0'.repeat(20 * 1024 * 1024),
+      });
+      expect(() => readRootFiles(bomb, nuspecName)).toThrow('larger than');
+
+      const lying = zip(
+        { 'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', '1.0.0'), 'lib/net9.0/a.dll': '\0'.repeat(40 * 1024 * 1024) },
+        { declaredSize: 100 },
+      );
+      expect(() => readRootFiles(lying, nuspecName)).toThrow('larger than');
+    });
+  });
+
   it('refuses something that is not a zip archive', () => {
     expect(() => readRootFiles(new Uint8Array(100), () => true)).toThrow('not a valid zip archive');
   });

@@ -4,7 +4,17 @@ import { deflateRawSync } from 'node:zlib';
  * A minimal zip writer for tests that need a .nupkg: each file stored deflated (or stored, with `store`), without
  * CRCs, which the feed's reader (src/server/feed/nupkg.ts) does not check.
  */
-export function zip(files: Record<string, string>, { store = false }: { store?: boolean } = {}): Uint8Array {
+export function zip(
+  files: Record<string, string>,
+  {
+    store = false,
+    declaredSize,
+  }: {
+    store?: boolean;
+    /** The uncompressed size each entry's headers claim, if not its real one: an archive that lies about its sizes. */
+    declaredSize?: number;
+  } = {},
+): Uint8Array {
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
@@ -20,7 +30,7 @@ export function zip(files: Record<string, string>, { store = false }: { store?: 
     local.writeUInt16LE(20, 4);
     local.writeUInt16LE(method, 8);
     local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(raw.length, 22);
+    local.writeUInt32LE(declaredSize ?? raw.length, 22);
     local.writeUInt16LE(nameBytes.length, 26);
     locals.push(local, nameBytes, data);
 
@@ -30,7 +40,7 @@ export function zip(files: Record<string, string>, { store = false }: { store?: 
     central.writeUInt16LE(20, 6);
     central.writeUInt16LE(method, 10);
     central.writeUInt32LE(data.length, 20);
-    central.writeUInt32LE(raw.length, 24);
+    central.writeUInt32LE(declaredSize ?? raw.length, 24);
     central.writeUInt16LE(nameBytes.length, 28);
     central.writeUInt32LE(offset, 42);
     centrals.push(central, nameBytes);

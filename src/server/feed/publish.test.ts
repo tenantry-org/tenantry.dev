@@ -176,6 +176,16 @@ describe('handlePublish', () => {
   });
 });
 
+describe('archives that inflate beyond the limits', () => {
+  it('refuses a package whose contents inflate past the limit with 400, storing nothing', async () => {
+    const response = await push({ ...efCore, 'lib/net9.0/huge.dll': '\0'.repeat(40 * 1024 * 1024) });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('larger than');
+    expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
+  });
+});
+
 describe('concurrent publishes of one version', () => {
   it('records the bytes that are stored at the recorded path, whichever push wins', async () => {
     // Storage that never replaces a stored file (Supabase's upload with upsert off). The first upload is the slower
