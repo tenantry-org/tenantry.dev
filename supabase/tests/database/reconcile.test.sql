@@ -21,8 +21,8 @@ insert into public.customers (customer_id, email) values
 insert into public.subscriptions (subscription_id, status, customer_id)
 select 'sub_' || customer_id, 'active', customer_id from public.customers where customer_id ~ '^ctm_[0-9]+$';
 
-insert into public.active_subscriptions (customer_id, access_status) values
-  ('ctm_access', 'grace'), ('ctm_lapsed', 'lapsed'), ('ctm_vested', 'lapsed');
+insert into public.active_subscriptions (customer_id, access_status, grace_ends_at) values
+  ('ctm_access', 'grace', now() + interval '10 days'), ('ctm_lapsed', 'lapsed', null), ('ctm_vested', 'lapsed', null);
 insert into public.active_subscriptions (customer_id, access_status, run_started_at, paid_through, vests_at) values
   ('ctm_running', 'lapsed', '2027-01-01', '2027-03-01', '2028-01-01');
 insert into public.subscriptions (subscription_id, status, customer_id) values

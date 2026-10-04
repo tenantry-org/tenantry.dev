@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { Entitlement, Payment, PaymentAdjustment, SubscriptionState } from '@/server/db/billing-store';
 import {
   addMonths,
+  canRestore,
   computeEntitlement,
+  currentAccess,
   coversRelease,
   type EntitlementInput,
   type EntitlementRules,
@@ -853,4 +855,38 @@ describe('properties over generated histories', () => {
       }
     },
   );
+});
+
+describe('access now, from what is stored', () => {
+  const now = new Date('2028-06-01T00:00:00Z');
+
+  it('keeps active and lapsed as stored, and treats never recorded as lapsed', () => {
+    expect(currentAccess({ status: 'active', graceEndsAt: null }, now)).toEqual({
+      status: 'active',
+      graceEndsAt: null,
+    });
+    expect(currentAccess({ status: 'lapsed', graceEndsAt: null }, now)).toEqual({
+      status: 'lapsed',
+      graceEndsAt: null,
+    });
+    expect(currentAccess(null, now)).toEqual({ status: 'lapsed', graceEndsAt: null });
+  });
+
+  it('keeps grace until it ends, and lapses it from that moment, before reconcile records it', () => {
+    const graceEndsAt = new Date('2028-06-10T00:00:00Z');
+    expect(currentAccess({ status: 'grace', graceEndsAt }, now)).toEqual({ status: 'grace', graceEndsAt });
+    expect(currentAccess({ status: 'grace', graceEndsAt }, graceEndsAt)).toEqual({
+      status: 'lapsed',
+      graceEndsAt: null,
+    });
+    expect(currentAccess({ status: 'grace', graceEndsAt: null }, now)).toEqual({ status: 'lapsed', graceEndsAt: null });
+  });
+
+  it('lets the package feed serve a customer with access or vested releases, and no one else', () => {
+    const vestedThrough = new Date('2027-12-31T00:00:00Z');
+    expect(canRestore({ accessStatus: 'active', vestedThrough: null })).toBe(true);
+    expect(canRestore({ accessStatus: 'grace', vestedThrough: null })).toBe(true);
+    expect(canRestore({ accessStatus: 'lapsed', vestedThrough })).toBe(true);
+    expect(canRestore({ accessStatus: 'lapsed', vestedThrough: null })).toBe(false);
+  });
 });

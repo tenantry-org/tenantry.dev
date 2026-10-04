@@ -9,7 +9,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(40);
+select plan(45);
 
 -- Structure: holds for every table and function, not only the ones listed below.
 select is_empty(
@@ -93,7 +93,18 @@ select is_empty($$select 1 from public.licence_failures$$, 'licence failures sho
 select is_empty($$select 1 from public.payment_adjustments$$, 'payment adjustments show no rows');
 select is_empty($$select 1 from public.pro_releases$$, 'releases show no rows');
 select is_empty($$select 1 from public.pro_packages$$, 'packages show no rows');
-select results_eq($$select prefix from public.feed_tokens$$, $$values ('tpf_alic'::text)$$, 'only her feed tokens');
+select results_eq($$select id is not null, name, prefix from public.feed_tokens$$, $$values (true, 'CI'::text, 'tpf_alic'::text)$$,
+  'only her feed tokens');
+select throws_ok($$select token_hash from public.feed_tokens$$, '42501', null, 'without their hashes');
+select throws_ok($$select * from public.feed_tokens$$, '42501', null, 'not even by asking for every column');
+select throws_ok($$select public.create_feed_token('ctm_alice', 'mine', repeat('b', 64), 'tpf_')$$, '42501', null,
+  'she cannot create a feed token herself');
+select throws_ok(
+  $$select public.revoke_feed_token('ctm_bob', (select id from public.feed_tokens limit 1))$$, '42501', null,
+  'nor revoke one');
+select throws_ok(
+  $$insert into public.feed_tokens (customer_id, name, token_hash, prefix) values ('ctm_alice', 'x', repeat('c', 64), 'tpf_')$$,
+  '42501', null, 'nor insert one');
 select throws_ok($$select * from public.feed_customer(encode(sha256('tpf_bob'), 'hex'))$$, '42501', null,
   'she cannot look up a feed token');
 select results_eq(

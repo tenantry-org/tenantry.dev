@@ -8,7 +8,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(23);
+select plan(25);
 
 insert into public.customers (customer_id, email) values ('ctm_1', 'buyer@example.com');
 insert into public.payments (
@@ -54,17 +54,19 @@ values ('ctm_1', 'operator', '2025-01-01', '2026-06-01', 'confirmed', now(), 'Me
 -- A month later: the run vested; the refunded annual term is no longer computed (as if its payment were gone).
 select is(
   public.set_customer_entitlement('ctm_1',
-    '{"access_status": "grace", "run_started_at": "2027-01-01T00:00:00Z", "paid_through": "2028-02-01T00:00:00Z",
-      "months_paid": 13, "vests_at": "2028-01-01T00:00:00Z", "conditional_through": "2029-02-01T00:00:00Z"}',
+    '{"access_status": "grace", "grace_ends_at": "2028-03-02T00:00:00Z", "run_started_at": "2027-01-01T00:00:00Z",
+      "paid_through": "2028-02-01T00:00:00Z", "months_paid": 13, "vests_at": "2028-01-01T00:00:00Z",
+      "conditional_through": "2029-02-01T00:00:00Z"}',
     '[{"kind": "qualifying_run", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
        "status": "confirmed", "confirmed_at": "2028-01-01T00:00:00Z", "transaction_id": null,
        "withdrawn_reason": null}]',
     '{}'),
   'active', 'returns the status it replaced');
 select results_eq(
-  $$select access_status, months_paid, conditional_through from public.active_subscriptions where customer_id = 'ctm_1'$$,
-  $$values ('grace'::text, 13, '2029-02-01 00:00+00'::timestamptz)$$,
-  'records the new state');
+  $$select access_status, grace_ends_at, months_paid, conditional_through from public.active_subscriptions
+    where customer_id = 'ctm_1'$$,
+  $$values ('grace'::text, '2028-03-02 00:00+00'::timestamptz, 13, '2029-02-01 00:00+00'::timestamptz)$$,
+  'records the new state, with when grace ends');
 select results_eq(
   $$select kind, status from public.vested_entitlements where customer_id = 'ctm_1' order by kind$$,
   $$values ('operator'::text, 'confirmed'::text), ('qualifying_run'::text, 'confirmed'::text)$$,
@@ -81,9 +83,10 @@ select is(
     '{}'),
   'grace', 'ending access returns the entitled status');
 select results_eq(
-  $$select access_status, run_started_at, months_paid from public.active_subscriptions where customer_id = 'ctm_1'$$,
-  $$values ('lapsed'::text, null::timestamptz, 0)$$,
-  'ending access resets the run');
+  $$select access_status, grace_ends_at, run_started_at, months_paid from public.active_subscriptions
+    where customer_id = 'ctm_1'$$,
+  $$values ('lapsed'::text, null::timestamptz, null::timestamptz, 0)$$,
+  'ending access resets the grace end and the run');
 select is(public.vested_through('ctm_1'), '2028-02-01 00:00+00'::timestamptz, 'vested rights stay after a lapse');
 select is(
   public.set_customer_entitlement('ctm_1', '{"access_status": "lapsed"}', null, null), 'lapsed',
@@ -92,6 +95,13 @@ select is(
 select throws_ok(
   $$select public.set_customer_entitlement('ctm_1', '{"access_status": "expired"}', null, null)$$,
   '23514', null, 'rejects an unknown access status');
+select throws_ok(
+  $$select public.set_customer_entitlement('ctm_1', '{"access_status": "grace"}', null, null)$$,
+  '23514', null, 'rejects grace without when it ends');
+select throws_ok(
+  $$select public.set_customer_entitlement('ctm_1', '{"access_status": "active", "grace_ends_at": "2028-03-02T00:00:00Z"}',
+    null, null)$$,
+  '23514', null, 'rejects a grace end outside grace');
 select throws_ok(
   $$select public.set_customer_entitlement('ctm_unknown', '{"access_status": "active"}', null, null)$$,
   '23503', null, 'rejects a customer that is not recorded');

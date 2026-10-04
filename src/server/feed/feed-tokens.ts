@@ -13,6 +13,16 @@ const TOKEN_PREFIX = 'tpf_';
 /** How much of a token is kept to tell it apart on the dashboard: the prefix and 4 more characters. */
 const SHOWN_LENGTH = TOKEN_PREFIX.length + 4;
 
+const TOKEN_SHAPE = /^tpf_[A-Za-z0-9_-]{43}$/;
+
+/**
+ * Whether a credential has the shape every feed token has. The feed asks the database only about one that does, so a
+ * request with a made-up or mistyped credential costs no query.
+ */
+export function isFeedTokenShape(token: string): boolean {
+  return TOKEN_SHAPE.test(token);
+}
+
 export function hashFeedToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex');
 }

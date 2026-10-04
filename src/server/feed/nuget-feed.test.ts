@@ -54,13 +54,32 @@ const PACKAGES: FeedPackage[] = [
   }),
 ];
 
+const lapsed = { status: 'lapsed', graceEndsAt: null } as const;
 const CUSTOMERS: Record<string, FeedCustomer> = {
-  active: { customerId: 'ctm_active', accessStatus: 'active', vestedThrough: null },
-  grace: { customerId: 'ctm_grace', accessStatus: 'grace', vestedThrough: null },
+  active: { customerId: 'ctm_active', access: { status: 'active', graceEndsAt: null }, vestedThrough: null },
+  grace: {
+    customerId: 'ctm_grace',
+    access: { status: 'grace', graceEndsAt: new Date('2028-06-10T00:00:00Z') },
+    vestedThrough: null,
+  },
   // Vested through the end of 2027: 1.4.0 and its security patch 1.4.3, not 1.4.1 (January 2028) or 1.6.0.
-  vested: { customerId: 'ctm_vested', accessStatus: 'lapsed', vestedThrough: new Date('2028-01-01T00:00:00Z') },
-  unvested: { customerId: 'ctm_unvested', accessStatus: 'lapsed', vestedThrough: null },
+  vested: { customerId: 'ctm_vested', access: lapsed, vestedThrough: new Date('2028-01-01T00:00:00Z') },
+  unvested: { customerId: 'ctm_unvested', access: lapsed, vestedThrough: null },
+  // Recorded in grace, but its grace ended before now and reconcile has not run since: lapsed, so vested only.
+  graceOver: {
+    customerId: 'ctm_grace_over',
+    access: { status: 'grace', graceEndsAt: new Date('2028-05-31T00:00:00Z') },
+    vestedThrough: new Date('2028-01-01T00:00:00Z'),
+  },
+  graceOverUnvested: {
+    customerId: 'ctm_grace_over_unvested',
+    access: { status: 'grace', graceEndsAt: new Date('2028-05-31T00:00:00Z') },
+    vestedThrough: null,
+  },
 };
+
+/** A well-formed feed token for a customer of CUSTOMERS. */
+const tokenOf = (name: string) => `tpf_${name.padEnd(43, '0')}`;
 
 let store: { [K in keyof FeedStore]: ReturnType<typeof vi.fn> };
 let deps: FeedDeps;
@@ -68,7 +87,7 @@ let deps: FeedDeps;
 beforeEach(() => {
   store = {
     findFeedCustomer: vi.fn(async (hash: string) => {
-      const name = Object.keys(CUSTOMERS).find((key) => hashFeedToken(`tpf_${key}`) === hash);
+      const name = Object.keys(CUSTOMERS).find((key) => hashFeedToken(tokenOf(key)) === hash);
       return name ? CUSTOMERS[name] : null;
     }),
     listFeedPackages: vi.fn(async (lowerId?: string) =>
@@ -101,7 +120,7 @@ function get(path: string, customer?: string, init: { authorization?: string } =
   const headers = new Headers();
   const authorization =
     init.authorization ??
-    (customer ? `Basic ${Buffer.from(`anything:tpf_${customer}`).toString('base64')}` : undefined);
+    (customer ? `Basic ${Buffer.from(`anything:${tokenOf(customer)}`).toString('base64')}` : undefined);
   if (authorization) headers.set('authorization', authorization);
 
   const url = new URL(`${BASE}/${path}`);
@@ -135,10 +154,18 @@ describe('the service index', () => {
 });
 
 describe('authentication', () => {
+  it('challenges a credential that is not shaped like a feed token without asking the database', async () => {
+    for (const credential of ['tpf_short', 'the-licence-key', `${tokenOf('active')}x`, `tpf_${'!'.repeat(43)}`]) {
+      const authorization = `Basic ${Buffer.from(`user:${credential}`).toString('base64')}`;
+      expect((await get('flat/tenantry.pro/index.json', undefined, { authorization })).status).toBe(401);
+    }
+    expect(store.findFeedCustomer).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['no credentials', undefined],
-    ['an unknown or revoked token', `Basic ${Buffer.from('user:tpf_revoked').toString('base64')}`],
-    ['another scheme', 'Bearer tpf_active'],
+    ['an unknown or revoked token', `Basic ${Buffer.from(`user:${tokenOf('revoked')}`).toString('base64')}`],
+    ['another scheme', `Bearer ${tokenOf('active')}`],
   ])('challenges a request with %s', async (_, authorization) => {
     const response = await get('flat/tenantry.pro/index.json', undefined, { authorization });
 
@@ -148,7 +175,7 @@ describe('authentication', () => {
 
   it('takes the token from the username when the password is empty', async () => {
     const response = await get('flat/tenantry.pro/index.json', undefined, {
-      authorization: `Basic ${Buffer.from('tpf_active:').toString('base64')}`,
+      authorization: `Basic ${Buffer.from(`${tokenOf('active')}:`).toString('base64')}`,
     });
 
     expect(response.status).toBe(200);
@@ -157,7 +184,7 @@ describe('authentication', () => {
   it('looks tokens up by their hash only', async () => {
     await get('flat/tenantry.pro/index.json', 'active');
 
-    expect(store.findFeedCustomer).toHaveBeenCalledWith(hashFeedToken('tpf_active'));
+    expect(store.findFeedCustomer).toHaveBeenCalledWith(hashFeedToken(tokenOf('active')));
   });
 });
 
@@ -170,6 +197,11 @@ describe('what each customer sees', () => {
   it('shows a lapsed vested customer the versions their date covers, with security patches to them', async () => {
     expect(await versions('vested')).toEqual(['1.4.0', '1.4.3']);
     expect(await versions('vested', 'tenantry.pro.efcore')).toEqual(['1.4.0']);
+  });
+
+  it('treats a grace period that has ended as lapsed, before reconcile records it', async () => {
+    expect(await versions('graceOver')).toEqual(['1.4.0', '1.4.3']);
+    expect((await get('flat/tenantry.pro/index.json', 'graceOverUnvested')).status).toBe(403);
   });
 
   it('refuses a lapsed customer who never vested, saying why', async () => {

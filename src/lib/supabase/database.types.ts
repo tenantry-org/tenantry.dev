@@ -8,6 +8,7 @@ export type Database = {
           access_status: string;
           conditional_through: string | null;
           customer_id: string;
+          grace_ends_at: string | null;
           months_paid: number;
           paid_through: string | null;
           run_started_at: string | null;
@@ -18,6 +19,7 @@ export type Database = {
           access_status?: string;
           conditional_through?: string | null;
           customer_id: string;
+          grace_ends_at?: string | null;
           months_paid?: number;
           paid_through?: string | null;
           run_started_at?: string | null;
@@ -28,6 +30,7 @@ export type Database = {
           access_status?: string;
           conditional_through?: string | null;
           customer_id?: string;
+          grace_ends_at?: string | null;
           months_paid?: number;
           paid_through?: string | null;
           run_started_at?: string | null;
@@ -576,6 +579,7 @@ export type Database = {
         Returns: {
           access_status: string;
           customer_id: string;
+          grace_ends_at: string;
           vested_through: string;
         }[];
       };

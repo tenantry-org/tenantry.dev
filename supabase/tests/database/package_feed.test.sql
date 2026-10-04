@@ -7,12 +7,17 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(21);
+select plan(22);
 
 insert into public.customers (customer_id, email) values
   ('ctm_active', 'active@example.com'), ('ctm_vested', 'vested@example.com'), ('ctm_new', 'new@example.com');
+insert into public.customers (customer_id, email) values ('ctm_grace', 'grace@example.com');
 insert into public.active_subscriptions (customer_id, access_status) values
   ('ctm_active', 'active'), ('ctm_vested', 'lapsed');
+insert into public.active_subscriptions (customer_id, access_status, grace_ends_at) values
+  ('ctm_grace', 'grace', '2027-06-01 00:00+00');
+insert into public.feed_tokens (customer_id, name, token_hash, prefix) values
+  ('ctm_grace', 'CI', encode(sha256('tpf_grace'), 'hex'), 'tpf_grac');
 insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at) values
   ('ctm_vested', 'qualifying_run', '2027-01-01', '2028-01-01', 'confirmed', '2028-01-01');
 
@@ -41,6 +46,10 @@ select results_eq(
   $$select customer_id, access_status, vested_through from public.feed_customer((select vested from hashes))$$,
   $$values ('ctm_vested'::text, 'lapsed'::text, '2028-01-01 00:00+00'::timestamptz)$$,
   'and their vested-through date');
+select results_eq(
+  $$select access_status, grace_ends_at from public.feed_customer(encode(sha256('tpf_grace'), 'hex'))$$,
+  $$values ('grace'::text, '2027-06-01 00:00+00'::timestamptz)$$,
+  'and, in grace, when it ends, for the feed to decide whether it has');
 select results_eq(
   $$select access_status from public.feed_customer((select new from hashes))$$,
   $$values ('lapsed'::text)$$,

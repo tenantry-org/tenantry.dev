@@ -325,6 +325,7 @@ describe('the payment ledger', () => {
       p_customer_id: 'ctm_1',
       p_state: {
         access_status: 'active',
+        grace_ends_at: null,
         run_started_at: '2027-01-01T00:00:00.000Z',
         paid_through: '2027-03-01T00:00:00.000Z',
         months_paid: 2,

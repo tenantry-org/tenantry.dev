@@ -1,7 +1,7 @@
 import 'server-only';
 import { createServiceRoleClient } from '@/server/db/service-role-client';
 import type { Json } from '@/lib/supabase/database.types';
-import type { AccessStatus } from '@/server/db/billing-store';
+import type { Access, AccessStatus } from '@/server/db/billing-store';
 
 /**
  * Service-role data access for the package feed (supabase/migrations/20261004130000_package_feed.sql): feed tokens,
@@ -9,10 +9,13 @@ import type { AccessStatus } from '@/server/db/billing-store';
  * src/server/feed; this module only maps rows.
  */
 
-/** The customer a feed token belongs to, with what decides which releases they may restore. */
+/**
+ * The customer a feed token belongs to, with what decides which releases they may restore: their access as stored
+ * (entitlement-policy.ts: currentAccess says what it is now) and their vested-through date.
+ */
 export interface FeedCustomer {
   customerId: string;
-  accessStatus: AccessStatus;
+  access: Access;
   vestedThrough: Date | null;
 }
 
@@ -50,9 +53,13 @@ export async function findFeedCustomer(tokenHash: string): Promise<FeedCustomer 
   return row
     ? {
         customerId: row.customer_id,
-        // active_subscriptions' check constraint allows only these; feed_customer gives 'lapsed' for no row.
-        accessStatus: row.access_status as AccessStatus,
-        // The function returns null when nothing is vested; generated return types are never nullable.
+        access: {
+          // active_subscriptions' check constraint allows only these; feed_customer gives 'lapsed' for no row.
+          status: row.access_status as AccessStatus,
+          // The function returns null outside grace and when nothing is vested; generated return types are never
+          // nullable.
+          graceEndsAt: (row.grace_ends_at as string | null) ? new Date(row.grace_ends_at) : null,
+        },
         vestedThrough: (row.vested_through as string | null) ? new Date(row.vested_through) : null,
       }
     : null;

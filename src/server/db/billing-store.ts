@@ -403,6 +403,7 @@ export async function saveCustomerState(customerId: string, entitlement: Entitle
     p_customer_id: customerId,
     p_state: {
       access_status: entitlement.access.status,
+      grace_ends_at: time(entitlement.access.graceEndsAt),
       run_started_at: time(run?.startedAt),
       paid_through: time(run?.paidThrough),
       months_paid: run?.monthsPaid ?? 0,

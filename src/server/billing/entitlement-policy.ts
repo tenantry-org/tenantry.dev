@@ -129,6 +129,26 @@ export function accessFor(subscriptions: SubscriptionState[], proProductId: stri
 }
 
 /**
+ * The customer's access now, from what is stored (active_subscriptions: its status and, in grace, when grace ends). A
+ * grace period that has ended counts as lapsed from that moment, before the daily reconcile records it, so the feed and
+ * the dashboard stop treating the customer as entitled at the same instant. Never recorded counts as lapsed.
+ */
+export function currentAccess(stored: Access | null, now: Date): Access {
+  if (!stored) return { status: 'lapsed', graceEndsAt: null };
+  if (stored.status !== 'grace') return { status: stored.status, graceEndsAt: null };
+  return stored.graceEndsAt && stored.graceEndsAt > now ? stored : { status: 'lapsed', graceEndsAt: null };
+}
+
+/**
+ * Whether the package feed serves the customer anything: every release while they have access, the vested releases
+ * after a lapse, and nothing to a lapsed customer with nothing vested. Feed tokens are created only for a customer it
+ * serves (the Pro access page says why not otherwise).
+ */
+export function canRestore(customer: { accessStatus: AccessStatus; vestedThrough: Date | null }): boolean {
+  return isEntitled(customer.accessStatus) || customer.vestedThrough !== null;
+}
+
+/**
  * Whether the customer may use (and the feed may serve them) a release with this entitlement date
  * (pro_releases.entitlement_at): every release while they have access, and after a lapse those their vested-through
  * date covers.
