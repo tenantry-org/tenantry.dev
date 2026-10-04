@@ -15,7 +15,9 @@ export interface PaddleTransaction {
   items: {
     price: { id: string; productId: string; billingCycle: { interval: string; frequency: number } | null } | null;
   }[];
-  details: { totals: { subtotal: string; discount: string; total: string; currencyCode: string } | null } | null;
+  details: {
+    totals: { subtotal: string; discount: string; total: string; tax: string; currencyCode: string } | null;
+  } | null;
   updatedAt: string;
 }
 

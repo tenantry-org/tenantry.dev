@@ -7,6 +7,7 @@ import { transactionEvent } from '@/test/paddle-events';
 import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import { syncCustomer } from './customer-access';
 import { reconcileCustomer, resetRecoveryAlerts } from './reconcile-customer';
+import { applyPaddleEvent } from './apply-paddle-event';
 
 let deps: FakeBillingDeps;
 
@@ -105,6 +106,7 @@ describe('reconcileCustomer', () => {
         subtotal: 3900,
         discount: 0,
         total: 3900,
+        tax: 0,
         currencyCode: 'GBP',
         occurredAt: '2026-09-01T00:05:00Z',
       });
@@ -138,6 +140,34 @@ describe('reconcileCustomer', () => {
       deps.listCompletedTransactions.mockClear();
       await reconcileCustomer('ctm_1', deps);
       expect(deps.listCompletedTransactions).not.toHaveBeenCalled();
+    });
+
+    it('records a recovered payment as the webhook would have, with what it charged before tax', async () => {
+      const event = transactionEvent({
+        eventId: 'evt_taxed',
+        transactionId: 'txn_taxed',
+        customerId: 'ctm_1',
+        subscriptionId: 'sub_1',
+        occurredAt: '2026-09-01T00:00:00Z',
+        total: '4680',
+        tax: '780',
+        period: { startsAt: '2026-09-01T00:00:00Z', endsAt: '2026-10-01T00:00:00Z' },
+      });
+      const transaction = Webhooks.fromJson(event as unknown as Parameters<typeof Webhooks.fromJson>[0])
+        .data as unknown as PaddleTransaction;
+
+      await startAccess();
+      deps.listCompletedTransactions.mockResolvedValue([transaction]);
+      await reconcileCustomer('ctm_1', deps);
+      const recovered = memory.state.payments.get('txn_taxed');
+
+      memory.state.payments.clear();
+      await applyPaddleEvent(Webhooks.fromJson(event as unknown as Parameters<typeof Webhooks.fromJson>[0]), deps);
+      const delivered = memory.state.payments.get('txn_taxed');
+
+      expect(recovered).toMatchObject({ total: 4680, tax: 780 });
+      expect({ ...recovered, occurredAt: null }).toEqual({ ...delivered, occurredAt: null });
+      expect((await memory.store.listPayments('ctm_1'))[0].charged).toBe(3900);
     });
 
     it('records only completed transactions, each once, however Paddle lists them', async () => {

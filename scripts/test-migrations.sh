@@ -15,12 +15,14 @@ test_migration() {
   echo "== $migration, from $previous"
   supabase db reset --local --version "$previous" >/dev/null
   supabase test db --local "$dir/before.sql"
+  # Only the migration under test, and those after it.
   supabase migration up --local >/dev/null
   supabase test db --local "$dir/after.sql"
 }
 
 status=0
 test_migration 20261004120000_entitlement_ledger 20261002120000 || status=1
+test_migration 20261005120000_money_kept 20261004130000 || status=1
 
 supabase db reset --local >/dev/null
 exit $status

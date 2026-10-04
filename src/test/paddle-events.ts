@@ -124,9 +124,20 @@ export function adjustmentEvent(options: {
   itemType?: 'full' | 'partial' | 'tax' | 'proration';
   /** Paddle's created_at on the adjustment, when it was created before this event. */
   createdAt?: string;
+  /** What it returns before tax (totals.subtotal), in the lowest unit. */
+  subtotal?: string;
 }): PaddleEventJson {
   const occurredAt = options.occurredAt ?? '2026-09-10T00:00:00Z';
-  const totals = { subtotal: '3900', tax: '0', total: '3900', fee: '0', earnings: '3900', currency_code: 'GBP' };
+  const subtotal = options.subtotal ?? '3900';
+  const totals = {
+    subtotal,
+    tax: '0',
+    total: subtotal,
+    fee: '0',
+    earnings: subtotal,
+    retained_fee: '0',
+    currency_code: 'GBP',
+  };
 
   return {
     event_id: options.eventId,
@@ -176,6 +187,8 @@ export function transactionEvent(options: {
   /** null for a transaction with no billing period (a one-time charge). */
   period?: { startsAt: string; endsAt: string } | null;
   total?: string;
+  /** The tax within the total, if any. */
+  tax?: string;
 }): PaddleEventJson {
   const occurredAt = options.occurredAt ?? '2026-09-01T00:05:00Z';
   const interval = options.interval ?? 'month';
@@ -202,10 +215,11 @@ export function transactionEvent(options: {
     created_at: '2026-09-01T00:00:00Z',
     updated_at: '2026-09-01T00:00:00Z',
   };
+  const tax = options.tax ?? '0';
   const totals = {
-    subtotal: total,
+    subtotal: String(Number(total) - Number(tax)),
     discount: '0',
-    tax: '0',
+    tax,
     total,
     credit: '0',
     credit_to_balance: '0',

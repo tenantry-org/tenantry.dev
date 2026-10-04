@@ -10,6 +10,7 @@ import {
   SubscriptionStatus,
 } from '@paddle/paddle-node-sdk';
 import { syncCustomer } from '@/server/billing/customer-access';
+import { adjustmentAmount } from '@/server/billing/paddle-assumptions';
 import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import { subscriptionEndedAt } from '@/server/billing/paddle-assumptions';
 import { normaliseEmail } from '@/server/db/customer-email';
@@ -37,6 +38,7 @@ interface AdjustmentEventData {
   subscriptionId: string | null;
   customerId: string;
   items: { type: string }[];
+  totals: { subtotal: string; currencyCode: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -157,6 +159,7 @@ export async function recordCompletedTransaction(
     subtotal: amount(totals.subtotal),
     discount: amount(totals.discount),
     total: amount(totals.total),
+    tax: amount(totals.tax),
     currencyCode: totals.currencyCode,
     occurredAt,
   });
@@ -190,6 +193,9 @@ async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, d
     type: data.type,
     itemTypes: data.items.map((item) => item.type),
     status: data.status,
+    // What it returns before tax (paddle-assumptions.ts: adjustmentAmount).
+    amount: adjustmentAmount(data.totals),
+    currencyCode: data.totals?.currencyCode ?? null,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
     occurredAt,

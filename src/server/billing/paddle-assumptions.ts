@@ -44,14 +44,11 @@ export function isAnnualTerm(billingInterval: string, billingFrequency: number):
 
 /**
  * Assumption 3: Paddle's hosted customer portal (linked from the billing card) may let a customer pause, or change
- * between monthly and annual at once. Neither is confirmed either way. The rules cope with both:
- *   - a paused subscription ends its paid period at `paused_at`, like a cancellation (`subscriptionEndedAt`), and
- *     resuming starts a new period, so the run breaks;
- *   - an immediate change from annual to monthly credits the unserved part of the annual term, and an approved credit
- *     that is not tax-only withdraws an annual grant as a partial refund does (`CREDIT_IS_PARTIAL_REFUND`).
- * The portal options should still be switched off (LAUNCH-SETUP.md), since a pause resets a customer's run.
+ * between monthly and annual at once. Neither is confirmed either way. The rules cope with both: a pause keeps the
+ * paid time already paid for (entitlement-policy.ts counts a payment kept in full for its whole period), and resuming
+ * starts a new period; an immediate change from annual to monthly credits the unserved part of the annual term, and a
+ * credit is money returned like a refund. The portal options should still be switched off (LAUNCH-SETUP.md).
  */
-export const CREDIT_IS_PARTIAL_REFUND = true;
 
 /** When a cancelled or paused subscription ended, from its Paddle status and timestamps; null while it runs. */
 export function subscriptionEndedAt(subscription: {
@@ -79,3 +76,20 @@ export const MONTH_END_TOLERANCE_MS = 3 * DAY_MS;
  * lost for longer than that, or for a customer reconcile no longer visits (one who lapsed), is not recovered.
  */
 export const PAYMENT_RECOVERY_DAYS = 90;
+
+/**
+ * Assumption 6: the amounts. A transaction's `details.totals.total` is "Total after discount and tax" and its
+ * `details.totals.tax` the tax, so total less tax is what was charged before tax, after any discount; an adjustment's
+ * `totals.subtotal` is "Total before tax. For tax adjustments, the value is 0." (Paddle's API reference). Both are in
+ * the transaction's currency (Paddle sets an adjustment's currency to its transaction's) and its lowest unit (stated for
+ * transactions; assumed for adjustments, whose reference does not say). The entitlement rules compare the two, so a
+ * tax-only correction returns nothing. Not confirmed: that the subtotal of a chargeback_reverse or credit_reverse is the
+ * amount it restores, and that a proration credit is in proportion to the time left in the term to within the
+ * continuity allowance above (a credit computed by whole days could break a qualifying period at an annual-to-monthly
+ * change).
+ */
+export function adjustmentAmount(totals: { subtotal: string } | null | undefined): number | null {
+  if (!totals) return null;
+  const amount = Number(totals.subtotal);
+  return Number.isSafeInteger(amount) && amount >= 0 ? amount : null;
+}

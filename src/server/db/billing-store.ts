@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SubscriptionStatus } from '@paddle/paddle-node-sdk';
 import { createServiceRoleClient } from '@/server/db/service-role-client';
+import { chargedBeforeTax } from '@/server/db/payment-amounts';
 import type { Json } from '@/lib/supabase/database.types';
 
 /**
@@ -25,8 +26,12 @@ export interface Payment {
   billingFrequency: number;
   periodStartsAt: Date;
   periodEndsAt: Date;
-  /** `details.totals.total`, in the currency's lowest unit: zero when the period was fully discounted. */
-  total: number;
+  /**
+   * What the customer was charged for the period before tax, in the currency's lowest unit: Paddle's
+   * `details.totals.total` less its `details.totals.tax`, so after any discount. Zero for a trial or a period discounted
+   * in full. The same basis as an adjustment's `amount`.
+   */
+  charged: number;
 }
 
 /** A Paddle adjustment to one of the customer's transactions (`payment_adjustments`). */
@@ -43,6 +48,12 @@ export interface PaymentAdjustment {
   status: string;
   approvedAt: Date | null;
   reversedAt: Date | null;
+  /**
+   * How much it returns (or, for a reversal, restores) before tax, in the currency's lowest unit: Paddle's
+   * `totals.subtotal`, which is 0 for a tax-only correction. Null if not recorded (adjustments recorded before amounts
+   * were): the entitlement rules then take it to return everything, unless it is tax only.
+   */
+  amount: number | null;
 }
 
 /** One of the customer's subscriptions, as its newest Paddle event left it (`subscriptions`). */
@@ -385,6 +396,8 @@ export interface PaymentEvent {
   subtotal: number;
   discount: number;
   total: number;
+  /** details.totals.tax: total less tax is what was charged before tax. */
+  tax: number;
   currencyCode: string;
   occurredAt: string;
 }
@@ -409,6 +422,7 @@ export async function recordPayment(event: PaymentEvent): Promise<boolean> {
     p_discount: event.discount,
     p_total: event.total,
     p_currency_code: event.currencyCode,
+    p_tax: event.tax,
     p_occurred_at: event.occurredAt,
   });
 
@@ -427,6 +441,9 @@ export interface PaymentAdjustmentEvent {
   type: string;
   itemTypes: string[];
   status: string;
+  /** Paddle's totals.subtotal: what it returns before tax, in the currency's lowest unit; null if not given. */
+  amount: number | null;
+  currencyCode: string | null;
   /** Paddle's created_at and updated_at on the adjustment. */
   createdAt: string;
   updatedAt: string;
@@ -449,6 +466,9 @@ export async function recordPaymentAdjustment(event: PaymentAdjustmentEvent): Pr
     p_type: event.type,
     p_item_types: event.itemTypes,
     p_status: event.status,
+    // The function takes null for an amount not given; generated argument types are never nullable.
+    p_subtotal: event.amount as number,
+    p_currency_code: event.currencyCode as string,
     p_created_at: event.createdAt,
     p_updated_at: event.updatedAt,
     p_occurred_at: event.occurredAt,
@@ -464,7 +484,9 @@ export async function listPayments(customerId: string): Promise<Payment[]> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('payments')
-    .select('transaction_id,subscription_id,billing_interval,billing_frequency,period_starts_at,period_ends_at,total')
+    .select(
+      'transaction_id,subscription_id,billing_interval,billing_frequency,period_starts_at,period_ends_at,subtotal,discount,total,tax',
+    )
     .eq('customer_id', customerId);
 
   if (error) throw error;
@@ -476,7 +498,7 @@ export async function listPayments(customerId: string): Promise<Payment[]> {
     billingFrequency: row.billing_frequency,
     periodStartsAt: new Date(row.period_starts_at),
     periodEndsAt: new Date(row.period_ends_at),
-    total: Number(row.total),
+    charged: chargedBeforeTax(row),
   }));
 }
 
@@ -485,7 +507,7 @@ export async function listPaymentAdjustments(customerId: string): Promise<Paymen
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from('payment_adjustments')
-    .select('adjustment_id,transaction_id,action,type,item_types,status,approved_at,reversed_at')
+    .select('adjustment_id,transaction_id,action,type,item_types,status,approved_at,reversed_at,subtotal')
     .eq('customer_id', customerId);
 
   if (error) throw error;
@@ -499,6 +521,7 @@ export async function listPaymentAdjustments(customerId: string): Promise<Paymen
     status: row.status,
     approvedAt: row.approved_at ? new Date(row.approved_at) : null,
     reversedAt: row.reversed_at ? new Date(row.reversed_at) : null,
+    amount: row.subtotal === null ? null : Number(row.subtotal),
   }));
 }
 

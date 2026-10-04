@@ -496,6 +496,7 @@ describe('applyPaddleEvent', () => {
         subtotal: 3900,
         discount: 0,
         total: 3900,
+        tax: 0,
         currencyCode: 'GBP',
         occurredAt: '2027-01-01T00:00:00.000Z',
         status: 'paid',
@@ -595,7 +596,12 @@ describe('applyPaddleEvent', () => {
       await applyPaddleEvent(delivered(pending), deps);
 
       const [adjustment] = memory.state.adjustments.values();
-      expect(adjustment).toMatchObject({ status: 'approved', approvedAt: '2027-03-08T00:00:00Z' });
+      expect(adjustment).toMatchObject({
+        status: 'approved',
+        approvedAt: '2027-03-08T00:00:00Z',
+        amount: 3900,
+        currencyCode: 'GBP',
+      });
       expect(memory.state.payments.get('txn_2')?.status).toBe('refunded');
 
       vi.setSystemTime(new Date('2028-01-02T00:00:00Z'));
@@ -622,6 +628,56 @@ describe('applyPaddleEvent', () => {
 
       expect(memory.state.subscriptions.get('sub_01')?.endedAt).toBe('2027-01-10T00:00:00Z');
       expect(memory.state.entitlementStates.get('ctm_01')?.run).toBeNull();
+    });
+  });
+
+  describe('amounts', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2027-01-20T00:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('records what a payment charged and an adjustment returned, so half refunded counts as half a month', async () => {
+      await applyPaddleEvent(delivered(created), deps);
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_january',
+            transactionId: 'txn_january',
+            occurredAt: '2027-01-01T00:00:00Z',
+            total: '4680',
+            tax: '780',
+            period: { startsAt: '2027-01-01T00:00:00Z', endsAt: '2027-01-31T00:00:00Z' },
+          }),
+        ),
+        deps,
+      );
+      await applyPaddleEvent(
+        delivered(
+          adjustmentEvent({
+            eventId: 'evt_half',
+            action: 'refund',
+            type: 'partial',
+            status: 'approved',
+            transactionId: 'txn_january',
+            subtotal: '1950',
+            occurredAt: '2027-01-10T00:00:00Z',
+          }),
+        ),
+        deps,
+      );
+
+      expect(memory.state.payments.get('txn_january')).toMatchObject({ total: 4680, tax: 780 });
+      expect([...memory.state.adjustments.values()][0]).toMatchObject({ amount: 1950 });
+      // 3900 charged before tax, 1950 returned: the first half of the 30-day period.
+      expect(memory.state.entitlementStates.get('ctm_01')?.run).toMatchObject({
+        paidThrough: new Date('2027-01-16T00:00:00Z'),
+      });
+      expect(memory.state.payments.get('txn_january')?.status).toBe('partially_refunded');
     });
   });
 });

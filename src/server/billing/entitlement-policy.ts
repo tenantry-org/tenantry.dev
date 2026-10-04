@@ -9,14 +9,8 @@ import type {
   PaymentAdjustment,
   PaymentStatus,
   SubscriptionState,
-  WithdrawnReason,
 } from '@/server/db/billing-store';
-import {
-  continuesRun,
-  CREDIT_IS_PARTIAL_REFUND,
-  isAnnualTerm,
-  MONTH_END_TOLERANCE_MS,
-} from '@/server/billing/paddle-assumptions';
+import { continuesRun, isAnnualTerm, MONTH_END_TOLERANCE_MS } from '@/server/billing/paddle-assumptions';
 
 /**
  * What a customer may access, as pure functions: the one place that answers it, for the webhook and reconcile path
@@ -29,30 +23,28 @@ import {
  * - What they own for good, and how far they are towards owning more (`computeEntitlement`). After a lapse they may use
  *   the releases their vested-through date covers (`mayUseRelease`).
  *
- * The plan's section 2 (plans-and-investigations/Tenantry-Licensing-And-Feed-Plan.md) states the entitlement rules; in
- * short:
+ * Vesting follows the money kept (the owner's decision of 4 October 2026, plans-and-investigations/
+ * Tenantry-Licensing-And-Feed-Plan.md section 2):
  *
- * - A paid period is a completed Pro payment for a billing period that charged something. It counts from its start to
- *   its end, or until its subscription ended if that was sooner.
- * - A run is a series of paid periods, each starting where the run so far is paid through (paddle-assumptions.ts says
- *   how close). Periods may overlap (a plan change, two subscriptions); a run's length is elapsed time, so an overlap
- *   counts once. Periods of any of the customer's Pro subscriptions can join one run.
- * - A run vests once it has been served for 12 months: at its start plus 12 months (or the end of the period that gets
- *   within a few days of it). From then on each later period of the run that has been served advances the vested date
- *   to its end. The grant is a `qualifying_run`.
- * - An annual payment grants its term at once, conditionally (`annual_term`): confirmed when the term has been served,
- *   withdrawn by a refund, credit or chargeback of that payment approved before then, or if the subscription ended
- *   before the term did.
- * - A period stops counting when a full refund or a chargeback of it is approved. A partial refund or credit leaves a
- *   monthly period counting; an annual term then counts only until that adjustment, and its grant is withdrawn.
- * - Each vesting is decided with the adjustments approved by the moment it was confirmed, so a later refund does not
- *   undo it. A chargeback does while `chargebackUndoesConfirmedVesting` is on (the owner's open question; see
- *   ENTITLEMENT_RULES).
- * - The vested-through date is the latest confirmed grant's. A release is covered when its entitlement date is on or
- *   before it (`coversRelease`).
+ * - A payment counts for the part of its billing period that the money still kept from it pays for. With C charged
+ *   before tax and R returned (refunds, credits and chargebacks in effect now; a reversed one no longer returns
+ *   anything), it counts for the first (C - R) / C of its period, from the period's start. Nothing if R reaches C, or if
+ *   nothing was charged (a trial, a period discounted in full). A discount is not money returned: the share is of what
+ *   was charged. A payment kept in full counts for its whole period, even if its subscription was cancelled or paused
+ *   before the period ended: that time was paid for.
+ * - A qualifying period is continuous counted time: each counted part starts no later than the continuity allowance
+ *   after the counted time so far (paddle-assumptions.ts), and overlapping parts count once. It vests when it has
+ *   lasted 12 months, through the end of the counted time already served (never later than now), and advances as more
+ *   is served. A part that counts in full may end up to MONTH_END_TOLERANCE_MS short of the 12 months; nothing else
+ *   may.
+ * - An annual payment grants its term at once, conditionally, and is confirmed at the term's end if nothing of it has
+ *   been returned; anything returned withdraws the grant, at any time. Its kept share counts as above all the same.
+ * - Everything is judged as the ledger stands now. Money returned after a vesting takes away whatever relied on it, and
+ *   a reversal restores it. Cancelling or lapsing takes nothing away.
  *
- * Everything is computed from the ledger each time (customer-access.ts: syncCustomer stores the result), so replaying or reordering
- * Paddle's events cannot change the outcome, and the outcome changes with time alone only as periods are served.
+ * Everything is computed from the ledger each time (customer-access.ts: syncCustomer stores the result), so replaying
+ * or reordering Paddle's events cannot change the outcome, and the outcome changes with time alone only as counted time
+ * is served.
  */
 
 export interface EntitlementInput {
@@ -63,18 +55,6 @@ export interface EntitlementInput {
   proProductId: string;
   now: Date;
 }
-
-export interface EntitlementRules {
-  /**
-   * Whether a chargeback withdraws vesting that was confirmed before it and relied on the charged-back payment. The
-   * owner decided that a charged-back payment does not count towards the 12 months; whether it also undoes vesting
-   * already confirmed is open. On: the vesting is decided as if the payment had never counted. Off: a chargeback is
-   * treated like a refund, and vesting confirmed before it stands.
-   */
-  chargebackUndoesConfirmedVesting: boolean;
-}
-
-export const ENTITLEMENT_RULES: EntitlementRules = { chargebackUndoesConfirmedVesting: true };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -140,37 +120,37 @@ export function mayUseRelease(
   return isEntitled(customer.accessStatus) || coversRelease(customer.vestedThrough, entitlementAt);
 }
 
-export function computeEntitlement(input: EntitlementInput, rules: EntitlementRules = ENTITLEMENT_RULES): Entitlement {
+export function computeEntitlement(input: EntitlementInput): Entitlement {
   const access = accessFor(input.subscriptions, input.proProductId, input.now);
   const ledger = new Ledger(input);
-  const now = input.now;
-  const undo = rules.chargebackUndoesConfirmedVesting;
+  const now = input.now.getTime();
+  const runs = ledger.runs();
 
-  // As of each instant, with chargebacks applied as of now when they undo confirmed vesting.
-  const runGrants = ledger.qualifyingRuns(undo ? () => now : (at) => at);
-  // Withdrawn by a chargeback: the runs that vested as of their own time but not once chargebacks apply throughout.
-  const withdrawn = undo
-    ? ledger
-        .qualifyingRuns((at) => at)
-        .filter((run) => !runGrants.some((kept) => kept.startedAt.getTime() === run.startedAt.getTime()))
-        .map((run) => ({
-          ...run,
-          status: 'withdrawn' as const,
-          confirmedAt: null,
-          withdrawnReason: 'chargeback' as const,
-        }))
-    : [];
-  const annual = ledger.annualTerms(undo);
-  const grants = dedupe([...runGrants, ...withdrawn, ...annual]);
+  const runGrants = runs.flatMap((run): Grant[] => {
+    const vestsAt = runVestsAt(run);
+    if (!vestsAt || vestsAt.getTime() > now) return [];
+    return [
+      {
+        kind: 'qualifying_run',
+        startedAt: run.startedAt,
+        vestedThrough: new Date(Math.min(now, run.paidThrough.getTime())),
+        status: 'confirmed',
+        confirmedAt: vestsAt,
+        transactionId: null,
+        withdrawnReason: null,
+      },
+    ];
+  });
+  const grants = dedupe([...runGrants, ...ledger.annualTerms()]);
 
   return {
     access,
-    run: ledger.currentRun(isEntitled(access.status)),
+    run: currentRun(runs, isEntitled(access.status), input.now),
     conditionalThrough: latest(grants.filter((g) => g.status === 'conditional').map((g) => g.vestedThrough)),
     vestedThrough: latest(grants.filter((g) => g.status === 'confirmed').map((g) => g.vestedThrough)),
     grants,
     paymentStatuses: Object.fromEntries(
-      input.payments.map((payment) => [payment.transactionId, ledger.statusAt(payment, now, now)]),
+      input.payments.map((payment) => [payment.transactionId, ledger.status(payment)]),
     ),
   };
 }
@@ -208,11 +188,13 @@ export function wholeMonths(start: Date, end: Date): number {
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+/** The counted part of a payment's period. */
 interface Period {
   payment: Payment;
   startsAt: Date;
-  /** The period's end, or its subscription's end if that came first. */
   endsAt: Date;
+  /** Whether nothing of the payment has been returned, so it counts for its whole period. */
+  full: boolean;
 }
 
 interface Run {
@@ -221,18 +203,11 @@ interface Run {
   periods: Period[];
 }
 
-type Effect = 'partial' | 'full' | 'chargeback';
-
-const STATUS_RANK: Record<PaymentStatus, number> = { paid: 0, partially_refunded: 1, refunded: 2, charged_back: 3 };
-const EFFECT_STATUS: Record<Effect, PaymentStatus> = {
-  partial: 'partially_refunded',
-  full: 'refunded',
-  chargeback: 'charged_back',
-};
+/** The adjustments that return money, and the reversals that restore it. */
+const RETURNING_ACTIONS = ['refund', 'credit', 'chargeback'] as const;
 
 class Ledger {
   private readonly adjustments = new Map<string, PaymentAdjustment[]>();
-  private readonly endedAt = new Map<string, Date | null>();
 
   constructor(private readonly input: EntitlementInput) {
     for (const adjustment of input.adjustments) {
@@ -240,83 +215,82 @@ class Ledger {
       list.push(adjustment);
       this.adjustments.set(adjustment.transactionId, list);
     }
-    for (const subscription of input.subscriptions) this.endedAt.set(subscription.subscriptionId, subscription.endedAt);
   }
 
   /**
-   * The payment's status at `at`: the strongest adjustment in effect then. A chargeback is judged at `chargebackAt`
-   * instead, which is now when chargebacks undo confirmed vesting.
+   * How much of the payment has been returned now, by action, before tax. An approved refund, credit or chargeback
+   * returns its amount; one Paddle has marked reversed, or the amount of an approved `<action>_reverse` adjustment,
+   * no longer does (the larger of the two, since both can describe one reversal). A reversal never restores more than
+   * its own action returned, so it cannot offset another kind of adjustment.
    */
-  statusAt(payment: Payment, at: Date, chargebackAt: Date): PaymentStatus {
-    let status: PaymentStatus = 'paid';
+  returned(payment: Payment): Record<(typeof RETURNING_ACTIONS)[number], number> {
+    const adjustments = this.adjustments.get(payment.transactionId) ?? [];
+    const amount = (adjustment: PaymentAdjustment) => amountOf(adjustment, payment.charged);
 
-    for (const adjustment of this.adjustments.get(payment.transactionId) ?? []) {
-      const effect = effectOf(adjustment);
-      if (!effect) continue;
-      if (!this.inEffect(adjustment, effect === 'chargeback' ? chargebackAt : at)) continue;
-
-      const candidate = EFFECT_STATUS[effect];
-      if (STATUS_RANK[candidate] > STATUS_RANK[status]) status = candidate;
-    }
-
-    return status;
+    return Object.fromEntries(
+      RETURNING_ACTIONS.map((action) => {
+        const made = adjustments.filter(
+          (a) => a.action === action && (a.status === 'approved' || a.status === 'reversed'),
+        );
+        const gross = sum(made.map(amount));
+        const reversedByStatus = sum(made.filter((a) => a.status === 'reversed').map(amount));
+        const reversals = sum(
+          adjustments
+            .filter((a) => a.action === `${action}_reverse` && a.status === 'approved')
+            // A full reversal restores everything; one of unknown amount nothing, until its amount is known.
+            .map((a) => (a.type === 'full' ? payment.charged : (a.amount ?? 0))),
+        );
+        return [action, Math.max(0, gross - Math.max(reversedByStatus, reversals))];
+      }),
+    ) as Record<(typeof RETURNING_ACTIONS)[number], number>;
   }
 
-  /**
-   * Every qualifying run, each vested through the latest instant it was confirmed at by now. `chargebackAt` gives the
-   * instant chargebacks are judged at for a confirmation at `at`.
-   */
-  qualifyingRuns(chargebackAt: (at: Date) => Date): Grant[] {
-    const now = this.input.now.getTime();
-    const grants = new Map<number, Grant>();
+  /** The share of its period the money kept from the payment pays for, from 0 to 1. */
+  keptShare(payment: Payment): number {
+    if (payment.charged <= 0) return 0;
+    const returned = sum(Object.values(this.returned(payment)));
+    return Math.min(1, Math.max(0, (payment.charged - returned) / payment.charged));
+  }
 
-    for (const at of this.confirmationInstants()) {
-      if (at.getTime() > now) break;
+  status(payment: Payment): PaymentStatus {
+    const returned = this.returned(payment);
+    if (returned.chargeback > 0) return 'charged_back';
+    const total = sum(Object.values(returned));
+    if (total <= 0) return 'paid';
+    return total >= payment.charged ? 'refunded' : 'partially_refunded';
+  }
 
-      const run = this.runsAt(at, chargebackAt(at)).findLast(
-        (r) => r.startedAt.getTime() <= at.getTime() && at.getTime() <= r.paidThrough.getTime(),
-      );
-      if (!run) continue;
+  /** The qualifying periods: the counted parts of all the customer's payments, joined while continuous, in order. */
+  runs(): Run[] {
+    const periods = this.input.payments
+      .flatMap((payment) => {
+        const period = this.countedPeriod(payment);
+        return period ? [period] : [];
+      })
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.endsAt.getTime() - b.endsAt.getTime());
 
-      const vestsAt = runVestsAt(run);
-      if (!vestsAt || vestsAt.getTime() > at.getTime()) continue;
-      // Only the 12-month mark and the ends of the run's own periods confirm anything.
-      if (at.getTime() !== vestsAt.getTime() && !run.periods.some((p) => p.endsAt.getTime() === at.getTime())) continue;
-
-      const key = run.startedAt.getTime();
-      const grant = grants.get(key);
-      if (grant) {
-        if (at > grant.vestedThrough) grant.vestedThrough = at;
+    const runs: Run[] = [];
+    for (const period of periods) {
+      const run = runs.at(-1);
+      if (run && continuesRun(run.paidThrough, period.startsAt)) {
+        run.periods.push(period);
+        if (period.endsAt > run.paidThrough) run.paidThrough = period.endsAt;
       } else {
-        grants.set(key, {
-          kind: 'qualifying_run',
-          startedAt: run.startedAt,
-          vestedThrough: at,
-          status: 'confirmed',
-          confirmedAt: at,
-          transactionId: null,
-          withdrawnReason: null,
-        });
+        runs.push({ startedAt: period.startsAt, paidThrough: period.endsAt, periods: [period] });
       }
     }
-
-    return [...grants.values()];
+    return runs;
   }
 
-  /** A grant for each annual payment that charged something, conditional until its term has been served. */
-  annualTerms(chargebacksUndo: boolean): Grant[] {
+  /** A grant for each annual payment that charged something: conditional, confirmed at the term end, or withdrawn. */
+  annualTerms(): Grant[] {
     const now = this.input.now;
 
     return this.input.payments
-      .filter((payment) => payment.total > 0 && isAnnualTerm(payment.billingInterval, payment.billingFrequency))
+      .filter((payment) => payment.charged > 0 && isAnnualTerm(payment.billingInterval, payment.billingFrequency))
       .map((payment) => {
         const termEnd = payment.periodEndsAt;
-        // Adjustments approved by the end of the term (or now, if sooner) decide it; a chargeback at any time if
-        // chargebacks undo confirmed vesting.
-        const decidedAt = termEnd < now ? termEnd : now;
-        const status = this.statusAt(payment, decidedAt, chargebacksUndo ? now : decidedAt);
-        const endedAt = this.endedAt.get(payment.subscriptionId) ?? null;
-
+        const returned = this.returned(payment);
         const grant: Grant = {
           kind: 'annual_term',
           startedAt: payment.periodStartsAt,
@@ -327,151 +301,73 @@ class Ledger {
           withdrawnReason: null,
         };
 
-        if (status === 'charged_back') return withdraw(grant, 'chargeback');
-        if (status !== 'paid') return withdraw(grant, 'refund');
-        if (endedAt && endedAt < termEnd && endedAt <= now) return withdraw(grant, 'term_not_completed');
+        if (returned.chargeback > 0) return withdraw(grant, 'chargeback');
+        if (sum(Object.values(returned)) > 0) return withdraw(grant, 'refund');
         if (termEnd <= now) return { ...grant, status: 'confirmed', confirmedAt: termEnd };
-
         return grant;
       });
   }
 
-  /** The run that continues to now, if the customer has access: its progress towards 12 months. */
-  currentRun(hasAccess: boolean): CurrentRun | null {
-    if (!hasAccess) return null;
+  // The first kept share of the payment's period, or null if nothing of it is kept.
+  private countedPeriod(payment: Payment): Period | null {
+    const share = this.keptShare(payment);
+    if (share <= 0) return null;
 
-    const now = this.input.now;
-    const run = this.runsAt(now, now).at(-1);
-    // A run whose last period ended more than a grace period ago is not continued by anything the customer has now.
-    if (!run || run.paidThrough.getTime() + GRACE_PERIOD_DAYS * DAY_MS < now.getTime()) return null;
-
-    return {
-      startedAt: run.startedAt,
-      paidThrough: run.paidThrough,
-      monthsPaid: wholeMonths(run.startedAt, run.paidThrough),
-      vestsAt: runVestsAt(run) ?? addMonths(run.startedAt, 12),
-    };
-  }
-
-  // The runs of the periods that count at `at`, in order.
-  private runsAt(at: Date, chargebackAt: Date): Run[] {
-    const runs: Run[] = [];
-
-    for (const period of this.periodsCountingAt(at, chargebackAt)) {
-      const run = runs.at(-1);
-      if (run && continuesRun(run.paidThrough, period.startsAt)) {
-        run.periods.push(period);
-        if (period.endsAt > run.paidThrough) run.paidThrough = period.endsAt;
-      } else {
-        runs.push({ startedAt: period.startsAt, paidThrough: period.endsAt, periods: [period] });
-      }
-    }
-
-    return runs;
-  }
-
-  private periodsCountingAt(at: Date, chargebackAt: Date): Period[] {
-    return this.input.payments
-      .flatMap((payment) => {
-        const period = this.countedPeriod(payment, this.statusAt(payment, at, chargebackAt), at);
-        return period && period.endsAt > period.startsAt ? [period] : [];
-      })
-      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.endsAt.getTime() - b.endsAt.getTime());
-  }
-
-  // The part of a payment's period that is a paid period at `at`, in this status, or null if none is. It charged
-  // something; a monthly period counts whole unless refunded in full or charged back; an annual term refunded in full
-  // or charged back does not count, and one partially refunded or credited counts until the first such adjustment
-  // (its grant is withdrawn all the same: annualTerms).
-  private countedPeriod(payment: Payment, status: PaymentStatus, at: Date): Period | null {
-    if (payment.total <= 0 || status === 'refunded' || status === 'charged_back') return null;
-
-    const period = this.period(payment);
-    if (status !== 'partially_refunded' || !isAnnualTerm(payment.billingInterval, payment.billingFrequency)) {
-      return period;
-    }
-
-    const partialAt = (this.adjustments.get(payment.transactionId) ?? [])
-      .filter((adjustment) => effectOf(adjustment) === 'partial' && this.inEffect(adjustment, at))
-      .map((adjustment) => adjustment.approvedAt!.getTime());
-    const cut = Math.min(...partialAt);
-    return cut < period.endsAt.getTime() ? { ...period, endsAt: new Date(cut) } : period;
-  }
-
-  private period(payment: Payment): Period {
-    const endedAt = this.endedAt.get(payment.subscriptionId) ?? null;
-    const endsAt = endedAt && endedAt < payment.periodEndsAt ? endedAt : payment.periodEndsAt;
-    return { payment, startsAt: payment.periodStartsAt, endsAt };
-  }
-
-  // Every instant a run could be confirmed at: the end of each period (or where an adjustment cuts one short), and 12
-  // months after each period's start (the only instants a run can start at).
-  private confirmationInstants(): Date[] {
-    const instants = new Set<number>();
-    for (const payment of this.input.payments) {
-      const period = this.period(payment);
-      instants.add(period.endsAt.getTime());
-      instants.add(addMonths(period.startsAt, 12).getTime());
-    }
-    for (const adjustment of this.input.adjustments) {
-      if (adjustment.approvedAt) instants.add(adjustment.approvedAt.getTime());
-    }
-    return [...instants].sort((a, b) => a - b).map((time) => new Date(time));
-  }
-
-  // Whether the adjustment applies at `at`: approved by then, and not reversed by then (Paddle marks a reversed
-  // chargeback or credit `reversed`, and creates a chargeback_reverse or credit_reverse adjustment).
-  private inEffect(adjustment: PaymentAdjustment, at: Date): boolean {
-    if (adjustment.status !== 'approved' && adjustment.status !== 'reversed') return false;
-    if (!adjustment.approvedAt || adjustment.approvedAt > at) return false;
-    if (adjustment.reversedAt && adjustment.reversedAt <= at) return false;
-
-    return !(this.adjustments.get(adjustment.transactionId) ?? []).some(
-      (other) =>
-        other.action === `${adjustment.action}_reverse` &&
-        other.status === 'approved' &&
-        other.approvedAt !== null &&
-        other.approvedAt <= at,
-    );
+    const startsAt = payment.periodStartsAt.getTime();
+    const length = payment.periodEndsAt.getTime() - startsAt;
+    if (length <= 0) return null;
+    const full = share >= 1;
+    const endsAt = full ? payment.periodEndsAt : new Date(startsAt + Math.floor(share * length));
+    return { payment, startsAt: payment.periodStartsAt, endsAt, full };
   }
 }
 
-// What an adjustment does to its payment, if anything. A tax-only correction does nothing; warnings and reversals are
-// not adjustments of the payment themselves.
-function effectOf(adjustment: PaymentAdjustment): Effect | null {
+/** The qualifying period that continues to now, if the customer has access: its progress towards 12 months. */
+function currentRun(runs: Run[], hasAccess: boolean, now: Date): CurrentRun | null {
+  if (!hasAccess) return null;
+
+  const run = runs.at(-1);
+  // A period whose counted time ended more than a grace period ago is not continued by anything the customer has now.
+  if (!run || run.paidThrough.getTime() + GRACE_PERIOD_DAYS * DAY_MS < now.getTime()) return null;
+
+  return {
+    startedAt: run.startedAt,
+    paidThrough: run.paidThrough,
+    monthsPaid: wholeMonths(run.startedAt, run.paidThrough),
+    vestsAt: runVestsAt(run) ?? addMonths(run.startedAt, 12),
+  };
+}
+
+// How much an adjustment returns: everything charged if Paddle calls it full (its amount, computed on another total,
+// can differ by a penny); otherwise its recorded amount; if that is unknown, nothing for a tax-only correction and
+// everything charged otherwise, so a missing amount never counts as money kept.
+function amountOf(adjustment: PaymentAdjustment, charged: number): number {
+  if (adjustment.type === 'full') return charged;
+  if (adjustment.amount !== null) return Math.max(0, adjustment.amount);
   const taxOnly = adjustment.itemTypes.length > 0 && adjustment.itemTypes.every((type) => type === 'tax');
-
-  switch (adjustment.action) {
-    case 'refund':
-      if (adjustment.type === 'full') return 'full';
-      return taxOnly ? null : 'partial';
-    case 'credit':
-      if (!CREDIT_IS_PARTIAL_REFUND || taxOnly) return null;
-      return adjustment.type === 'full' ? 'full' : 'partial';
-    case 'chargeback':
-      return 'chargeback';
-    default:
-      return null;
-  }
+  return taxOnly ? 0 : charged;
 }
 
-// When the run reaches 12 months, or null if its periods do not get there: 12 calendar months after its start, or the
-// end of the first period that gets within the month-end tolerance of that, if sooner. The tolerance is for Paddle's
-// month-end renewal dates (paddle-assumptions.ts), so only a period that ends where it was billed to may use it: one cut
-// short, by an adjustment or by its subscription ending, must reach the full 12 months.
+function sum(values: number[]): number {
+  return values.reduce((total, value) => total + value, 0);
+}
+
+// When the qualifying period reaches 12 months, or null if it does not: 12 calendar months after its start, or the
+// end of the first part that gets within the month-end tolerance of that, if sooner. The tolerance is for Paddle's
+// month-end renewal dates (paddle-assumptions.ts), so only a part that counts in full, ending where it was billed to,
+// may use it.
 function runVestsAt(run: Run): Date | null {
   const twelveMonths = addMonths(run.startedAt, 12).getTime();
   const enough = twelveMonths - MONTH_END_TOLERANCE_MS;
 
   const ends = run.periods.flatMap((period) => {
     const end = period.endsAt.getTime();
-    const cut = end < period.payment.periodEndsAt.getTime();
-    return end >= (cut ? twelveMonths : enough) ? [end] : [];
+    return end >= (period.full ? enough : twelveMonths) ? [end] : [];
   });
   return ends.length === 0 ? null : new Date(Math.min(twelveMonths, ...ends));
 }
 
-function withdraw(grant: Grant, reason: WithdrawnReason): Grant {
+function withdraw(grant: Grant, reason: 'refund' | 'chargeback'): Grant {
   return { ...grant, status: 'withdrawn', confirmedAt: null, withdrawnReason: reason };
 }
 

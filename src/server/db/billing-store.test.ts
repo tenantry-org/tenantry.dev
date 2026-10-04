@@ -260,7 +260,8 @@ describe('the payment ledger', () => {
         periodEndsAt: '2027-02-01T00:00:00Z',
         subtotal: 3900,
         discount: 0,
-        total: 3900,
+        total: 4680,
+        tax: 780,
         currencyCode: 'GBP',
         occurredAt: '2027-01-01T00:05:00Z',
       }),
@@ -278,8 +279,9 @@ describe('the payment ledger', () => {
       p_period_ends_at: '2027-02-01T00:00:00Z',
       p_subtotal: 3900,
       p_discount: 0,
-      p_total: 3900,
+      p_total: 4680,
       p_currency_code: 'GBP',
+      p_tax: 780,
       p_occurred_at: '2027-01-01T00:05:00Z',
     });
   });
@@ -294,6 +296,8 @@ describe('the payment ledger', () => {
       type: 'partial',
       itemTypes: ['tax'],
       status: 'approved',
+      amount: 0,
+      currencyCode: 'GBP',
       createdAt: '2027-01-02T00:00:00Z',
       updatedAt: '2027-01-03T00:00:00Z',
       occurredAt: '2027-01-03T00:00:01Z',
@@ -304,6 +308,8 @@ describe('the payment ledger', () => {
       p_adjustment_id: 'adj_1',
       p_subscription_id: null,
       p_item_types: ['tax'],
+      p_subtotal: 0,
+      p_currency_code: 'GBP',
       p_created_at: '2027-01-02T00:00:00Z',
       p_updated_at: '2027-01-03T00:00:00Z',
     });
@@ -322,7 +328,23 @@ describe('the payment ledger', () => {
           billing_frequency: 1,
           period_starts_at: '2027-01-01T00:00:00+00:00',
           period_ends_at: '2028-01-01T00:00:00+00:00',
-          total: 39000,
+          subtotal: 39000,
+          discount: 0,
+          total: 46800,
+          tax: 7800,
+        },
+        // Recorded before tax was: subtotal less discount.
+        {
+          transaction_id: 'txn_0',
+          subscription_id: 'sub_1',
+          billing_interval: 'month',
+          billing_frequency: 1,
+          period_starts_at: '2026-12-01T00:00:00+00:00',
+          period_ends_at: '2027-01-01T00:00:00+00:00',
+          subtotal: 3900,
+          discount: 1000,
+          total: 3480,
+          tax: null,
         },
       ],
     };
@@ -337,6 +359,18 @@ describe('the payment ledger', () => {
           status: 'reversed',
           approved_at: '2027-02-01T00:00:00+00:00',
           reversed_at: '2027-03-01T00:00:00+00:00',
+          subtotal: 39000,
+        },
+        {
+          adjustment_id: 'adj_0',
+          transaction_id: 'txn_0',
+          action: 'refund',
+          type: 'partial',
+          item_types: ['partial'],
+          status: 'approved',
+          approved_at: '2027-01-02T00:00:00+00:00',
+          reversed_at: null,
+          subtotal: null,
         },
       ],
     };
@@ -360,15 +394,18 @@ describe('the payment ledger', () => {
         billingFrequency: 1,
         periodStartsAt: new Date('2027-01-01T00:00:00Z'),
         periodEndsAt: new Date('2028-01-01T00:00:00Z'),
-        total: 39000,
+        charged: 39000,
       },
+      expect.objectContaining({ transactionId: 'txn_0', charged: 2900 }),
     ]);
     await expect(listPaymentAdjustments('ctm_1')).resolves.toEqual([
       expect.objectContaining({
         action: 'chargeback',
+        amount: 39000,
         approvedAt: new Date('2027-02-01T00:00:00Z'),
         reversedAt: new Date('2027-03-01T00:00:00Z'),
       }),
+      expect.objectContaining({ adjustmentId: 'adj_0', amount: null }),
     ]);
     await expect(listSubscriptions('ctm_1')).resolves.toEqual([
       {

@@ -10,6 +10,7 @@ import type {
   SubscriptionEvent,
 } from '@/server/db/billing-store';
 import type { BillingStore } from '@/server/billing/deps';
+import { chargedBeforeTax } from '@/server/db/payment-amounts';
 
 /**
  * In-memory stand-in for billing-store.ts, for tests that follow a customer's access through several
@@ -224,9 +225,15 @@ export const memory = {
       const reversedAt = event.status === 'reversed' ? event.updatedAt : null;
       const newer = !existing || !isOlder(event.occurredAt, existing.occurredAt);
 
-      if (!newer && (existing.approvedAt || !approvedAt) && (existing.reversedAt || !reversedAt)) return false;
+      const fillsAmount = existing !== undefined && existing.amount === null && event.amount !== null;
+      if (!newer && !fillsAmount && (existing.approvedAt || !approvedAt) && (existing.reversedAt || !reversedAt)) {
+        return false;
+      }
       state.adjustments.set(event.adjustmentId, {
         ...(newer ? event : existing),
+        // As record_payment_adjustment does: an amount, once known, is kept.
+        amount: existing?.amount ?? event.amount,
+        currencyCode: existing?.currencyCode ?? event.currencyCode,
         approvedAt: existing?.approvedAt ?? approvedAt,
         reversedAt: existing?.reversedAt ?? reversedAt,
       });
@@ -243,7 +250,7 @@ export const memory = {
           billingFrequency: payment.billingFrequency,
           periodStartsAt: new Date(payment.periodStartsAt),
           periodEndsAt: new Date(payment.periodEndsAt),
-          total: payment.total,
+          charged: chargedBeforeTax(payment),
         }));
     },
 
@@ -259,6 +266,7 @@ export const memory = {
           status: adjustment.status,
           approvedAt: adjustment.approvedAt ? new Date(adjustment.approvedAt) : null,
           reversedAt: adjustment.reversedAt ? new Date(adjustment.reversedAt) : null,
+          amount: adjustment.amount,
         }));
     },
 
