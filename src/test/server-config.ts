@@ -27,6 +27,8 @@ export function testServerConfig(overrides: Partial<ServerConfig> = {}): ServerC
     email: { resendApiKey: 're_test', from: 'Tenantry <noreply@example.com>', replyTo: 'support@example.com' },
     alertEmail: 'ops@example.com',
     cronSecret: 'cron-secret',
+    // The SHA-256 of 'publish-key'.
+    feedPublishKeySha256: 'e8d9f85fc129e2165c7c8bb1d8878428335d12491f89d98092c91b11f7331788',
     ...overrides,
   };
 }

@@ -122,6 +122,47 @@ export type Database = {
         };
         Relationships: [];
       };
+      feed_tokens: {
+        Row: {
+          created_at: string;
+          customer_id: string;
+          id: string;
+          last_used_at: string | null;
+          name: string;
+          prefix: string;
+          revoked_at: string | null;
+          token_hash: string;
+        };
+        Insert: {
+          created_at?: string;
+          customer_id: string;
+          id?: string;
+          last_used_at?: string | null;
+          name: string;
+          prefix: string;
+          revoked_at?: string | null;
+          token_hash: string;
+        };
+        Update: {
+          created_at?: string;
+          customer_id?: string;
+          id?: string;
+          last_used_at?: string | null;
+          name?: string;
+          prefix?: string;
+          revoked_at?: string | null;
+          token_hash?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'feed_tokens_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['customer_id'];
+          },
+        ];
+      };
       github_links: {
         Row: {
           customer_id: string;
@@ -339,6 +380,56 @@ export type Database = {
           },
         ];
       };
+      pro_packages: {
+        Row: {
+          authors: string | null;
+          created_at: string;
+          dependency_groups: NonNullable<Json>;
+          description: string | null;
+          lower_id: string;
+          nuspec: string;
+          package_id: string;
+          sha512: string;
+          size: number;
+          storage_path: string;
+          version: string;
+        };
+        Insert: {
+          authors?: string | null;
+          created_at?: string;
+          dependency_groups?: NonNullable<Json>;
+          description?: string | null;
+          lower_id: string;
+          nuspec: string;
+          package_id: string;
+          sha512: string;
+          size: number;
+          storage_path: string;
+          version: string;
+        };
+        Update: {
+          authors?: string | null;
+          created_at?: string;
+          dependency_groups?: NonNullable<Json>;
+          description?: string | null;
+          lower_id?: string;
+          nuspec?: string;
+          package_id?: string;
+          sha512?: string;
+          size?: number;
+          storage_path?: string;
+          version?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'pro_packages_version_fkey';
+            columns: ['version'];
+            isOneToOne: false;
+            referencedRelation: 'pro_releases';
+            referencedColumns: ['version'];
+          },
+        ];
+      };
       pro_releases: {
         Row: {
           created_at: string;
@@ -511,7 +602,19 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      create_feed_token: {
+        Args: { p_customer_id: string; p_name: string; p_prefix: string; p_token_hash: string };
+        Returns: string;
+      };
       customers_to_reconcile: { Args: Record<PropertyKey, never>; Returns: string[] };
+      feed_customer: {
+        Args: { p_token_hash: string };
+        Returns: {
+          access_status: string;
+          customer_id: string;
+          vested_through: string;
+        }[];
+      };
       record_customer_event: {
         Args: { p_customer_id: string; p_email: string; p_occurred_at: string };
         Returns: boolean;
@@ -568,6 +671,7 @@ export type Database = {
         Returns: boolean;
       };
       release_customer_lease: { Args: { p_lease_id: string }; Returns: undefined };
+      revoke_feed_token: { Args: { p_customer_id: string; p_token_id: string }; Returns: boolean };
       set_customer_entitlement: {
         Args: { p_customer_id: string; p_grants: Json; p_payment_statuses: Json; p_state: Json };
         Returns: string;

@@ -65,6 +65,12 @@ export interface ServerConfig extends PublicConfig {
   alertEmail: string | null;
   /** The bearer secret Vercel Cron sends to /api/reconcile. */
   cronSecret: string;
+  /**
+   * The hex SHA-256 of the key the release workflow publishes packages to the feed with (its X-NuGet-ApiKey), or
+   * null: publishing is then refused. Only the hash is configured, so the key itself is only in the workflow's
+   * secrets.
+   */
+  feedPublishKeySha256: string | null;
 }
 
 /**
@@ -102,6 +108,11 @@ export function validateServerConfig(
     problems.push(`PADDLE_PRO_PRODUCT_ID must be a Paddle product id ("pro_…"); it is "${proProductId}"`);
   }
   const cronSecret = required('CRON_SECRET', 'the reconcile job cannot be authorised');
+
+  const feedPublishKeySha256 = value('FEED_PUBLISH_KEY_SHA256')?.toLowerCase() ?? null;
+  if (feedPublishKeySha256 && !/^[0-9a-f]{64}$/.test(feedPublishKeySha256)) {
+    problems.push('FEED_PUBLISH_KEY_SHA256 must be the hex SHA-256 of the feed publish key (64 hex digits)');
+  }
 
   const github = {
     org: required('GITHUB_ORG', 'there is no default org, so provisioning cannot fall back to another environment’s'),
@@ -182,6 +193,7 @@ export function validateServerConfig(
     email: resendApiKey ? { resendApiKey, from: from ?? '', replyTo: replyTo || null } : null,
     alertEmail: alertEmail || null,
     cronSecret,
+    feedPublishKeySha256,
   });
 }
 

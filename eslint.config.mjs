@@ -31,9 +31,9 @@ const serviceRoleClient = {
   message: 'The service-role client bypasses RLS: only the modules in src/server/db use it.',
 };
 
-// The server code is in layers, and imports point only down this list: billing (the rules and services) → jobs
-// (the customer jobs' worker and leases) → integrations (Paddle, GitHub, email, licence signing) and db (the
-// Supabase clients and the modules that query the database) → config. src/lib holds isomorphic helpers and imports
+// The server code is in layers, and imports point only down this list: feed (the package feed) → billing (the rules
+// and services) → jobs (the customer jobs' worker and leases) → integrations (Paddle, GitHub, email, licence signing)
+// and db (the Supabase clients and the modules that query the database) → config. src/lib holds isomorphic helpers and imports
 // no server code. The patterns match both the alias and relative paths (`@/server/billing/…`, `../billing/…`).
 const below = (layer, ...higher) => ({
   regex: `^(@/server/|(\\.\\./)+(server/)?)(${higher.join('|')})(/|$)`,
@@ -43,7 +43,7 @@ const isomorphic = {
   regex: '^(@/server|(\\.\\./)+server)(/|$)',
   message: 'src/lib is isomorphic: it imports no server code.',
 };
-const dbLayer = below('db', 'billing', 'jobs', 'integrations');
+const dbLayer = below('db', 'feed', 'billing', 'jobs', 'integrations');
 
 function importRules(files, patterns, { ignores = [], clients = true } = {}) {
   return {
@@ -70,15 +70,16 @@ const eslintConfig = [
   importRules(['src/**/*.{ts,tsx}'], [serviceRoleClient], { ignores: ['src/server/**', 'src/lib/**'] }),
   importRules(['src/lib/**/*.{ts,tsx}'], [isomorphic], { ignores: [browserClientFactory] }),
   importRules([browserClientFactory], [isomorphic], { clients: false }),
-  importRules(['src/server/billing/**/*.{ts,tsx}'], [serviceRoleClient]),
-  importRules(['src/server/jobs/**/*.{ts,tsx}'], [serviceRoleClient, below('jobs', 'billing')]),
+  importRules(['src/server/feed/**/*.{ts,tsx}'], [serviceRoleClient]),
+  importRules(['src/server/billing/**/*.{ts,tsx}'], [serviceRoleClient, below('billing', 'feed')]),
+  importRules(['src/server/jobs/**/*.{ts,tsx}'], [serviceRoleClient, below('jobs', 'feed', 'billing')]),
   importRules(
     ['src/server/integrations/**/*.{ts,tsx}'],
-    [serviceRoleClient, below('integrations', 'billing', 'jobs', 'db')],
+    [serviceRoleClient, below('integrations', 'feed', 'billing', 'jobs', 'db')],
   ),
   importRules(
     ['src/server/config/**/*.{ts,tsx}'],
-    [serviceRoleClient, below('config', 'billing', 'jobs', 'integrations', 'db')],
+    [serviceRoleClient, below('config', 'feed', 'billing', 'jobs', 'integrations', 'db')],
   ),
   importRules(['src/server/db/**/*.{ts,tsx}'], [dbLayer], { ignores: serverClientFactories }),
   importRules(serverClientFactories, [dbLayer], { clients: false }),

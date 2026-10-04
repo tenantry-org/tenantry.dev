@@ -11,11 +11,12 @@ export const config = {
   matcher: [
     /*
      * Every path except:
-     * - the docs and the API routes, which read no session (a signed-in reader would otherwise wait on Supabase Auth
-     *   for every docs page), with their RSC payloads (`/docs.rsc`, `/docs.segments/…`);
+     * - the docs, the API routes and the package feed, which read no session (a signed-in reader would otherwise wait
+     *   on Supabase Auth for every docs page, and a restore for every package), with the docs' RSC payloads
+     *   (`/docs.rsc`, `/docs.segments/…`);
      * - Next's static files and image optimisation, the favicon and images.
      * The home page (its header shows the account) and checkout are matched.
      */
-    '/((?!(?:docs|api)(?:[/.]|$)|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!(?:docs|api|feed)(?:[/.]|$)|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

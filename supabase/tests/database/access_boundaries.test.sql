@@ -9,7 +9,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(41);
+select plan(45);
 
 -- Structure: holds for every table and function, not only the ones listed below.
 select is_empty(
@@ -60,6 +60,11 @@ insert into public.vested_entitlements (customer_id, kind, started_at, vested_th
   ('ctm_alice', 'qualifying_run', '2026-01-01', '2027-01-01', 'confirmed', now()),
   ('ctm_bob', 'qualifying_run', '2026-01-01', '2027-01-01', 'confirmed', now());
 insert into public.pro_releases (version, major, minor, patch, published_at) values ('1.0.0', 1, 0, 0, now());
+insert into public.pro_packages (lower_id, version, package_id, storage_path, size, sha512, nuspec)
+values ('tenantry.pro', '1.0.0', 'Tenantry.Pro', 'tenantry.pro/1.0.0/tenantry.pro.1.0.0.nupkg', 1, 'x', '<package/>');
+insert into public.feed_tokens (customer_id, name, token_hash, prefix) values
+  ('ctm_alice', 'CI', encode(sha256('tpf_alice'), 'hex'), 'tpf_alic'),
+  ('ctm_bob', 'CI', encode(sha256('tpf_bob'), 'hex'), 'tpf_bob_');
 insert into public.github_links (customer_id, github_login, github_id) values
   ('ctm_alice', 'alice-gh', 1001), ('ctm_bob', 'bob-gh', 1002);
 insert into public.licence_failures (customer_id, attempts, last_error) values ('ctm_bob', 1, 'signing failed');
@@ -91,6 +96,13 @@ select is_empty($$select 1 from public.customer_jobs$$, 'customer jobs show no r
 select is_empty($$select 1 from public.licence_failures$$, 'licence failures show no rows');
 select is_empty($$select 1 from public.payment_adjustments$$, 'payment adjustments show no rows');
 select is_empty($$select 1 from public.pro_releases$$, 'releases show no rows');
+select is_empty($$select 1 from public.pro_packages$$, 'packages show no rows');
+select results_eq($$select prefix from public.feed_tokens$$, $$values ('tpf_alic'::text)$$, 'only her feed tokens');
+select throws_ok($$select * from public.feed_customer(encode(sha256('tpf_bob'), 'hex'))$$, '42501', null,
+  'she cannot look up a feed token');
+select results_eq(
+  $$with changed as (update public.feed_tokens set revoked_at = null returning 1) select count(*)::int from changed$$,
+  $$values (0)$$, 'she cannot change a feed token');
 
 -- Alice cannot write, not even her own rows.
 select throws_ok(

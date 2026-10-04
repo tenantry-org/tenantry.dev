@@ -79,12 +79,25 @@ describe('validateServerConfig', () => {
       email: { resendApiKey: 'resend', from: 'Tenantry <hello@tenantry.dev>', replyTo: 'support@tenantry.dev' },
       alertEmail: 'ops@tenantry.dev',
       cronSecret: 'cron',
+      feedPublishKeySha256: null,
     });
     expect(config.licenceSigningKey.export({ type: 'pkcs8', format: 'pem' })).toBe(productionKey.pem);
     expect([config, config.paddle, config.paddle.prices, config.github.app, config.email].every(Object.isFrozen)).toBe(
       true,
     );
     expect(validateServerConfig(environment('sandbox'), productionKey.spki).paddle.environment).toBe('sandbox');
+  });
+
+  it('takes the hash of the feed publish key, which is optional', () => {
+    const hash = 'E8D9F85FC129E2165C7C8BB1D8878428335D12491F89D98092C91B11F7331788';
+
+    expect(
+      validateServerConfig(environment('sandbox', { FEED_PUBLISH_KEY_SHA256: hash }), productionKey.spki)
+        .feedPublishKeySha256,
+    ).toBe(hash.toLowerCase());
+    expect(problems(environment('sandbox', { FEED_PUBLISH_KEY_SHA256: 'publish-key' }))).toEqual([
+      expect.stringContaining('FEED_PUBLISH_KEY_SHA256 must be the hex SHA-256'),
+    ]);
   });
 
   it('throws for a misconfigured production environment, listing every problem', () => {
