@@ -34,6 +34,7 @@ function payment(start: string, options: Partial<Payment> & { months?: number } 
     periodStartsAt: date(start),
     periodEndsAt: addMonths(date(start), months),
     charged: months >= 12 ? 39000 : 3900,
+    priceId: months >= 12 ? 'pri_01year' : 'pri_01month',
     ...rest,
   };
 }
@@ -76,6 +77,7 @@ function adjustment(
 }
 
 const PRO = 'pro_01';
+const OFFER_PRICES = ['pri_01month', 'pri_01year'];
 
 /** A Pro subscription that is running (active, unless another Paddle status is given). */
 function running(subscriptionId = 'sub_1', status = 'active', graceStartedAt: string | null = null): SubscriptionState {
@@ -102,6 +104,7 @@ function compute(input: Omit<Partial<EntitlementInput>, 'now'> & { now: string; 
     adjustments: [],
     subscriptions: [endedAt ? ended('sub_1', endedAt) : running()],
     proProductId: PRO,
+    offerPriceIds: OFFER_PRICES,
     ...rest,
     now: date(now),
   });
@@ -438,6 +441,21 @@ describe('a subscription ending with its payment kept in full', () => {
   });
 });
 
+describe('prices', () => {
+  it('counts only payments at one of the offer prices: another price on the Pro product earns nothing', () => {
+    const offPrice = monthly('2027-01-01T00:00:00Z', 12, { priceId: 'pri_staff_special' });
+
+    expect(compute({ payments: offPrice, now: '2028-01-01T00:00:00Z' }).vestedThrough).toBeNull();
+    expect(
+      compute({ payments: [annual('2027-01-01T00:00:00Z', { priceId: 'pri_other' })], now: '2027-06-01T00:00:00Z' })
+        .grants,
+    ).toEqual([]);
+    expect(vested(compute({ payments: monthly('2027-01-01T00:00:00Z', 12), now: '2028-01-01T00:00:00Z' }))).toBe(
+      '2028-01-01T00:00:00.000Z',
+    );
+  });
+});
+
 describe('what counts as money returned', () => {
   const payments = monthly('2027-01-01T00:00:00Z', 12);
   const now = '2028-01-01T00:00:00Z';
@@ -661,6 +679,7 @@ describe('access', () => {
       payments: [],
       adjustments: [],
       proProductId: PRO,
+      offerPriceIds: OFFER_PRICES,
       now,
     }).access;
 

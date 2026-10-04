@@ -183,6 +183,8 @@ export function transactionEvent(options: {
   subscriptionId?: string | null;
   origin?: string;
   productId?: string;
+  /** By default the offer price for the interval. */
+  priceId?: string;
   interval?: 'month' | 'year';
   /** null for a transaction with no billing period (a one-time charge). */
   period?: { startsAt: string; endsAt: string } | null;
@@ -198,7 +200,7 @@ export function transactionEvent(options: {
       ? { startsAt: '2026-09-01T00:00:00Z', endsAt: '2026-10-01T00:00:00Z' }
       : options.period;
   const price = {
-    id: interval === 'year' ? 'pri_01year' : 'pri_01month',
+    id: options.priceId ?? (interval === 'year' ? 'pri_01year' : 'pri_01month'),
     product_id: options.productId ?? 'pro_01',
     description: `Tenantry Pro ${interval}ly`,
     type: 'standard',

@@ -22,6 +22,8 @@ export type PaymentStatus = 'paid' | 'partially_refunded' | 'refunded' | 'charge
 export interface Payment {
   transactionId: string;
   subscriptionId: string;
+  /** The Paddle price paid: only a payment at one of the offer prices (PADDLE_PRICE_MONTHLY or _YEARLY) counts. */
+  priceId: string;
   billingInterval: string;
   billingFrequency: number;
   periodStartsAt: Date;
@@ -353,7 +355,7 @@ export async function listPayments(customerId: string): Promise<Payment[]> {
   const { data, error } = await supabase
     .from('payments')
     .select(
-      'transaction_id,subscription_id,billing_interval,billing_frequency,period_starts_at,period_ends_at,subtotal,discount,total,tax',
+      'transaction_id,subscription_id,price_id,billing_interval,billing_frequency,period_starts_at,period_ends_at,subtotal,discount,total,tax',
     )
     .eq('customer_id', customerId);
 
@@ -362,6 +364,7 @@ export async function listPayments(customerId: string): Promise<Payment[]> {
   return (data ?? []).map((row) => ({
     transactionId: row.transaction_id,
     subscriptionId: row.subscription_id,
+    priceId: row.price_id,
     billingInterval: row.billing_interval,
     billingFrequency: row.billing_frequency,
     periodStartsAt: new Date(row.period_starts_at),

@@ -33,6 +33,9 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
         frameTarget: 'paddle-checkout-frame',
         frameInitialHeight: 450,
         frameStyle: 'width: 100%; background-color: transparent; border: none',
+        // No discount is offered, so the field for a discount code is hidden (it shows by default). Any discount would
+        // still count only as what was charged (entitlement-policy.ts).
+        showAddDiscounts: false,
         // Paddle needs an absolute URL; a relative one is rejected and the buyer is not redirected.
         successUrl: `${window.location.origin}/checkout/success`,
       },

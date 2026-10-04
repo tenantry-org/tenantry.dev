@@ -9,7 +9,7 @@ import {
 } from '@/server/integrations/email/templates';
 import { errorMessage } from '@/lib/errors';
 import { computeEntitlement, isEntitled } from '@/server/billing/entitlement-policy';
-import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
+import { type BillingDeps, defaultBillingDeps, offerPriceIds } from '@/server/billing/deps';
 
 /**
  * Brings a customer's stored state, and what follows from it, in line with what Paddle has told us. Every Paddle event
@@ -70,6 +70,7 @@ export async function syncCustomer(
     payments,
     adjustments,
     proProductId: deps.config.paddle.proProductId,
+    offerPriceIds: offerPriceIds(deps),
     now,
   });
   const entitled = isEntitled(entitlement.access.status);

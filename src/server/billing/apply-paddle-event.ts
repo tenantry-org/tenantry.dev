@@ -15,7 +15,7 @@ import type { PaddleTransaction } from '@/server/integrations/paddle/list-transa
 import type { PaddleAdjustment } from '@/server/integrations/paddle/list-adjustments';
 import { subscriptionEndedAt } from '@/server/billing/paddle-assumptions';
 import { normaliseEmail } from '@/server/db/customer-email';
-import { type BillingDeps, defaultBillingDeps } from '@/server/billing/deps';
+import { type BillingDeps, defaultBillingDeps, offerPriceIds } from '@/server/billing/deps';
 
 // Structural view of the bits of SubscriptionNotification this handler needs.
 interface SubscriptionEventData {
@@ -126,7 +126,8 @@ async function handleTransactionCompleted(data: PaddleTransaction, occurredAt: s
 /**
  * Records a completed transaction in the payment ledger if it pays a billing period of a Pro subscription (it has a
  * customer, a subscription, a billing period, and a recurring Pro price), whatever its origin, and returns whether it
- * does. Anything else (a one-time charge, another product) is ignored. Recording is idempotent on the transaction id.
+ * does. Anything else (a one-time charge, another product) is ignored. A payment at a Pro price other than the two
+ * offered is recorded but counts for nothing (entitlement-policy.ts), and the operator is told. Recording is idempotent on the transaction id.
  * The webhook records each transaction.completed this way, and reconcile any completed transaction Paddle lists that
  * the ledger is missing (reconcile-customer.ts).
  */
@@ -164,6 +165,16 @@ export async function recordCompletedTransaction(
     currencyCode: totals.currencyCode,
     occurredAt,
   });
+
+  if (!offerPriceIds(deps).includes(price.id)) {
+    await deps.alertOperator(
+      `Pro payment at a price not offered, for customer ${data.customerId}`,
+      `Transaction ${data.id} (${data.origin}) on subscription ${data.subscriptionId} paid price ${price.id}, which ` +
+        'is neither PADDLE_PRICE_MONTHLY nor PADDLE_PRICE_YEARLY. It is recorded but counts for nothing towards ' +
+        'vesting and grants no annual term. Check how the price was sold; if the time should count, add an operator ' +
+        'grant.',
+    );
+  }
 
   return true;
 }

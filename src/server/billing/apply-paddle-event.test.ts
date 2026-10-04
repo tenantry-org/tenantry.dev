@@ -518,6 +518,39 @@ describe('applyPaddleEvent', () => {
       expect(memory.state.entitlementStates.size).toBe(0);
     });
 
+    it('records a Pro payment at a price that is not offered as not counting, and alerts the operator', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      await applyPaddleEvent(delivered(created), deps);
+
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_annual_special',
+            transactionId: 'txn_special',
+            interval: 'year',
+            priceId: 'pri_01special',
+            period: { startsAt: '2027-01-01T00:00:00Z', endsAt: '2028-01-01T00:00:00Z' },
+          }),
+        ),
+        deps,
+      );
+
+      expect(memory.state.payments.get('txn_special')?.priceId).toBe('pri_01special');
+      expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({
+        conditionalThrough: null,
+        run: null,
+        vestedThrough: null,
+      });
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Pro payment at a price not offered, for customer ctm_01',
+        expect.stringContaining('txn_special'),
+      );
+
+      vi.setSystemTime(new Date('2028-01-02T00:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toBeNull();
+    });
+
     it('fails a payment whose customer is not recorded yet, so the worker retries it', async () => {
       memory.state.emails.clear();
 

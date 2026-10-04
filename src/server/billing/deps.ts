@@ -46,3 +46,8 @@ export const defaultBillingDeps: BillingDeps = {
   listCompletedTransactions: (subscriptionIds, billedSince) => listCompletedTransactions(subscriptionIds, billedSince),
   listAdjustments: (subscriptionIds) => listAdjustments(subscriptionIds),
 };
+
+/** The prices Pro is offered at (PADDLE_PRICE_MONTHLY and PADDLE_PRICE_YEARLY): only a payment at one of them counts. */
+export function offerPriceIds(deps: Pick<BillingDeps, 'config'>): string[] {
+  return Object.values(deps.config.paddle.prices);
+}

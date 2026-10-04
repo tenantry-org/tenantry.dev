@@ -185,6 +185,7 @@ export const memory = {
         .map((payment) => ({
           transactionId: payment.transactionId,
           subscriptionId: payment.subscriptionId,
+          priceId: payment.priceId,
           billingInterval: payment.billingInterval,
           billingFrequency: payment.billingFrequency,
           periodStartsAt: new Date(payment.periodStartsAt),

@@ -26,7 +26,7 @@ import { continuesRun, isAnnualTerm, MONTH_END_TOLERANCE_MS } from '@/server/bil
  * Vesting follows the money kept (the owner's decision of 4 October 2026, plans-and-investigations/
  * Tenantry-Licensing-And-Feed-Plan.md section 2):
  *
- * - A payment counts for the part of its billing period that the money still kept from it pays for. With C charged
+ * - A payment at one of the offer prices counts for the part of its billing period that the money still kept from it pays for. With C charged
  *   before tax and R returned (refunds, credits and chargebacks in effect now; a reversed one no longer returns
  *   anything), it counts for the first (C - R) / C of its period, from the period's start. Nothing if R reaches C, or if
  *   nothing was charged (a trial, a period discounted in full). A discount is not money returned: the share is of what
@@ -53,6 +53,11 @@ export interface EntitlementInput {
   adjustments: PaymentAdjustment[];
   /** The product that is Tenantry Pro (PADDLE_PRO_PRODUCT_ID): a subscription to any other entitles to nothing. */
   proProductId: string;
+  /**
+   * The prices Tenantry Pro is offered at (PADDLE_PRICE_MONTHLY and PADDLE_PRICE_YEARLY). A payment at any other price,
+   * even one on the Pro product, counts for nothing and grants nothing: another price could have any amount or period.
+   */
+  offerPriceIds: string[];
   now: Date;
 }
 
@@ -307,7 +312,12 @@ class Ledger {
     const now = this.input.now;
 
     return this.input.payments
-      .filter((payment) => payment.charged > 0 && isAnnualTerm(payment.billingInterval, payment.billingFrequency))
+      .filter(
+        (payment) =>
+          this.isOffered(payment) &&
+          payment.charged > 0 &&
+          isAnnualTerm(payment.billingInterval, payment.billingFrequency),
+      )
       .map((payment) => {
         const termEnd = payment.periodEndsAt;
         const returned = this.returned(payment);
@@ -328,8 +338,14 @@ class Ledger {
       });
   }
 
-  // The first kept share of the payment's period, or null if nothing of it is kept.
+  /** Whether the payment was at one of the prices Pro is offered at. */
+  isOffered(payment: Payment): boolean {
+    return this.input.offerPriceIds.includes(payment.priceId);
+  }
+
+  // The first kept share of the payment's period, or null if nothing of it is kept or it was not at an offer price.
   private countedPeriod(payment: Payment): Period | null {
+    if (!this.isOffered(payment)) return null;
     const share = this.keptShare(payment);
     if (share <= 0) return null;
 
