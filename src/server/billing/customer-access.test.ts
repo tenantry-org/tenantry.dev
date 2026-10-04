@@ -387,7 +387,7 @@ describe('vesting emails', () => {
     expect(subjects()).toEqual(['Your Tenantry Pro vested releases have changed']);
     const [message] = deps.sendEmail.mock.calls[0];
     expect(message.html).toContain('Your annual term no longer vests the releases published up to 1 January 2027');
-    expect(message.html).toContain('because its payment was refunded');
+    expect(message.html).toContain('because money paid for it was refunded or credited');
     expect(message.html).toContain('No releases are vested now.');
     expect(alerts()).toEqual(['Grant withdrawn for customer ctm_1']);
 
@@ -396,6 +396,71 @@ describe('vesting emails', () => {
     await syncCustomer('ctm_1', deps, new Date('2026-01-09T00:00:00Z'));
     expect(deps.sendEmail).not.toHaveBeenCalled();
     expect(deps.alertOperator).not.toHaveBeenCalled();
+  });
+
+  async function refund(adjustmentId: string, transactionId: string, at: string, amount = 3900) {
+    await memory.store.recordPaymentAdjustment({
+      adjustmentId,
+      transactionId,
+      customerId: 'ctm_1',
+      subscriptionId: 'sub_1',
+      action: 'refund',
+      type: amount >= 3900 ? 'full' : 'partial',
+      itemTypes: [amount >= 3900 ? 'full' : 'partial'],
+      status: 'approved',
+      amount,
+      currencyCode: 'GBP',
+      createdAt: at,
+      updatedAt: at,
+      occurredAt: at,
+    });
+  }
+
+  it('tells the customer and the operator when a refund of a month takes their vesting away', async () => {
+    memory.subscribe('ctm_1');
+    for (let n = 0; n < 14; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+    await syncCustomer('ctm_1', deps, new Date('2027-02-10T00:00:00Z'));
+    vi.clearAllMocks();
+
+    // March 2026 refunded: the qualifying period now starts in April 2026 and has not reached 12 months.
+    await refund('adj_march', 'txn_2', '2027-02-11T00:00:00Z');
+    await syncCustomer('ctm_1', deps, new Date('2027-02-11T01:00:00Z'));
+
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toBeNull();
+    expect(subjects()).toEqual(['Your Tenantry Pro vested releases have changed']);
+    const [message] = deps.sendEmail.mock.calls[0];
+    expect(message.html).toContain(
+      'Your qualifying period no longer vests the releases published up to 10 February 2027',
+    );
+    expect(message.html).toContain('because money it relied on was refunded, credited or charged back');
+    expect(message.html).toContain('No releases are vested now.');
+    expect(alerts()).toEqual(['Vested releases taken away for customer ctm_1']);
+  });
+
+  it('says nothing when a refund moves the start of a vested qualifying period but not its vested-through date', async () => {
+    memory.subscribe('ctm_1');
+    for (let n = 0; n < 26; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+    await syncCustomer('ctm_1', deps, new Date('2028-02-10T00:00:00Z'));
+    vi.clearAllMocks();
+
+    await refund('adj_first', 'txn_0', '2028-02-11T00:00:00Z');
+    await syncCustomer('ctm_1', deps, new Date('2028-02-11T00:00:00Z'));
+
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2028-02-11T00:00:00Z'));
+    expect(deps.sendEmail).not.toHaveBeenCalled();
+    expect(deps.alertOperator).not.toHaveBeenCalled();
+  });
+
+  it('says the vested-through date moves forward as paid time is served', async () => {
+    memory.subscribe('ctm_1');
+    for (let n = 0; n < 12; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+    await syncCustomer('ctm_1', deps, new Date('2027-01-01T01:00:00Z'));
+
+    const [message] = deps.sendEmail.mock.calls.filter(
+      ([m]) => m.subject === 'Your Tenantry Pro releases are vested',
+    )[0];
+    expect(message.html).toContain('moves forward as your paid time is served');
+    expect(message.html).not.toContain('end of each paid month');
   });
 
   it('says nothing about an annual term until it is completed, then that it vested', async () => {

@@ -1,5 +1,6 @@
 import 'server-only';
 import type { Entitlement, Grant } from '@/server/db/billing-store';
+import type { WithdrawnGrant } from '@/server/integrations/email/templates';
 import {
   accessRevokedEmail,
   grantWithdrawnEmail,
@@ -109,11 +110,15 @@ export async function syncCustomer(
 }
 
 /**
- * Tells the customer about each grant that became confirmed (absent or conditional before: a first vesting, a new
- * qualifying period that vested, an annual term completed) and each that was withdrawn (conditional or confirmed
- * before), comparing the grants stored before this sync with those stored by it. A confirmed grant whose vested-through
- * date only moves forward, as a qualifying period does each month, sends nothing. A withdrawal also alerts the operator,
- * since a refund or chargeback took away releases. Never throws: a failed email is not resent.
+ * Tells the customer when their vested releases change, comparing the grants stored before this sync with those stored
+ * by it:
+ *   - an annual term's grant withdrawn (money returned from its payment);
+ *   - their vested-through date moved back or gone for any other reason: money returned that a qualifying period relied
+ *     on, which recomputes the qualifying period without it rather than marking it withdrawn;
+ *   - a grant newly confirmed (a first vesting, a new qualifying period, an annual term completed) that vested after
+ *     their previous vested-through date. A vested-through date moving forward with the time served sends nothing, nor
+ *     does a qualifying period recomputed from a later start.
+ * Anything taken away also alerts the operator. Never throws: a failed email is not resent.
  */
 async function notifyGrantChanges(
   customerId: string,
@@ -123,36 +128,52 @@ async function notifyGrantChanges(
   deps: BillingDeps,
 ) {
   const before = new Map(previous.map((grant) => [grantKey(grant), grant.status]));
+  const previousThrough = latestDate(previous.filter((g) => g.status === 'confirmed').map((g) => g.vestedThrough));
+  const through = entitlement.vestedThrough;
+
   const confirmed = entitlement.grants.filter(
     (grant) => grant.status === 'confirmed' && before.get(grantKey(grant)) !== 'confirmed',
   );
-  const withdrawn = entitlement.grants.filter((grant) => {
+  const withdrawn: WithdrawnGrant[] = entitlement.grants.filter((grant) => {
     const was = before.get(grantKey(grant));
     return grant.status === 'withdrawn' && (was === 'conditional' || was === 'confirmed');
   });
+  // Vesting taken away without a grant marked withdrawn: money returned that a qualifying period relied on.
+  if (withdrawn.length === 0 && previousThrough && (!through || through < previousThrough)) {
+    withdrawn.push({ kind: 'qualifying_run', vestedThrough: previousThrough, withdrawnReason: null });
+  }
+  // A grant that vested after the previous vested-through date: not a qualifying period recomputed from a later start.
+  const vested =
+    through !== null &&
+    confirmed.some((grant) => !previousThrough || (grant.confirmedAt ?? grant.vestedThrough) > previousThrough);
 
   for (const grant of withdrawn) {
+    const what = grant.kind === 'annual_term' ? 'annual term' : 'qualifying period';
     await deps.alertOperator(
-      `Grant withdrawn for customer ${customerId}`,
-      `The ${grant.kind === 'annual_term' ? 'annual term' : 'qualifying period'} of Paddle customer ${customerId} ` +
-        `that started ${grant.startedAt.toISOString()} no longer vests releases up to ` +
-        `${grant.vestedThrough.toISOString()} (${grant.withdrawnReason}). Their vested-through date is now ` +
-        `${entitlement.vestedThrough?.toISOString() ?? 'none'}. Check the adjustment in Paddle if this is unexpected.`,
+      grant.withdrawnReason
+        ? `Grant withdrawn for customer ${customerId}`
+        : `Vested releases taken away for customer ${customerId}`,
+      `The ${what} of Paddle customer ${customerId} no longer vests releases up to ` +
+        `${grant.vestedThrough.toISOString()} (${grant.withdrawnReason ?? 'money it relied on was returned'}). Their ` +
+        `vested-through date is now ${through?.toISOString() ?? 'none'}. Check the adjustment in Paddle if this is ` +
+        'unexpected.',
     );
   }
-  if (confirmed.length > 0 && entitlement.vestedThrough) {
-    console.info(
-      `Customer access: customer ${customerId} is vested through ${entitlement.vestedThrough.toISOString()}.`,
-    );
+  if (vested) {
+    console.info(`Customer access: customer ${customerId} is vested through ${through!.toISOString()}.`);
   }
 
   if (!email) return;
   for (const grant of withdrawn) {
-    await deps.sendEmail(grantWithdrawnEmail(email, grant, entitlement.vestedThrough, deps.config.siteUrl));
+    await deps.sendEmail(grantWithdrawnEmail(email, grant, through, deps.config.siteUrl));
   }
-  if (confirmed.length > 0 && entitlement.vestedThrough) {
-    await deps.sendEmail(vestingConfirmedEmail(email, entitlement.vestedThrough, deps.config.siteUrl));
+  if (vested) {
+    await deps.sendEmail(vestingConfirmedEmail(email, through!, deps.config.siteUrl));
   }
+}
+
+function latestDate(dates: Date[]): Date | null {
+  return dates.length === 0 ? null : new Date(Math.max(...dates.map((date) => date.getTime())));
 }
 
 function grantKey(grant: Pick<Grant, 'kind' | 'startedAt'>): string {

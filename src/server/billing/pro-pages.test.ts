@@ -86,8 +86,19 @@ describe('readEntitlement', () => {
       graceEndsAt: null,
       canRestore: true,
       vestedThrough: null,
-      qualifying: { monthsPaid: 3, vestsAt: '2027-07-01T00:00:00.000Z' },
+      qualifying: { monthsPaid: 3, vestsAt: '2027-07-01T00:00:00.000Z', reached: false },
       conditionalThrough: null,
+    });
+  });
+
+  it('says whether the qualifying period has reached 12 months by now, not only whether 12 months are paid', async () => {
+    state.tables.active_subscriptions = stored('active', { months_paid: 12, vests_at: '2027-07-01T00:00:00Z' });
+
+    await expect(readEntitlement('ctm_1', new Date('2027-06-15T00:00:00Z'))).resolves.toMatchObject({
+      qualifying: { monthsPaid: 12, reached: false },
+    });
+    await expect(readEntitlement('ctm_1', new Date('2027-07-01T00:00:00Z'))).resolves.toMatchObject({
+      qualifying: { reached: true },
     });
   });
 

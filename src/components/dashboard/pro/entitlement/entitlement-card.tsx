@@ -86,8 +86,8 @@ function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) 
   );
 }
 
-// How far the customer is towards vesting: an annual term confirmed when it is completed, or the paid months of the
-// current qualifying period.
+// How far the customer is towards vesting: an annual term confirmed at its end if its payment is kept, or the paid time
+// of the current qualifying period (the time the money kept pays for).
 function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
   const { conditionalThrough, qualifying } = entitlement;
 
@@ -96,8 +96,8 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
       <p>
         Your annual term grants the releases published up to{' '}
         <span className={'font-medium text-foreground'}>{formatDate(conditionalThrough)}</span>. They become vested
-        releases when the term is completed on that date. A refund or chargeback of the term withdraws the grant, and so
-        does ending the subscription before then.
+        releases at the end of the term, on that date, if its payment is kept in full. A refund, credit or chargeback of
+        the payment withdraws the grant, even after the term.
       </p>
     );
   }
@@ -106,11 +106,11 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
     return <p>No paid period is recorded yet. Your qualifying period starts with your first payment.</p>;
   }
 
-  if (qualifying.monthsPaid >= 12) {
+  if (qualifying.reached) {
     return (
       <p>
         Your qualifying period reached 12 paid months on {formatDate(qualifying.vestsAt)}. While you stay subscribed,
-        your vested-through date moves forward at the end of each paid month.
+        your vested-through date moves forward as your paid time is served.
       </p>
     );
   }
@@ -119,7 +119,9 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
     <p>
       Qualifying period: <span className={'font-medium text-foreground'}>{qualifying.monthsPaid} of 12</span> paid
       months. If your subscription continues to {formatDate(qualifying.vestsAt)}, the releases published up to then
-      become vested. If it ends before then, the qualifying period starts again from your next subscription.
+      become vested. If it ends before then, the qualifying period starts again from your next subscription. A refund,
+      credit or chargeback of a payment takes away the time that money paid for, and the qualifying period then starts
+      again after it.
     </p>
   );
 }

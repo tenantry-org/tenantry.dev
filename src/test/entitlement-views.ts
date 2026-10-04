@@ -8,7 +8,7 @@ export const ENTITLEMENT = {
     graceEndsAt: null,
     canRestore: true,
     vestedThrough: null,
-    qualifying: { monthsPaid: 4, vestsAt: '2027-01-01T00:00:00.000Z' },
+    qualifying: { monthsPaid: 4, vestsAt: '2027-01-01T00:00:00.000Z', reached: false },
     conditionalThrough: null,
   },
   /** Fourteen months in: vested, and the vested-through date moving forward. */
@@ -17,7 +17,7 @@ export const ENTITLEMENT = {
     graceEndsAt: null,
     canRestore: true,
     vestedThrough: '2027-03-01T00:00:00.000Z',
-    qualifying: { monthsPaid: 14, vestsAt: '2027-01-01T00:00:00.000Z' },
+    qualifying: { monthsPaid: 14, vestsAt: '2027-01-01T00:00:00.000Z', reached: true },
     conditionalThrough: null,
   },
   annual: {
@@ -25,7 +25,7 @@ export const ENTITLEMENT = {
     graceEndsAt: null,
     canRestore: true,
     vestedThrough: null,
-    qualifying: { monthsPaid: 0, vestsAt: '2027-10-01T00:00:00.000Z' },
+    qualifying: { monthsPaid: 12, vestsAt: '2027-10-01T00:00:00.000Z', reached: false },
     conditionalThrough: '2027-10-01T00:00:00.000Z',
   },
   grace: {
@@ -33,7 +33,7 @@ export const ENTITLEMENT = {
     graceEndsAt: '2026-10-31T00:00:00.000Z',
     canRestore: true,
     vestedThrough: null,
-    qualifying: { monthsPaid: 1, vestsAt: '2027-09-01T00:00:00.000Z' },
+    qualifying: { monthsPaid: 1, vestsAt: '2027-09-01T00:00:00.000Z', reached: false },
     conditionalThrough: null,
   },
   vestedLapsed: {
@@ -42,6 +42,15 @@ export const ENTITLEMENT = {
     canRestore: true,
     vestedThrough: '2027-12-31T00:00:00.000Z',
     qualifying: null,
+    conditionalThrough: null,
+  },
+  /** Twelve months paid, the twelfth not yet served. */
+  twelvePaid: {
+    access: 'active',
+    graceEndsAt: null,
+    canRestore: true,
+    vestedThrough: null,
+    qualifying: { monthsPaid: 12, vestsAt: '2027-01-01T00:00:00.000Z', reached: false },
     conditionalThrough: null,
   },
   unvestedLapsed: {

@@ -66,26 +66,30 @@ export function vestingConfirmedEmail(to: string, vestedThrough: Date, siteUrl: 
     html: layout(
       `<h1 style="font-size:20px">Your releases are vested</h1>
 <p>Every Tenantry Pro release published on or before ${longDate(vestedThrough)}, your vested-through date, is now vested. Vested releases stay licensed to you after your subscription ends, and the package feed keeps serving them to you, with the security patches of their minor versions.</p>
-<p>While you stay subscribed, your vested-through date moves forward at the end of each paid month.</p>
+<p>While you stay subscribed, your vested-through date moves forward as your paid time is served. A refund, credit or chargeback takes away the time its money paid for.</p>
 <p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">See your vested releases</a></p>`,
     ),
   };
 }
 
-/** A withdrawn grant, as vested_entitlements records it (billing-store.ts: Grant). */
-interface WithdrawnGrant {
+/**
+ * A grant withdrawn, as vested_entitlements records it (billing-store.ts: Grant), or a qualifying period's vesting taken
+ * away (no reason recorded: money it relied on was returned).
+ */
+export interface WithdrawnGrant {
   kind: 'qualifying_run' | 'annual_term';
   vestedThrough: Date;
   withdrawnReason: 'refund' | 'chargeback' | 'term_not_completed' | null;
 }
 
 const WITHDRAWN_BECAUSE: Record<NonNullable<WithdrawnGrant['withdrawnReason']>, string> = {
-  refund: 'its payment was refunded',
+  refund: 'money paid for it was refunded or credited',
   chargeback: 'a payment it relied on was charged back',
+  // No longer recorded (vesting follows the money kept), but rows from before may still say so.
   term_not_completed: 'the subscription ended before the annual term was completed',
 };
 
-/** Sent when a grant is withdrawn: by a refund, a chargeback, or an annual term the subscription did not complete. */
+/** Sent when vested releases are taken away: money returned from an annual term, or that a qualifying period relied on. */
 export function grantWithdrawnEmail(
   to: string,
   grant: WithdrawnGrant,
@@ -93,7 +97,11 @@ export function grantWithdrawnEmail(
   siteUrl: string,
 ): EmailMessage {
   const what = grant.kind === 'annual_term' ? 'Your annual term' : 'Your qualifying period';
-  const because = grant.withdrawnReason ? `, because ${WITHDRAWN_BECAUSE[grant.withdrawnReason]}` : '';
+  const because = `, because ${
+    grant.withdrawnReason
+      ? WITHDRAWN_BECAUSE[grant.withdrawnReason]
+      : 'money it relied on was refunded, credited or charged back'
+  }`;
   return {
     to,
     subject: 'Your Tenantry Pro vested releases have changed',

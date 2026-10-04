@@ -12,6 +12,7 @@ describe('EntitlementCard', () => {
 
     expect(html).toContain('4 of 12</span> paid months');
     expect(html).toContain('If your subscription continues to 1 January 2027');
+    expect(html).toContain('A refund, credit or chargeback of a payment takes away the time that money paid for');
     expect(html).not.toContain('vested-through date is');
   });
 
@@ -19,7 +20,17 @@ describe('EntitlementCard', () => {
     const html = render(ENTITLEMENT.vestedActive);
 
     expect(html).toContain('reached 12 paid months on 1 January 2027');
+    expect(html).toContain('moves forward as your paid time is served');
+    expect(html).not.toContain('end of each paid month');
     expect(html).toContain('vested-through date is <span class="font-medium text-foreground">1 March 2027</span>');
+  });
+
+  it('does not say 12 months were reached until the twelfth is served', () => {
+    const html = render(ENTITLEMENT.twelvePaid);
+
+    expect(html).not.toContain('reached 12 paid months');
+    expect(html).toContain('12 of 12</span> paid months');
+    expect(html).toContain('If your subscription continues to 1 January 2027');
   });
 
   it('shows an annual subscriber the grant and the condition it is confirmed on', () => {
@@ -27,7 +38,9 @@ describe('EntitlementCard', () => {
 
     expect(html).toContain('Your annual term grants the releases published up to');
     expect(html).toContain('1 October 2027');
-    expect(html).toContain('A refund or chargeback of the term withdraws the grant');
+    expect(html).toContain('if its payment is kept in full');
+    expect(html).toContain('A refund, credit or chargeback of the payment withdraws the grant, even after the term');
+    expect(html).not.toContain('ending the subscription');
     expect(html).not.toContain('paid months');
   });
 

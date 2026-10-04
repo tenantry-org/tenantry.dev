@@ -47,8 +47,11 @@ export interface EntitlementView {
   canRestore: boolean;
   /** The vested-through date: every release published on or before it is vested. Null when nothing is vested. */
   vestedThrough: string | null;
-  /** The current qualifying period, while they have access: whole paid months so far, and when it reaches 12. */
-  qualifying: { monthsPaid: number; vestsAt: string } | null;
+  /**
+   * The current qualifying period, while they have access: its whole months of paid time (the time the money kept pays
+   * for, served or paid ahead), when it reaches 12 months, and whether it has by now.
+   */
+  qualifying: { monthsPaid: number; vestsAt: string; reached: boolean } | null;
   /** The end of an annual term whose grant is confirmed when the term is completed. */
   conditionalThrough: string | null;
 }
@@ -116,7 +119,13 @@ export async function readEntitlement(customerId: string, now: Date = new Date()
     vestedThrough: iso(vestedThrough),
     // Progress counts only while the customer has access; a lapse resets it.
     qualifying:
-      entitled && state?.run ? { monthsPaid: state.run.monthsPaid, vestsAt: state.run.vestsAt.toISOString() } : null,
+      entitled && state?.run
+        ? {
+            monthsPaid: state.run.monthsPaid,
+            vestsAt: state.run.vestsAt.toISOString(),
+            reached: state.run.vestsAt.getTime() <= now.getTime(),
+          }
+        : null,
     conditionalThrough: entitled ? iso(state?.conditionalThrough ?? null) : null,
   };
 }
