@@ -68,29 +68,52 @@ export function partialClone(group, tags) {
   return existsSync(join(dir, 'HEAD')) ? dir : null;
 }
 
-/** A file as a tag has it (`docs/installation.md`), or null when the tag or the file does not exist. */
+/**
+ * A file as a tag has it (`docs/installation.md`), or null when the tag or the file does not exist. Whether it exists
+ * is read from the tag's trees, which the partial clone holds; its contents may need fetching, and a fetch that fails
+ * throws, so a file that cannot be read is never taken for one that does not exist.
+ */
 export function fileAt(dir, tag, path) {
   if (!hasTag(dir, tag)) return null;
-  try {
-    return git('-C', dir, 'show', `${tag}:${path}`);
-  } catch {
-    return null;
-  }
+  if (!git('-C', dir, 'ls-tree', '--name-only', tag, '--', path)) return null;
+  return git('-C', dir, 'show', `${tag}:${path}`);
 }
 
-/** The folders in a tag's folder (`samples`), or an empty list when it has none. */
+/** The folders in a tag's folder (`samples`, or '' for the root), or an empty list when it has none. */
 export function foldersAt(dir, tag, path) {
+  const args = path ? ['--', `${path}/`] : [];
+  return git('-C', dir, 'ls-tree', '-d', '--name-only', tag, ...args)
+    .split('\n')
+    .filter(Boolean)
+    .map((folder) => folder.slice(path ? path.length + 1 : 0));
+}
+
+/** A URL's body. Fails with the URL when it cannot be reached or answers an error, so a run that cannot read stops. */
+export async function fetchText(url, fetchUrl = fetch) {
+  let response;
   try {
-    return git('-C', dir, 'ls-tree', '-d', '--name-only', `${tag}:${path}`).split('\n').filter(Boolean);
+    response = await fetchUrl(url);
+  } catch (error) {
+    throw new Error(`docs-versions: ${url}: ${error.message}`);
+  }
+  if (!response.ok) throw new Error(`docs-versions: ${url} answered ${response.status}.`);
+  return response.text();
+}
+
+/** A URL's JSON, failing with the URL as fetchText does, or when the body is not JSON. */
+export async function fetchJson(url, fetchUrl = fetch) {
+  const text = await fetchText(url, fetchUrl);
+  try {
+    return JSON.parse(text);
   } catch {
-    return [];
+    throw new Error(`docs-versions: ${url} did not answer JSON.`);
   }
 }
 
 /**
  * Why the site cannot publish a release's docs from a group's tag (`core` or `pro`), or null when it can: the tag must
  * have a docs folder, and from CHANGELOG_SINCE on a CHANGELOG.md with the release's own section, which the
- * Changelog page shows. The tag must be in the clone (hasTag).
+ * Changelog page shows. The tag must be in the clone (hasTag); a file that cannot be read throws.
  */
 export function docsProblem(dir, group, tag) {
   if (foldersAt(dir, tag, '').every((folder) => folder !== 'docs')) return `${tag} has no docs folder`;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dotnetVersions, sampleCount } from './newest-release.mjs';
+import { dotnetVersions, releaseFacts, sampleCount } from './newest-release.mjs';
 
 describe('newest release', () => {
   it('reads the .NET versions a nuspec targets, oldest first, each once', () => {
@@ -17,5 +17,13 @@ describe('newest release', () => {
     expect(sampleCount('pro', ['Tenantry.Pro.Samples.AuditLogging', 'Tenantry.Samples.Aot'])).toBe(1);
     expect(() => sampleCount('core', ['examples'])).toThrow('samples/ has no Tenantry.Samples.* folder.');
     expect(() => sampleCount('pro', [])).toThrow('samples/ has no Tenantry.Pro.Samples.* folder.');
+  });
+
+  it('gives the facts of a release, or the reason it cannot', () => {
+    const nuspec = '<group targetFramework="net8.0" /><group targetFramework="net10.0" />';
+    expect(releaseFacts('core', ['Tenantry.Samples.Aot'], nuspec)).toEqual({ dotnet: ['8', '10'], samples: 1 });
+    expect(() => releaseFacts('pro', ['Tenantry.Pro.Samples.AuditLogging'], null)).toThrow(
+      'it has no docs/installation.md',
+    );
   });
 });

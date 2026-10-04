@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { installSnippets } from './install-snippets.mjs';
 
 export const NEWEST_RELEASE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'newest-release.json');
 
@@ -26,6 +27,22 @@ export function sampleCount(group, folders) {
   const count = folders.filter((folder) => folder.startsWith(SAMPLE_PREFIX[group])).length;
   if (count === 0) throw new Error(`samples/ has no ${SAMPLE_PREFIX[group]}* folder.`);
   return count;
+}
+
+/**
+ * What the site says about a release of the newest line, from what was read of it: its samples/ folders, and Core's
+ * nuspec or Pro's installation guide (null when the tag has none). Throws, with the reason, when the release does not
+ * give it; reading is the caller's, so a read that fails is never taken for a release without the facts.
+ *
+ * @param {'core' | 'pro'} group
+ * @param {string[]} sampleFolders
+ * @param {string | null} text
+ */
+export function releaseFacts(group, sampleFolders, text) {
+  const samples = sampleCount(group, sampleFolders);
+  if (group === 'core') return { dotnet: dotnetVersions(text ?? ''), samples };
+  if (text === null) throw new Error('it has no docs/installation.md');
+  return { samples, proInstallation: installSnippets(text) };
 }
 
 /** newest-release.json, or null before it is first written. */

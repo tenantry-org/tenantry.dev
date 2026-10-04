@@ -6,7 +6,7 @@
  * says about the newest of them (newest-release.mjs). A Core tag counts only once NuGet lists its version: Core is
  * tagged before its release runs, which can wait for approval, fail or be refused, and one taken back is unlisted. A
  * release whose docs the site cannot publish (docsProblem in docs-sources.mjs), or, in the newest line, whose facts it
- * cannot read (factsOf), is left out with a warning, and its line keeps the release before it. The
+ * cannot read (releaseFacts), is left out with a warning, and its line keeps the release before it. The
  * docs-versions workflow runs it on a schedule and commits any change, which redeploys the site; nobody edits either
  * file by hand.
  *
@@ -15,7 +15,16 @@
  */
 import { execFileSync } from 'child_process';
 import { isDeepStrictEqual } from 'util';
-import { docsProblem, fileAt, foldersAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
+import {
+  docsProblem,
+  fetchJson,
+  fetchText,
+  fileAt,
+  foldersAt,
+  hasTag,
+  partialClone,
+  REPOSITORIES,
+} from './docs-sources.mjs';
 import {
   FIRST_SOLD_RELEASE,
   GROUPS,
@@ -26,8 +35,7 @@ import {
   resolvePublishable,
   writeVersions,
 } from './docs-versions.mjs';
-import { installSnippets } from './install-snippets.mjs';
-import { dotnetVersions, readNewestRelease, sampleCount, writeNewestRelease } from './newest-release.mjs';
+import { readNewestRelease, releaseFacts, writeNewestRelease } from './newest-release.mjs';
 
 function tags(group) {
   const options = { encoding: 'utf8' };
@@ -36,22 +44,6 @@ function tags(group) {
     .split('\n')
     .map((line) => line.split('\trefs/tags/')[1])
     .filter(Boolean);
-}
-
-// A URL's body, failing with the URL when it cannot be read or, for JSON, parsed.
-async function fetchText(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`docs-versions: ${url} answered ${response.status}.`);
-  return response.text();
-}
-
-async function fetchJson(url) {
-  const text = await fetchText(url);
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`docs-versions: ${url} did not answer JSON.`);
-  }
 }
 
 // Tenantry.Core's registration index, which marks unlisted versions, and its package folder, which serves each nuspec.
@@ -89,18 +81,8 @@ const clones = Object.fromEntries(
   ]),
 );
 
-// What the site says about a release of the newest line (newest-release.mjs): Core's .NET versions and samples, and
-// Pro's samples and install snippets. Throws, with the reason, when the release does not give it.
-async function factsOf(group, tag) {
-  const samples = sampleCount(group, foldersAt(clones[group], tag, 'samples'));
-  if (group === 'core') {
-    return { dotnet: dotnetVersions(await fetchText(`${PACKAGE}/${tag.slice(1)}/tenantry.core.nuspec`)), samples };
-  }
-  const guide = fileAt(clones.pro, tag, 'docs/installation.md');
-  if (guide === null) throw new Error('it has no docs/installation.md');
-  return { samples, proInstallation: installSnippets(guide) };
-}
-
+// The checks of a release (docsProblem), and for one of the newest line what the site says about it (releaseFacts).
+// A reason is returned for a release that does not give them; a read that fails throws, and the run stops.
 const facts = {};
 async function problem(group, tag, newest) {
   if (!clones[group] || !hasTag(clones[group], tag)) {
@@ -108,11 +90,15 @@ async function problem(group, tag, newest) {
   }
   const reason = docsProblem(clones[group], group, tag);
   if (reason || !newest) return reason;
+  const folders = foldersAt(clones[group], tag, 'samples');
+  const text =
+    group === 'core'
+      ? await fetchText(`${PACKAGE}/${tag.slice(1)}/tenantry.core.nuspec`)
+      : fileAt(clones.pro, tag, 'docs/installation.md');
   try {
-    facts[group] = await factsOf(group, tag);
+    facts[group] = releaseFacts(group, folders, text);
     return null;
   } catch (error) {
-    if (error.message.startsWith('docs-versions:')) throw error; // NuGet could not be read: stop, publish nothing
     return `${tag}: ${error.message.replace(/\.$/, '')}`;
   }
 }
