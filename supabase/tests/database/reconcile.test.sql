@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(2);
+select plan(3);
 
 insert into public.customers (customer_id, email)
 select 'ctm_' || lpad(n::text, 4, '0'), 'buyer' || n || '@example.com' from generate_series(1, 1500) n;
@@ -45,6 +45,27 @@ select ok(
     and not public.customers_to_reconcile() && array['ctm_lapsed', 'ctm_vested'],
   'found by access, a subscription that may entitle, a failing licence, a current run or an annual '
     || 'grant to confirm; a lapsed customer, vested or not, is not');
+
+-- Paid time still being served: a payment kept in full counts for its whole period even after the subscription
+-- ended, so vesting can fall due while the customer is lapsed. Visited until two days after the period ends.
+insert into public.customers (customer_id, email) values
+  ('ctm_paid_on', 'paid-on@example.com'), ('ctm_paid_off', 'paid-off@example.com');
+insert into public.active_subscriptions (customer_id, access_status) values
+  ('ctm_paid_on', 'lapsed'), ('ctm_paid_off', 'lapsed');
+insert into public.payments (
+  transaction_id, customer_id, subscription_id, origin, price_id, billing_interval, billing_frequency,
+  period_starts_at, period_ends_at, subtotal, discount, total, currency_code, completed_at, last_event_at
+) values
+  ('txn_on', 'ctm_paid_on', 'sub_on', 'web', 'pri_1', 'month', 1, now() - interval '10 days',
+    now() + interval '20 days', 3900, 0, 3900, 'GBP', now(), now()),
+  ('txn_recent', 'ctm_paid_on', 'sub_on', 'web', 'pri_1', 'month', 1, now() - interval '40 days',
+    now() - interval '10 days', 3900, 0, 3900, 'GBP', now(), now()),
+  ('txn_off', 'ctm_paid_off', 'sub_off', 'web', 'pri_1', 'month', 1, now() - interval '33 days',
+    now() - interval '3 days', 3900, 0, 3900, 'GBP', now(), now());
+select ok(
+  public.customers_to_reconcile() @> array['ctm_paid_on']
+    and not public.customers_to_reconcile() @> array['ctm_paid_off'],
+  'a lapsed customer is visited while a paid period is being served, and until two days after it ends');
 
 select * from finish();
 rollback;

@@ -140,6 +140,10 @@ export const memory = {
         ...[...state.entitlementStates]
           .filter(([, entitlement]) => entitlement.run || entitlement.grants.some((g) => g.status === 'conditional'))
           .map(([customerId]) => customerId),
+        // Paid time still being served, or served within two days (20261005130000_reconcile_paid_time.sql).
+        ...[...state.payments.values()]
+          .filter((payment) => new Date(payment.periodEndsAt).getTime() > Date.now() - 2 * 24 * 60 * 60 * 1000)
+          .map((payment) => payment.customerId),
       ]);
       return [...customers].sort();
     },

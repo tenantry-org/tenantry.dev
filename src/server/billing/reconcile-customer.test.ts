@@ -64,6 +64,63 @@ describe('reconcileCustomer', () => {
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
+  describe('paid time served after the subscription ended', () => {
+    async function pay(transactionId: string, startsAt: string, endsAt: string) {
+      await memory.store.recordPayment({
+        transactionId,
+        customerId: 'ctm_1',
+        subscriptionId: 'sub_1',
+        origin: 'subscription_recurring',
+        priceId: 'pri_01month',
+        billingInterval: 'month',
+        billingFrequency: 1,
+        periodStartsAt: startsAt,
+        periodEndsAt: endsAt,
+        subtotal: 3900,
+        discount: 0,
+        total: 3900,
+        tax: 0,
+        currencyCode: 'GBP',
+        occurredAt: startsAt,
+      });
+    }
+    const month = (n: number) => new Date(Date.UTC(2026, n, 1)).toISOString();
+
+    it('vests a customer cancelled at once in month 12 with nothing refunded, once the paid month is served', async () => {
+      for (let n = 0; n < 12; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+      vi.setSystemTime(new Date('2026-12-10T00:00:00Z'));
+      memory.subscribe('ctm_1', { status: 'canceled' });
+      await syncCustomer('ctm_1', deps);
+      expect(memory.state.access.get('ctm_1')).toBe('lapsed');
+      expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toBeNull();
+
+      // Lapsed, but December is paid for: reconcile keeps visiting until it has been served.
+      vi.setSystemTime(new Date('2026-12-31T04:00:00Z'));
+      expect(await memory.store.customersToReconcile()).toContain('ctm_1');
+      vi.setSystemTime(new Date('2027-01-01T04:00:00Z'));
+      expect(await memory.store.customersToReconcile()).toContain('ctm_1');
+      await reconcileCustomer('ctm_1', deps);
+
+      expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-01-01T00:00:00Z'));
+      vi.setSystemTime(new Date('2027-01-04T04:00:00Z'));
+      expect(await memory.store.customersToReconcile()).not.toContain('ctm_1');
+    });
+
+    it('moves a vested customer’s date to the end of the month they paid for when they cancel mid-month', async () => {
+      for (let n = 0; n < 14; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+      vi.setSystemTime(new Date('2027-02-10T00:00:00Z'));
+      memory.subscribe('ctm_1', { status: 'canceled' });
+      await syncCustomer('ctm_1', deps);
+      expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-02-10T00:00:00Z'));
+
+      vi.setSystemTime(new Date('2027-03-01T04:00:00Z'));
+      expect(await memory.store.customersToReconcile()).toContain('ctm_1');
+      await reconcileCustomer('ctm_1', deps);
+
+      expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-03-01T00:00:00Z'));
+    });
+  });
+
   describe('payments whose notification was lost', () => {
     // A completed Pro renewal of sub_1, as Paddle's API lists it: the same entity the notification carries.
     const listed = (transactionId: string, startsAt: string, endsAt: string, productId = 'pro_01') =>
