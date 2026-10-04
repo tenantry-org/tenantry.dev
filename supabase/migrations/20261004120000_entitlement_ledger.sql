@@ -544,9 +544,31 @@ begin
 end
 $$;
 
+-- entitlement_at is in the column list so that setting it directly is undone.
 create trigger pro_releases_entitlement_at
-  before insert or update of published_at, security, major, minor on public.pro_releases
+  before insert or update of published_at, security, major, minor, patch, entitlement_at on public.pro_releases
   for each row execute function private.set_release_entitlement_at();
+
+-- A corrected X.Y.0 date carries to its security patches: touching their entitlement_at re-runs the trigger above,
+-- which takes the X.Y.0's new date.
+create function private.carry_release_date_to_security_patches()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  update public.pro_releases r
+  set entitlement_at = new.published_at
+  where r.major = new.major and r.minor = new.minor and r.security and r.patch > 0;
+  return null;
+end
+$$;
+
+create trigger pro_releases_security_patch_dates
+  after update of published_at on public.pro_releases
+  for each row
+  when (new.patch = 0 and new.published_at is distinct from old.published_at)
+  execute function private.carry_release_date_to_security_patches();
 
 -- ---------------------------------------------------------------------------------------------------------------------
 -- customers_to_reconcile: every customer the reconcile run must check, as one array (not cut at the API's max_rows):
@@ -598,6 +620,7 @@ revoke all on function public.vested_through(text) from public, anon, authentica
 revoke all on function public.set_customer_entitlement(text, jsonb, jsonb, jsonb) from public, anon, authenticated;
 revoke all on function public.customers_to_reconcile() from public, anon, authenticated;
 revoke all on function private.set_release_entitlement_at() from public, anon, authenticated;
+revoke all on function private.carry_release_date_to_security_patches() from public, anon, authenticated;
 
 grant execute on function public.record_subscription_event(
   text, text, text, text, text, timestamp with time zone, text, timestamp with time zone, timestamp with time zone,

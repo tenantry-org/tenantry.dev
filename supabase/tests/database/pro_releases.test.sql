@@ -8,7 +8,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(8);
+select plan(11);
 
 insert into public.pro_releases (version, major, minor, patch, published_at) values
   ('1.4.0', 1, 4, 0, '2027-11-20 12:00+00'),
@@ -26,6 +26,22 @@ select is((select entitlement_at from public.pro_releases where version = '1.4.3
 update public.pro_releases set published_at = '2027-11-21 12:00+00' where version = '1.4.3';
 select is((select entitlement_at from public.pro_releases where version = '1.4.3'), '2027-11-20 12:00+00'::timestamptz,
   'and keeps it when its own date is corrected');
+
+-- entitlement_at is derived: set directly, it is put back.
+update public.pro_releases set entitlement_at = '2000-01-01 00:00+00' where version = '1.4.1';
+select is((select entitlement_at from public.pro_releases where version = '1.4.1'), '2027-12-10 12:00+00'::timestamptz,
+  'a release''s entitlement date cannot be set directly');
+update public.pro_releases set entitlement_at = '2000-01-01 00:00+00' where version = '1.4.3';
+select is((select entitlement_at from public.pro_releases where version = '1.4.3'), '2027-11-20 12:00+00'::timestamptz,
+  'nor a security patch''s');
+
+-- Correcting an X.Y.0's date moves its security patches with it, and not its other patches.
+update public.pro_releases set published_at = '2027-11-19 08:00+00' where version = '1.4.0';
+select results_eq(
+  $$select version, entitlement_at from public.pro_releases where major = 1 and minor = 4 order by patch$$,
+  $$values ('1.4.0'::text, '2027-11-19 08:00+00'::timestamptz), ('1.4.1', '2027-12-10 12:00+00'),
+    ('1.4.3', '2027-11-19 08:00+00')$$,
+  'a corrected X.Y.0 date carries to its security patches');
 
 select throws_ok(
   $$insert into public.pro_releases (version, major, minor, patch, published_at, security)
