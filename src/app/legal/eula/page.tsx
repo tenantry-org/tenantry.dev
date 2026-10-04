@@ -35,29 +35,31 @@ export default function EulaPage() {
       <p>
         A paid period is a billing period of any of your Tenantry Pro subscriptions whose payment has been completed and
         charged more than zero after discounts. It counts from the start of the billing period to its end, or to when
-        the subscription was cancelled or paused, if that was sooner. Refunds, credits and chargebacks change what
-        counts, as set out below.
+        the subscription was cancelled, or paused and not resumed, if that was sooner. Refunds, credits and chargebacks
+        change what counts, as set out below.
       </p>
       <p>
         A qualifying period is a series of paid periods in which each starts no more than one hour after the end of the
-        series so far. Paid periods that overlap, as when you change plan, count once. Any gap breaks a qualifying
-        period: for example when your subscription ends, a renewal is not paid, or a period does not count, including a
-        period discounted to zero. The next paid period then starts a new qualifying period from zero.
+        series so far. Paid periods that overlap, as when you change plan, count once. Any gap of more than one hour
+        breaks a qualifying period: for example when your subscription ends and no paid period follows within the hour,
+        a renewal is not paid, or a period does not count, including a period discounted to zero. The next paid period
+        then starts a new qualifying period from zero.
       </p>
       <p>
-        A qualifying period vests at the end of its 12th calendar month. If your billing dates fall at the end of
-        shorter months, so that 12 monthly periods end up to three days before that date, it vests when the last of them
-        ends; this does not apply to a period cut short by a cancellation, a pause or a refund. The moment it vests is
-        then a vested-through date. While the same qualifying period continues, the end of each further paid period,
-        once reached, becomes its new vested-through date.
+        A qualifying period vests when it has lasted 12 calendar months (&quot;12 consecutive paid months&quot;). It
+        vests earlier, at the end of one of its paid periods, if that period runs to the end of its billing period and
+        ends no more than three days before the 12 months are reached, which allows for billing dates at the end of
+        shorter months. A paid period cut short by a cancellation, a pause, a refund or a credit does not vest it early.
+        The moment it vests is then a vested-through date. While the same qualifying period continues, the end of each
+        further paid period, once reached, becomes its new vested-through date.
       </p>
       <p>
-        When you pay for an annual billing period (an &quot;annual term&quot;), Tenantry grants you at once a perpetual
-        licence to the releases whose release date is on or before the end of that term, on condition that you complete
-        the term. The grant is confirmed when the term ends, and the end of the term is then a vested-through date. The
-        grant is withdrawn if the subscription is cancelled or paused before the term ends, if by the end of the term
-        the payment has been refunded or credited in full or in part (other than a correction of tax), or if the payment
-        is charged back at any time.
+        When you pay for an annual billing period (an &quot;annual term&quot;), Tenantry grants you at once, on
+        condition that you complete the term, that every release whose release date is on or before the end of the term
+        is vested (the &quot;term&apos;s grant&quot;). The term&apos;s grant is confirmed when the term ends, and the
+        end of the term is then a vested-through date. It is withdrawn if the subscription is cancelled, or paused and
+        not resumed, before the term ends, if by the end of the term the payment has been refunded or credited in full
+        or in part (other than a correction of tax), or if the payment is charged back at any time.
       </p>
       <p>
         Only refunds, credits and chargebacks that have been approved have any effect, and a correction of tax alone has
@@ -86,15 +88,16 @@ export default function EulaPage() {
 
       <h2>3. The package feed and feed tokens</h2>
       <p>
-        Tenantry delivers the Software through a private NuGet package feed (the &quot;package feed&quot;). While your
-        subscription is active, the package feed serves you every release. After your subscription ends, it serves you
-        the vested releases, and nothing if you have no vested-through date. It does not affect copies you have already
-        downloaded: whether you may use those is set by section 1.
+        Tenantry delivers the Software through a private NuGet package feed that Tenantry runs (the &quot;package
+        feed&quot;). While your subscription is active, the package feed serves you every release. After your
+        subscription ends, it serves you the vested releases, and nothing if you have no vested-through date. It does
+        not affect copies you have already downloaded: whether you may use those is set by section 1.
       </p>
       <p>
-        You access the package feed with feed tokens, which are credentials for your account. You may give them to your
-        employees and contractors and use them in your own build systems, and you must keep them secret. Unlike your
-        licence key, a feed token may not be included in an application you distribute.
+        You access the package feed with feed tokens, which you create and revoke on your Pro access page. They are
+        credentials for your account. You may give them to your employees and contractors and use them in your own build
+        systems, and you must keep them secret. Unlike your licence key, a feed token may not be included in an
+        application you distribute.
       </p>
 
       <h2>4. Distribution in your applications</h2>
