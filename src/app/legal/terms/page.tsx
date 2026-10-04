@@ -31,11 +31,12 @@ export default function TermsPage() {
       <h2>3. Access provisioning</h2>
       <p>
         Tenantry Pro is delivered through the package feed, a private NuGet feed that Tenantry runs, which you access
-        with feed tokens. While your subscription is active, the package feed serves every release of Tenantry Pro. Your
-        subscription stays active for up to 30 days after a renewal payment first fails, while Paddle tries to collect
-        it. After your subscription ends, the package feed serves only the releases that are vested under the EULA, and
-        none if no release is. You are also issued a licence key, which does not expire and stays the same after your
-        subscription ends. The key does not decide which releases you may use; the <a href="/legal/eula">EULA</a> does.
+        with feed tokens that you create and revoke on your Pro access page. While your subscription is active, the
+        package feed serves every release of Tenantry Pro. Your subscription stays active for up to 30 days after a
+        renewal payment first fails, while Paddle tries to collect it. After your subscription ends, the package feed
+        serves only the vested releases (EULA, section 2), and none if no release is vested. You are also issued a
+        licence key, which does not expire and stays the same after your subscription ends. The key does not decide
+        which releases you may use; the <a href="/legal/eula">EULA</a> does.
       </p>
 
       <h2>4. Acceptable use</h2>
@@ -60,7 +61,7 @@ export default function TermsPage() {
       <h2>7. Termination</h2>
       <p>
         We may suspend or terminate access for breach of these Terms. You may cancel at any time; cancellation stops
-        future renewals and does not affect the releases already vested under the EULA.
+        future renewals. It does not affect the vested releases, which only a chargeback can withdraw (EULA, section 2).
       </p>
 
       <h2>8. Governing law</h2>
