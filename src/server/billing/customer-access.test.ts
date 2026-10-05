@@ -529,7 +529,7 @@ describe('vesting emails', () => {
       'Your annual term is paid, so every Tenantry Pro release published on or before 1 January 2027',
     );
     expect(message.html).toContain('including those published later in the term');
-    expect(message.html).toContain("A refund, credit or chargeback of the term's payment withdraws them");
+    expect(message.html).toContain("A refund, credit or chargeback of any of the term's payments withdraws them");
     expect(message.html).not.toContain('moves forward as your paid time is served');
     vi.clearAllMocks();
 

@@ -49,7 +49,7 @@ describe('EntitlementCard', () => {
     expect(html).toContain('including those published later in the term');
     expect(html).toContain('vested-through date is <span class="font-medium text-foreground">1 October 2027</span>');
     expect(html).toContain(
-      'A refund, credit or chargeback of the term&#x27;s payment withdraws them, even after the term',
+      'A refund, credit or chargeback of any of the term&#x27;s payments withdraws them, even after the term',
     );
     expect(html).not.toContain('end of the term, on that date');
     expect(html).not.toContain('paid months');

@@ -313,46 +313,87 @@ describe('the owner’s table', () => {
       expect(vested(compute({ payments: [leapDay], now: '2028-03-01T00:00:00Z' }))).toBe('2029-02-28T00:00:00.000Z');
     });
 
-    it('lets the full payment decide a term that a small charge was also stamped with', () => {
-      // Paddle stamps a 500 charge with the same whole-year period as the 39000 payment.
-      const small = annual('2027-01-01T00:00:00Z', { charged: 500 });
+    it('withdraws the term on a refund of any payment of its billing period, a top-up included, and keeps the rest as paid time', () => {
       const now = '2027-07-03T00:00:00Z';
       const annualGrants = (entitlement: Entitlement) => entitlement.grants.filter((g) => g.kind === 'annual_term');
+      const topUps = [
+        // Stamped with the whole year, or with its second half.
+        annual('2027-01-01T00:00:00Z', { charged: 500 }),
+        payment('2027-07-01T00:00:00Z', {
+          months: 6,
+          billingInterval: 'year',
+          billingFrequency: 1,
+          priceId: 'pri_01year',
+          charged: 500,
+        }),
+      ];
 
-      // The small charge refunded, the full payment kept: vested, whichever order the payments are listed in.
-      const smallRefunded = adjustment(small, 'refund', '2027-07-02T00:00:00Z');
-      for (const payments of [
-        [term, small],
-        [small, term],
-      ]) {
-        const entitlement = compute({ payments, adjustments: [smallRefunded], now });
-        expect(vested(entitlement)).toBe('2028-01-01T00:00:00.000Z');
-        expect(annualGrants(entitlement)).toEqual([
-          expect.objectContaining({ transactionId: term.transactionId, status: 'confirmed' }),
+      for (const topUp of topUps) {
+        // The top-up refunded, the annual payment kept: withdrawn, whichever order the payments are listed in.
+        const refunded = adjustment(topUp, 'refund', '2027-07-02T00:00:00Z');
+        for (const payments of [
+          [term, topUp],
+          [topUp, term],
+        ]) {
+          const entitlement = compute({ payments, adjustments: [refunded], now });
+          expect(entitlement.vestedThrough).toBeNull();
+          expect(annualGrants(entitlement)).toEqual([
+            expect.objectContaining({
+              transactionId: term.transactionId,
+              status: 'withdrawn',
+              withdrawnReason: 'refund',
+            }),
+          ]);
+          // 39000 of the 39500 charged for the year is kept: the first 39000 / 39500 of it, a little under 12 months.
+          const kept = Math.floor((39000 / 39500) * 365 * DAY);
+          expect(entitlement.run).toMatchObject({
+            paidThrough: new Date(date('2027-01-01T00:00:00Z').getTime() + kept),
+            monthsPaid: 11,
+          });
+        }
+
+        // Charged back, then the dispute won: confirmed again.
+        const chargeback = adjustment(topUp, 'chargeback', '2027-07-02T00:00:00Z');
+        expect(annualGrants(compute({ payments: [term, topUp], adjustments: [chargeback], now }))).toEqual([
+          expect.objectContaining({ status: 'withdrawn', withdrawnReason: 'chargeback' }),
         ]);
-      }
+        const reversed = { ...chargeback, status: 'reversed', reversedAt: date('2027-07-02T12:00:00Z') };
+        const restored = compute({ payments: [term, topUp], adjustments: [reversed], now });
+        expect(annualGrants(restored)).toEqual([expect.objectContaining({ status: 'confirmed' })]);
+        expect(vested(restored)).toBe('2028-01-01T00:00:00.000Z');
 
-      // The full payment refunded, the small charge kept: no term is vested at once.
-      const termRefunded = adjustment(term, 'refund', '2027-07-02T00:00:00Z');
-      for (const payments of [
-        [term, small],
-        [small, term],
-      ]) {
-        const entitlement = compute({ payments, adjustments: [termRefunded], now, endedAt: '2027-07-02T00:00:00Z' });
+        // The annual payment refunded, the top-up kept: withdrawn too.
+        const termRefunded = adjustment(term, 'refund', '2027-07-02T00:00:00Z');
+        const entitlement = compute({
+          payments: [term, topUp],
+          adjustments: [termRefunded],
+          now,
+          endedAt: '2027-07-02T00:00:00Z',
+        });
         expect(entitlement.vestedThrough).toBeNull();
         expect(annualGrants(entitlement)).toEqual([
           expect.objectContaining({ transactionId: term.transactionId, status: 'withdrawn' }),
         ]);
       }
+    });
 
-      // Two equal payments for one term, one of them refunded: the one kept decides.
-      const again = annual('2027-01-01T00:00:00Z');
+    it('lets the kept term decide when two subscriptions each pay for a year from the same day', () => {
+      const again = annual('2027-01-01T00:00:00Z', { subscriptionId: 'sub_2' });
       const againRefunded = adjustment(again, 'refund', '2027-07-02T00:00:00Z');
       for (const payments of [
         [term, again],
         [again, term],
       ]) {
-        expect(vested(compute({ payments, adjustments: [againRefunded], now }))).toBe('2028-01-01T00:00:00.000Z');
+        const entitlement = compute({
+          payments,
+          adjustments: [againRefunded],
+          subscriptions: [running('sub_1'), running('sub_2')],
+          now: '2027-07-03T00:00:00Z',
+        });
+        expect(vested(entitlement)).toBe('2028-01-01T00:00:00.000Z');
+        expect(entitlement.grants.filter((g) => g.kind === 'annual_term')).toEqual([
+          expect.objectContaining({ transactionId: term.transactionId, status: 'confirmed' }),
+        ]);
       }
     });
 

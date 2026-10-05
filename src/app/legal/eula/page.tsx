@@ -79,11 +79,12 @@ export default function EulaPage() {
       </p>
       <p>
         When you pay a yearly price this site has offered for an annual billing period (an &quot;annual term&quot;),
-        Tenantry grants you at once, on condition that you keep the whole payment, that every release whose release date
-        is on or before the end of the term is vested (the &quot;term&apos;s grant&quot;). From when you pay, the end of
+        Tenantry grants you at once, on condition that you keep the whole of the term&apos;s payments (the payment for
+        the term, and any payment for part of it, such as a prorated charge), that every release whose release date is
+        on or before the end of the term is vested (the &quot;term&apos;s grant&quot;). From when you pay, the end of
         the term is a vested-through date, even if your subscription ends before the term does. Any refund, credit or
-        chargeback of the payment withdraws the term&apos;s grant, at any time, including after the term has ended. The
-        part of the term that the money kept pays for is still a paid period.
+        chargeback of any of the term&apos;s payments withdraws the term&apos;s grant, at any time, including after the
+        term has ended. The part of the term that the money kept pays for is still a paid period.
       </p>
       <p>
         Your vested-through date is the later of your paid time&apos;s vested-through date and the end of any annual

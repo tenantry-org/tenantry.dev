@@ -99,8 +99,8 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
     return (
       <p>
         Your annual term is paid, so every release published up to the end of the term is vested, including those
-        published later in the term. A refund, credit or chargeback of the term&apos;s payment withdraws them, even
-        after the term.
+        published later in the term. A refund, credit or chargeback of any of the term&apos;s payments withdraws them,
+        even after the term.
       </p>
     );
   }

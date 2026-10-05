@@ -401,42 +401,43 @@ class Ledger {
 
   /**
    * A grant for each annual term: confirmed when paid (from its billing period's start) through the term's end while
-   * nothing of its payment is returned, and withdrawn otherwise. An annual term is a payment at an offer price that
-   * bills yearly, that charged something, and whose billing period is a whole year: 12 calendar months from its start,
-   * so `monthsOf` gives 12. A shorter payment at a yearly price, such as a prorated charge for a plan change, grants no
-   * term: it counts only as paid time, like any other payment.
+   * nothing is returned from any payment of its billing period (`billingPeriods`: the annual payment and any charge
+   * within it, such as a prorated top-up), and withdrawn otherwise: as a chargeback if any of them is charged back,
+   * else as a refund. A reversal that leaves nothing returned restores it. The money kept still counts as paid time.
+   * An annual term is a billing period whose payment is at an offer price that bills yearly, that charged something,
+   * and whose period is a whole year: 12 calendar months from its start, so `monthsOf` gives 12. A shorter payment at
+   * a yearly price, such as a prorated charge for a plan change, grants no term: it counts only as paid time.
    *
-   * vested_entitlements keeps one grant per term start, so of two annual terms with the same start, one decides: the
-   * one that charged more, then the later-ending, then the one kept over one withdrawn, then the lower transaction id.
-   * A small charge stamped with the whole year's period can therefore neither grant the year nor, refunded, take away
-   * the year that the full payment, kept, granted.
+   * vested_entitlements keeps one grant per term start, so of two annual terms with the same start (of two
+   * subscriptions), one decides: the one whose payment charged more, then the later-ending, then the one kept over one
+   * withdrawn, then the lower transaction id.
    */
   annualTerms(): Grant[] {
-    const terms = new Map<number, Payment>();
-    for (const payment of this.input.payments.filter((p) => this.isAnnualTerm(p))) {
-      const start = payment.periodStartsAt.getTime();
-      const other = terms.get(start);
-      if (!other || this.decidesTerm(payment, other)) terms.set(start, payment);
+    const terms = new Map<number, Grant>();
+    for (const period of this.billingPeriods().filter(({ payment }) => this.isAnnualTerm(payment))) {
+      const grant = this.annualGrant(period);
+      const other = terms.get(grant.startedAt.getTime());
+      if (!other || this.decidesTerm(period, grant, other)) terms.set(grant.startedAt.getTime(), grant);
     }
+    return [...terms.values()].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+  }
 
-    return [...terms.values()]
-      .sort((a, b) => a.periodStartsAt.getTime() - b.periodStartsAt.getTime())
-      .map((payment) => {
-        const returned = this.returned(payment);
-        const grant: Grant = {
-          kind: 'annual_term',
-          startedAt: payment.periodStartsAt,
-          vestedThrough: payment.periodEndsAt,
-          status: 'confirmed',
-          confirmedAt: payment.periodStartsAt,
-          transactionId: payment.transactionId,
-          withdrawnReason: null,
-        };
+  // The annual term's grant: withdrawn if money is returned from any payment of its billing period.
+  private annualGrant({ payment, within }: BillingPeriod): Grant {
+    const returned = [payment, ...within].map((p) => this.returned(p));
+    const grant: Grant = {
+      kind: 'annual_term',
+      startedAt: payment.periodStartsAt,
+      vestedThrough: payment.periodEndsAt,
+      status: 'confirmed',
+      confirmedAt: payment.periodStartsAt,
+      transactionId: payment.transactionId,
+      withdrawnReason: null,
+    };
 
-        if (returned.chargeback > 0) return withdraw(grant, 'chargeback');
-        if (sum(Object.values(returned)) > 0) return withdraw(grant, 'refund');
-        return grant;
-      });
+    if (returned.some((r) => r.chargeback > 0)) return withdraw(grant, 'chargeback');
+    if (returned.some((r) => sum(Object.values(r)) > 0)) return withdraw(grant, 'refund');
+    return grant;
   }
 
   private isAnnualTerm(payment: Payment): boolean {
@@ -448,14 +449,16 @@ class Ledger {
     );
   }
 
-  // Whether `payment` decides its term over `other`, an annual term with the same start (annualTerms).
-  private decidesTerm(payment: Payment, other: Payment): boolean {
-    const kept = (p: Payment) => (sum(Object.values(this.returned(p))) > 0 ? 0 : 1);
+  // Whether the annual term of `period`, whose grant is `grant`, decides its start over `other`, the grant of another
+  // annual term with the same start (annualTerms).
+  private decidesTerm(period: BillingPeriod, grant: Grant, other: Grant): boolean {
+    const otherPayment = this.input.payments.find((p) => p.transactionId === other.transactionId)!;
+    const kept = (g: Grant) => (g.status === 'confirmed' ? 1 : 0);
     return (
-      (payment.charged - other.charged ||
-        payment.periodEndsAt.getTime() - other.periodEndsAt.getTime() ||
-        kept(payment) - kept(other) ||
-        other.transactionId.localeCompare(payment.transactionId)) > 0
+      (period.payment.charged - otherPayment.charged ||
+        grant.vestedThrough.getTime() - other.vestedThrough.getTime() ||
+        kept(grant) - kept(other) ||
+        other.transactionId!.localeCompare(grant.transactionId!)) > 0
     );
   }
 
