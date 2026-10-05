@@ -1,9 +1,9 @@
 ---
 title: What changes in a shared-database app's writes when it moves from Finbuckle.MultiTenant to Tenantry
-description: The same Order entity and the same writes, run against Finbuckle.MultiTenant 10.1.4 and Tenantry Core 0.6.0, with the SQL each one sends and the result.
+description: The same Order entity and the same writes, run against Finbuckle.MultiTenant 10.1.4 and Tenantry Core 0.7.0, with the SQL each one sends and the result.
 date: 2026-10-04
 author: Oliver McNally
-versions: Tenantry 0.6.0, Finbuckle.MultiTenant 10.1.4, .NET 10, EF Core 10.0.12 and SQLite
+versions: Tenantry 0.7.0, Finbuckle.MultiTenant 10.1.4, .NET 10, EF Core 10.0.12 and SQLite
 tags: [dotnet, efcore, multitenancy, aspnetcore]
 next:
   label: Read the guide to migrating from Finbuckle
@@ -14,7 +14,7 @@ draft: true
 A team on Finbuckle.MultiTenant that looks at moving to [Tenantry Core](/docs/core) needs to know whether its data
 ends up isolated the same way, as well as which methods to rename. I ran three writes against both libraries, with the
 same `Order` entity, one shared SQLite database and two tenants, Acme and Globex, each with one order. Order 1 is
-Acme's. Finbuckle.MultiTenant was 10.1.4, the current release; Tenantry was 0.6.0. Both ran on .NET 10 and EF Core
+Acme's. Finbuckle.MultiTenant was 10.1.4, the current release; Tenantry was 0.7.0. Both ran on .NET 10 and EF Core
 10.0.12.
 
 The entity is the same in both runs, except that under Tenantry it implements `ITenantEntity<string>`:
@@ -169,7 +169,7 @@ It returned 1, and Acme's order belonged to Globex. Tenantry checks the setters 
 threw before any SQL was sent:
 
 ```text
-Tenantry.EfCore.TenantIsolationViolationException: ExecuteUpdate cannot set TenantId on tenant-scoped entity 'Order':
+Tenantry.EfCore.TenantIsolationViolationException: ExecuteUpdate cannot set TenantId on tenant-owned entity 'Order':
 that would move rows into another tenant. Set properties on the entity itself, and move data between tenants with
 explicit, reviewed SQL.
 ```
@@ -189,6 +189,7 @@ identifier the store does not know has no tenant.
 
 Neither library isolates SQL that does not start from a `DbSet`. In Acme's context, `Database.SqlQuery` over the
 `Orders` table returned both tenants' rows under each library. `Orders.FromSql` returned only Acme's, because EF Core
-composes query filters onto it.
+composes query filters onto it. Tenantry's analyzer notes the `SqlQuery` call when the project builds, as TNY1003, at
+info level.
 
 The guide below covers the rest of the move: tenant types and stores, resolvers, per-tenant options and a checklist.
