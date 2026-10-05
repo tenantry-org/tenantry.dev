@@ -26,12 +26,16 @@ import { isAnnualTerm, MONTH_END_TOLERANCE_MS, REVERSAL_RECORD_WINDOW_MS } from 
  * Vesting follows the money kept, and paid time adds up (the owner's decisions of 4 and 5 October 2026,
  * plans-and-investigations/Tenantry-Licensing-And-Feed-Plan.md section 2):
  *
- * - A payment at one of the offer prices counts for the part of its billing period that the money still kept from it
- *   pays for. With C charged before tax and R returned (refunds, credits and chargebacks in effect now; a reversed one
- *   no longer returns anything), it counts for the first (C - R) / C of its period, from the period's start. Nothing if
- *   R reaches C, or if nothing was charged (a trial, a period discounted in full). A discount is not money returned:
- *   the share is of what was charged. A payment kept in full counts for its whole period, even if its subscription was
- *   cancelled or paused before the period ended: that time was paid for.
+ * - A billing period is a payment at one of the offer prices together with the payments of the same subscription,
+ *   billed at the same interval, whose periods lie within its period, such as a prorated charge (`billingPeriods`):
+ *   proration pays for time already paid for, so it adds no time. A payment at another interval within it, such as a
+ *   monthly one after a move from an annual term, is a billing period of its own. A billing period counts for the part of its period that the money still
+ *   kept from its payments pays for. With C charged before tax across them and R returned (refunds, credits and
+ *   chargebacks in effect now; a reversed one no longer returns anything), it counts for the first (C - R) / C of its
+ *   period, from the period's start. Nothing if R reaches C, or if nothing was charged (a trial, a period discounted in
+ *   full). A discount is not money returned: the share is of what was charged. A billing period kept in full counts
+ *   for its whole period, even if its subscription was cancelled or paused before the period ended: that time was paid
+ *   for.
  * - The customer's paid time is the counted parts of all their payments, merged where they meet or overlap, so no
  *   stretch of time counts twice. It adds up across gaps: separate subscriptions, with or without time between them,
  *   all count. It starts at the start of its first counted part.
@@ -219,13 +223,10 @@ export function wholeMonths(start: Date, end: Date): number {
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** The counted part of a payment's period. */
-interface Period {
+/** A billing period: its payment, and the payments of the same subscription and interval whose periods lie within it. */
+interface BillingPeriod {
   payment: Payment;
-  startsAt: Date;
-  endsAt: Date;
-  /** Whether nothing of the payment has been returned, so it counts for its whole period. */
-  full: boolean;
+  within: Payment[];
 }
 
 /** The customer's paid time. */
@@ -234,8 +235,8 @@ interface PaidTime {
   startedAt: Date;
   /** The end of the latest billing period at an offer price. */
   billedThrough: Date;
-  /** The payments at the offer prices. */
-  payments: Payment[];
+  /** The billing periods at the offer prices. */
+  periods: BillingPeriod[];
   /** The counted parts of their periods, merged where they meet or overlap, in order. */
   counted: [number, number][];
 }
@@ -286,11 +287,52 @@ class Ledger {
     return reversalsOf(made, reversals, payment);
   }
 
-  /** The share of its period the money kept from the payment pays for, from 0 to 1. */
-  keptShare(payment: Payment): number {
-    if (payment.charged <= 0) return 0;
-    const returned = sum(Object.values(this.returned(payment)));
-    return Math.min(1, Math.max(0, (payment.charged - returned) / payment.charged));
+  /**
+   * The share of a billing period the money kept from its payments pays for, from 0 to 1: what is kept of all they
+   * charged. Nothing if they charged nothing.
+   */
+  keptShare(period: BillingPeriod): number {
+    const payments = [period.payment, ...period.within];
+    const charged = sum(payments.map((payment) => Math.max(0, payment.charged)));
+    if (charged <= 0) return 0;
+    const kept = sum(
+      payments.map((payment) => Math.max(0, payment.charged - sum(Object.values(this.returned(payment))))),
+    );
+    return Math.min(1, kept / charged);
+  }
+
+  /**
+   * The billing periods of the payments at the offer prices: each payment whose period does not lie within the period of
+   * another payment of the same subscription billed at the same interval, with those that do. Of two payments for the same period, the one that
+   * charged more holds it (then the lower transaction id), so the grouping does not depend on the order of the ledger.
+   */
+  billingPeriods(): BillingPeriod[] {
+    const payments = this.input.payments
+      .filter((payment) => this.isOffered(payment) && payment.periodEndsAt > payment.periodStartsAt)
+      .sort(
+        (a, b) =>
+          b.periodEndsAt.getTime() -
+            b.periodStartsAt.getTime() -
+            (a.periodEndsAt.getTime() - a.periodStartsAt.getTime()) ||
+          a.periodStartsAt.getTime() - b.periodStartsAt.getTime() ||
+          b.charged - a.charged ||
+          a.transactionId.localeCompare(b.transactionId),
+      );
+
+    const periods: BillingPeriod[] = [];
+    for (const payment of payments) {
+      const holder = periods.find(
+        ({ payment: p }) =>
+          p.subscriptionId === payment.subscriptionId &&
+          p.billingInterval === payment.billingInterval &&
+          p.billingFrequency === payment.billingFrequency &&
+          p.periodStartsAt <= payment.periodStartsAt &&
+          p.periodEndsAt >= payment.periodEndsAt,
+      );
+      if (holder) holder.within.push(payment);
+      else periods.push({ payment, within: [] });
+    }
+    return periods;
   }
 
   status(payment: Payment): PaymentStatus {
@@ -303,21 +345,19 @@ class Ledger {
 
   /** The customer's paid time, or null if no payment counts for any time. */
   paidTime(): PaidTime | null {
-    const payments = this.input.payments.filter(
-      (payment) => this.isOffered(payment) && payment.periodEndsAt > payment.periodStartsAt,
-    );
+    const periods = this.billingPeriods();
     const counted = merge(
-      payments.flatMap((payment) => {
-        const period = this.countedPeriod(payment);
-        return period ? [[period.startsAt.getTime(), period.endsAt.getTime()] as [number, number]] : [];
+      periods.flatMap((period) => {
+        const part = this.countedPart(period);
+        return part ? [part] : [];
       }),
     );
     if (counted.length === 0) return null;
 
     return {
       startedAt: new Date(counted[0][0]),
-      billedThrough: new Date(Math.max(...payments.map((payment) => payment.periodEndsAt.getTime()))),
-      payments,
+      billedThrough: new Date(Math.max(...periods.map((period) => period.payment.periodEndsAt.getTime()))),
+      periods,
       counted,
     };
   }
@@ -339,9 +379,9 @@ class Ledger {
         break;
       }
       served += to - from;
-      const allFull = paid.payments
-        .filter((payment) => payment.periodStartsAt.getTime() >= start && payment.periodStartsAt.getTime() < to)
-        .every((payment) => this.keptShare(payment) >= 1);
+      const allFull = paid.periods
+        .filter(({ payment }) => payment.periodStartsAt.getTime() >= start && payment.periodStartsAt.getTime() < to)
+        .every((period) => this.keptShare(period) >= 1);
       if (served >= required - MONTH_END_TOLERANCE_MS && allFull) vestings.push(to);
     }
     return vestings.length === 0 ? null : new Date(Math.min(...vestings));
@@ -412,18 +452,14 @@ class Ledger {
     return this.input.offerPriceIds.includes(payment.priceId);
   }
 
-  // The first kept share of the payment's period, or null if nothing of it is kept or it was not at an offer price.
-  private countedPeriod(payment: Payment): Period | null {
-    if (!this.isOffered(payment)) return null;
-    const share = this.keptShare(payment);
+  // The first kept share of the billing period's period, or null if nothing of it is kept.
+  private countedPart(period: BillingPeriod): [number, number] | null {
+    const share = this.keptShare(period);
     if (share <= 0) return null;
 
-    const startsAt = payment.periodStartsAt.getTime();
-    const length = payment.periodEndsAt.getTime() - startsAt;
-    if (length <= 0) return null;
-    const full = share >= 1;
-    const endsAt = full ? payment.periodEndsAt : new Date(startsAt + Math.floor(share * length));
-    return { payment, startsAt: payment.periodStartsAt, endsAt, full };
+    const startsAt = period.payment.periodStartsAt.getTime();
+    const endsAt = period.payment.periodEndsAt.getTime();
+    return [startsAt, share >= 1 ? endsAt : startsAt + Math.floor(share * (endsAt - startsAt))];
   }
 }
 

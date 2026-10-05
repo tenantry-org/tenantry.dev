@@ -237,6 +237,58 @@ describe('the owner’s table', () => {
   describe('annual plans', () => {
     const term = annual('2027-01-01T00:00:00Z');
 
+    describe('a charge within a paid billing period, such as a prorated top-up', () => {
+      const halfTerm = (charged = 500) =>
+        payment('2027-07-01T00:00:00Z', {
+          months: 6,
+          billingInterval: 'year',
+          billingFrequency: 1,
+          priceId: 'pri_01year',
+          charged,
+        });
+      const at = (payments: Payment[], adjustments: PaymentAdjustment[], now: string, endedAt?: string) =>
+        compute({ payments, adjustments, now, endedAt });
+
+      it.each([
+        ['the whole year', () => annual('2027-01-01T00:00:00Z', { charged: 500 })],
+        ['the second half of the year', () => halfTerm()],
+      ])('adds no time when stamped with %s, kept after the main payment is refunded', (_, topUp) => {
+        const refund = adjustment(term, 'refund', '2027-07-02T00:00:00Z');
+        for (const now of ['2027-07-03T00:00:00Z', '2028-02-01T00:00:00Z', '2030-01-01T00:00:00Z']) {
+          const entitlement = at([term, topUp()], [refund], now, '2027-07-02T00:00:00Z');
+          expect(entitlement.vestedThrough).toBeNull();
+          expect(confirmedRuns(entitlement)).toEqual([]);
+        }
+        // Its 500 of the 39500 charged for the year pays for the first few days of it, and no more.
+        const kept = Math.floor((500 / 39500) * 365 * DAY);
+        expect(at([term, topUp()], [refund], '2027-07-03T00:00:00Z').run).toMatchObject({
+          paidThrough: new Date(date('2027-01-01T00:00:00Z').getTime() + kept),
+          monthsPaid: 0,
+        });
+      });
+
+      it('changes nothing when everything is kept: the term vests at once and its paid time is the year', () => {
+        const kept = compute({ payments: [term, halfTerm()], now: '2027-09-01T00:00:00Z' });
+        const alone = compute({ payments: [term], now: '2027-09-01T00:00:00Z' });
+
+        expect(kept.vestedThrough).toEqual(alone.vestedThrough);
+        expect(kept.run).toEqual(alone.run);
+        expect(confirmedRuns(compute({ payments: [term, halfTerm()], now: '2028-02-01T00:00:00Z' }))).toEqual(
+          confirmedRuns(compute({ payments: [term], now: '2028-02-01T00:00:00Z' })),
+        );
+      });
+
+      it('takes away only its own share of the year when only the top-up is refunded', () => {
+        const topUp = halfTerm(3900);
+        const refund = adjustment(topUp, 'refund', '2027-07-02T00:00:00Z');
+        const entitlement = compute({ payments: [term, topUp], adjustments: [refund], now: '2027-09-01T00:00:00Z' });
+
+        // 39000 of 42900 kept: the first 39000 / 42900 of the year.
+        const kept = Math.floor((39000 / 42900) * 365 * DAY);
+        expect(entitlement.run?.paidThrough).toEqual(new Date(date('2027-01-01T00:00:00Z').getTime() + kept));
+      });
+    });
+
     it('grants no term for a payment at the yearly price shorter than a year: it counts only as paid time', () => {
       // A prorated charge for a plan change, at the yearly price, for the last six months of the term.
       const prorated = payment('2027-07-01T00:00:00Z', {
