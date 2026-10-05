@@ -38,7 +38,7 @@ return 0;`,
   },
   {
     title: 'Onboard and offboard tenants',
-    text: 'One call creates a tenant’s database or schema, migrates it and runs your own steps, such as seeding its data. Offboarding refuses a tenant that is still active and runs your export steps first. It then drops the tenant’s database or schema or, in a shared database, deletes its rows from the tenant-owned tables in one transaction per context. A failed run is retried by running it again, so your steps must be safe to repeat.',
+    text: 'One call creates a tenant’s database or schema, migrates it and runs your own steps, such as seeding its data. Offboarding refuses a tenant that is still active and runs your export steps first. Then, with the step registered, it drops the tenant’s database or schema or, in a shared database, deletes its rows from the tenant-owned tables in one transaction per context. A failed run is retried by running it again, so your steps must be safe to repeat.',
     caption: 'TenantOnboarding.cs',
     code: `tenant.UsePro(pro => pro
     .AddProvisioningStep<SeedInitialData>()       // your step, last
@@ -182,8 +182,8 @@ export default function ProPage() {
               Pro builds on the free, open-source Tenantry Core. With a database or schema per tenant, it creates them,
               migrates them all as a deployment step, and checks their health. With any layout, a shared database
               included, it runs Hangfire, Quartz.NET, MassTransit and Rebus work as its tenant, keeps an audit log of
-              each tenant’s changes, and offboards a tenant by deleting its rows or dropping its database or schema. One
-              price covers your whole company.
+              each tenant’s changes, and offboards a tenant by deleting its rows or dropping its database or schema,
+              with the step for it registered. One price covers your whole company.
             </p>
             <div className={'mt-8 flex flex-wrap items-center gap-3'}>
               <Button asChild size={'lg'}>
