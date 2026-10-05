@@ -17,7 +17,7 @@ export const SUPPORT_REPLY_WITHIN = '48 hours';
 export const ProOffer: Offer = {
   name: 'Tenantry Pro',
   description:
-    'The tenant in your jobs and messages, audit logging, and tenant onboarding, offboarding and migrations, with a shared database or a database or schema per tenant.',
+    'Migrations and provisioning for tenant databases and schemas, the tenant in background jobs and messages, audit logging, and offboarding.',
   features: [
     'Hangfire, Quartz.NET, MassTransit and Rebus work run as the tenant it was created for, and refused for a suspended or deleted tenant',
     'Recurring jobs and background services that run once for each tenant',

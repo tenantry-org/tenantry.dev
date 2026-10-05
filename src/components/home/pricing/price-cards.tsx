@@ -11,11 +11,12 @@ import Link from 'next/link';
 interface Props {
   option: BillingIntervalOption;
   prices: PricesState;
+  proLink: boolean;
 }
 
 const CARD = 'flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm';
 
-export function PriceCards({ option, prices }: Props) {
+export function PriceCards({ option, prices, proLink }: Props) {
   const offer = ProOffer;
   // Read while the home page prerenders, so a build without the public configuration fails (public-config.ts).
   const { paddle, checkoutEnabled } = publicConfig();
@@ -59,11 +60,13 @@ export function PriceCards({ option, prices }: Props) {
             · Cancel any time · The versions you have keep working
           </p>
         </div>
-        <div className={'border-t border-border bg-surface px-8 py-6 text-sm'}>
-          <Link href={'/pro'} className={'font-medium text-link hover:underline'}>
-            What Pro includes
-          </Link>
-        </div>
+        {proLink && (
+          <div className={'border-t border-border bg-surface px-8 py-6 text-sm'}>
+            <Link href={'/pro'} className={'font-medium text-link hover:underline'}>
+              What Pro includes
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );

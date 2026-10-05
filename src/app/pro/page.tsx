@@ -3,13 +3,14 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import Header from '@/components/home/header/header';
 import { Footer } from '@/components/home/footer/footer';
+import { Pricing } from '@/components/home/pricing/pricing';
 import { Button } from '@/components/ui/button';
 import { CodeFigure } from '@/components/shared/code-figure';
 import { ProofStrip } from '@/components/shared/proof-strip';
 import { TrackedLink } from '@/components/shared/tracked-link';
 import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
-import { latestDocsVersion } from '@/lib/docs-versions';
+import { latestDocsVersion, publishedSince } from '@/lib/docs-versions';
 
 export const metadata: Metadata = {
   title: 'Tenantry Pro: multi-tenant migrations, provisioning and jobs',
@@ -18,11 +19,45 @@ export const metadata: Metadata = {
   alternates: { canonical: '/pro' },
 };
 
-// From Tenantry Pro's guides (Hangfire, audit logging, tenant lifecycle, migrations), shortened; each uses Pro 0.6's API.
+// Pro 0.8 replaces seeders with provisioning steps of your own (ITenantProvisioningStep<TKey>, AddProvisioningStep).
+const YOUR_STEP = publishedSince('pro', 'v0.8.0')
+  ? '.AddProvisioningStep<SeedInitialData>()       // your step, last'
+  : '.AddSeeder<DefaultDataSeeder>()               // your seeder, last';
+
+// From Tenantry Pro's guides (tenant migrations, tenant lifecycle, Hangfire, audit logging), shortened to the outcome,
+// an example and a limitation; each sample uses the API of the Pro release the site shows.
 const WORKFLOWS = [
   {
+    title: 'Keep every tenant database migrated',
+    text: 'Run migrate-tenants as a deployment step to apply pending migrations to every tenant database or schema. It tries every one, unless --max-failures or a stop signal ends the run early, and exits non-zero if any failed, which stops the release. Run one at a time: two runs from overlapping deployments race.',
+    caption: 'Program.cs',
+    code: `await using var app = builder.Build();
+
+// dotnet run -- migrate-tenants
+if (await app.RunTenantMigrationsIfRequestedAsync(args) is { } exitCode)
+    return exitCode;   // 1 if any database or schema failed
+
+await app.RunAsync();
+return 0;`,
+    link: { label: 'Tenant migrations', href: '/docs/pro/migration-orchestration' },
+  },
+  {
+    title: 'Onboard and offboard tenants',
+    text: 'One call creates a tenant’s database or schema, migrates it and runs your own steps, such as seeding its data. Offboarding refuses a tenant that is still active, runs your export steps, then drops the database or schema, or deletes the tenant’s rows from a shared database’s tenant-owned tables in one transaction per context. A failed run is retried by running it again, so your steps must be safe to repeat.',
+    caption: 'TenantOnboarding.cs',
+    code: `tenant.UsePro(pro => pro
+    ${YOUR_STEP}
+    .AddDatabaseProvisioning<AppDbContext>()      // creates the database, first
+    .AddMigrations<AppDbContext>());              // then migrates it
+
+var result = await provisioner.ProvisionAsync(descriptor, ct);
+if (result.Succeeded)
+    await tenants.ActivateAsync(descriptor.TenantId, ct);`,
+    link: { label: 'Tenant lifecycle', href: '/docs/pro/tenant-lifecycle' },
+  },
+  {
     title: 'Run background work as the tenant',
-    text: 'Hangfire and Quartz.NET jobs and MassTransit and Rebus messages run as the tenant they were created for, with the DbContext isolated as in a request. Recurring jobs and background services can run once for each tenant. By default, work whose tenant no longer exists, or is suspended, fails without running. An adapter API carries the tenant through other libraries the same way.',
+    text: 'Hangfire and Quartz.NET jobs and MassTransit and Rebus messages run as the tenant they were created for, with the DbContext isolated as in a request, and recurring jobs can run once for each tenant. By default, work whose tenant no longer exists or is suspended fails without running. Work created with no tenant current carries none, and by default runs without one and logs a warning.',
     caption: 'Program.cs',
     code: `tenant.UsePro(pro => pro.AddHangfirePropagation());
 
@@ -36,7 +71,7 @@ jobs.WithTenant(tenantId).Enqueue<ReportJob>(job => job.Execute());`,
   },
   {
     title: 'Audit each tenant’s changes',
-    text: 'Pro records each insert, update and delete that SaveChanges writes through a context with UseTenantry(): the tenant, the table and primary key, the old and new values, the time and a correlation id. Your IAuditContextProvider names the user, and your IAuditStore keeps the entries; by default no user is named and the entries go to the log. They are written once the transaction commits, or inside it if you choose. ExecuteUpdate, ExecuteDelete and raw SQL are not recorded.',
+    text: 'Pro records each insert, update and delete that SaveChanges writes through a context with UseTenantry(), with the tenant, the table and primary key, the old and new values and the time. Your IAuditContextProvider names the user and your IAuditStore keeps the entries; by default they go to the log. ExecuteUpdate, ExecuteDelete and raw SQL are not recorded.',
     caption: 'Program.cs',
     code: `tenant.UsePro(pro => pro.AddAuditLogging(opts =>
     opts.ExcludeProperty<User>(user => user.PasswordHash)));
@@ -44,34 +79,6 @@ jobs.WithTenant(tenantId).Enqueue<ReportJob>(job => job.Execute());`,
 builder.Services.AddSingleton<IAuditContextProvider, HttpAuditContextProvider>();   // who made the change
 builder.Services.AddScoped<IAuditStore, AuditTableStore>();                         // where entries go`,
     link: { label: 'Audit logging', href: '/docs/pro/audit-logging' },
-  },
-  {
-    title: 'Onboard and offboard tenants',
-    text: 'One call onboards a tenant: it creates the tenant’s database or schema and migrates it, if the tenant has one, then runs your seeders, and its result reports each step. With a shared database it runs only your seeders and steps. To retry a failed onboarding, run it again: every step runs again, and Tenantry’s own are safe to repeat, so write your seeders to be too. Offboarding refuses a tenant that is still active and runs your export steps. With the step for it added, it then deletes the tenant’s rows from every tenant-owned table of a shared database in one transaction, or drops its database or schema.',
-    caption: 'TenantOnboarding.cs',
-    code: `tenant.UsePro(pro => pro
-    .AddSeeder<DefaultDataSeeder>()               // your seeder, last
-    .AddDatabaseProvisioning<AppDbContext>()      // creates the database, first
-    .AddMigrations<AppDbContext>());              // then migrates it
-
-var result = await provisioner.ProvisionAsync(descriptor, ct);
-if (result.Succeeded)
-    await tenants.ActivateAsync(descriptor.TenantId, ct);`,
-    link: { label: 'Tenant lifecycle', href: '/docs/pro/tenant-lifecycle' },
-  },
-  {
-    title: 'Keep every tenant database migrated',
-    text: 'Run migrate-tenants as a deployment step. It applies pending migrations to every tenant database or schema. If one fails, the others still run, and the step exits non-zero, which stops the release. You can also read where each database stands without migrating.',
-    caption: 'Program.cs',
-    code: `await using var app = builder.Build();
-
-// dotnet run -- migrate-tenants
-if (await app.RunTenantMigrationsIfRequestedAsync(args) is { } exitCode)
-    return exitCode;   // 1 if any database or schema failed
-
-await app.RunAsync();
-return 0;`,
-    link: { label: 'Tenant migrations', href: '/docs/pro/migration-orchestration' },
   },
 ];
 
@@ -157,17 +164,18 @@ export default function ProPage() {
           <div className={'mx-auto max-w-6xl px-4 pb-16 pt-16 md:px-8 md:pt-24'}>
             <p className={'text-sm font-medium text-link'}>Tenantry Pro</p>
             <h1 className={'mt-3 max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl'}>
-              Keep the tenant in background work, and manage each tenant’s data from onboarding to offboarding
+              Provision, migrate and remove tenants, run jobs as their tenant, and audit their changes
             </h1>
             <p className={'mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground'}>
-              Pro is for two kinds of application. With a shared database, it adds Hangfire, Quartz.NET, MassTransit and
-              Rebus work that runs as its tenant, an audit log of each tenant’s changes, and offboarding that deletes a
-              tenant’s rows. With a database or schema per tenant, it also creates, migrates, checks and removes them.
-              Pro builds on the free, open-source Tenantry Core. One price covers your whole company.
+              Pro builds on the free, open-source Tenantry Core. With a database or schema per tenant, it creates them,
+              migrates them all as a deployment step, and checks their health. With any layout, a shared database
+              included, it runs Hangfire, Quartz.NET, MassTransit and Rebus work as its tenant, keeps an audit log of
+              each tenant’s changes, and offboards a tenant by deleting its rows or dropping its database or schema. One
+              price covers your whole company.
             </p>
             <div className={'mt-8 flex flex-wrap items-center gap-3'}>
               <Button asChild size={'lg'}>
-                <TrackedLink href={'/#pricing'} event={'See pricing'} data={{ from: 'pro' }}>
+                <TrackedLink href={'#pricing'} event={'See pricing'} data={{ from: 'pro' }}>
                   Subscribe to Pro <ArrowRight className={'h-4 w-4'} />
                 </TrackedLink>
               </Button>
@@ -253,15 +261,10 @@ export default function ProPage() {
                 </div>
               ))}
             </dl>
-            <div className={'mt-12'}>
-              <Button asChild size={'lg'}>
-                <TrackedLink href={'/#pricing'} event={'See pricing'} data={{ from: 'pro, questions' }}>
-                  Subscribe to Pro <ArrowRight className={'h-4 w-4'} />
-                </TrackedLink>
-              </Button>
-            </div>
           </div>
         </section>
+
+        <Pricing proLink={false} />
       </main>
       <Footer />
     </>

@@ -7,7 +7,8 @@ import { BILLING_INTERVALS, type BillingIntervalOption } from '@/constants/billi
 import { usePaddle } from '@/hooks/use-paddle';
 import { usePaddlePrices } from '@/hooks/use-paddle-prices';
 
-export function Pricing() {
+/** The pricing block; `proLink` links the Pro card to /pro, which the Pro page itself leaves out. */
+export function Pricing({ proLink = true }: Readonly<{ proLink?: boolean }>) {
   const [option, setOption] = useState<BillingIntervalOption>(BILLING_INTERVALS[0]);
   const prices = usePaddlePrices(usePaddle());
 
@@ -20,7 +21,7 @@ export function Pricing() {
           1.0.
         </p>
         <Toggle option={option} setOption={setOption} />
-        <PriceCards option={option} prices={prices} />
+        <PriceCards option={option} prices={prices} proLink={proLink} />
       </div>
     </section>
   );
