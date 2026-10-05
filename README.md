@@ -189,7 +189,7 @@ NuGet and the next run drops it; a Pro release is dropped by deleting its tag fr
 once both Core and Pro have a release in it, with the newest patch of each, so a new minor released by Core first
 stays off the site until Pro's release, and the previous minor is shown meanwhile. Only the newest minor is shown until
 a release has been sold. When checkout opens, `FIRST_SOLD_RELEASE` in `scripts/docs-versions.mjs` is set to Core's and
-Pro's newest published releases (their patches can differ, such as `{ core: 'v0.7.3', pro: 'v0.7.1' }`); from then on
+Pro's newest published releases (their patches can differ, such as `{ core: 'v0.8.1', pro: 'v0.8.0' }`); from then on
 every minor from that one is shown, and each product's changelog starts at its own release sold.
 
 The same run reads what the site says about the newest release from the release itself and writes it to

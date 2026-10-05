@@ -23,7 +23,7 @@ const STABLE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 export const CONFIG_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs-versions.json');
 
 /**
- * The first releases that were on sale, one per product, such as `{ core: 'v0.7.3', pro: 'v0.7.1' }`, or null while
+ * The first releases that were on sale, one per product, such as `{ core: 'v0.8.1', pro: 'v0.8.0' }`, or null while
  * Tenantry Pro is not on sale. Core and Pro number their patches separately, so each has its own. The site shows
  * nothing older: no docs of a minor before theirs, and no changelog entry of a product's release before its own.
  * While it is null no release has been sold, so the site shows only the newest minor and, in its changelog, only
@@ -43,7 +43,7 @@ export function checkFirstSold(firstSold) {
   if (tags.every((tag) => STABLE_TAG.test(tag ?? '')) && new Set(tags.map(minorOf)).size === 1) return firstSold;
   throw new Error(
     `FIRST_SOLD_RELEASE is ${JSON.stringify(firstSold)}: set it to null, or to Core's and Pro's first releases ` +
-      "sold, such as { core: 'v0.7.3', pro: 'v0.7.1' }: both release tags with their v, without a pre-release " +
+      "sold, such as { core: 'v0.8.1', pro: 'v0.8.0' }: both release tags with their v, without a pre-release " +
       'suffix, in the same minor.',
   );
 }

@@ -139,7 +139,7 @@ describe('docs versions', () => {
 
   it("accepts no first sale, or Core's and Pro's release tags in one minor, and refuses anything else", () => {
     expect(checkFirstSold(null)).toBeNull();
-    expect(checkFirstSold(sold('v0.7.3', 'v0.7.1'))).toEqual({ core: 'v0.7.3', pro: 'v0.7.1' });
+    expect(checkFirstSold(sold('v0.8.1', 'v0.8.0'))).toEqual({ core: 'v0.8.1', pro: 'v0.8.0' });
     const refused = [
       'v0.6.1',
       sold('0.6.1'),
@@ -170,24 +170,24 @@ describe('docs versions', () => {
   });
 
   it("shows each product's changelog from its own first release sold when their patches differ", () => {
-    // Checkout opens at Core v0.7.3 and Pro v0.7.1; Core v0.7.4 and Pro v0.7.2 follow.
-    const firstSold = sold('v0.7.3', 'v0.7.1');
+    // Checkout opens at Core v0.8.3 and Pro v0.8.1; Core v0.8.4 and Pro v0.8.2 follow.
+    const firstSold = sold('v0.8.3', 'v0.8.1');
     const changelog = (patches: number[]) =>
-      patches.map((patch) => `## [0.7.${patch}] - 2026-11-0${patch + 1}\n\n- Patch ${patch}.\n`).join('\n');
+      patches.map((patch) => `## [0.8.${patch}] - 2026-11-0${patch + 1}\n\n- Patch ${patch}.\n`).join('\n');
     const page = (group: 'core' | 'pro', tag: string, patches: number[]) =>
       changelogPage(changelog(patches), {
         product: group,
-        minor: '0.7',
+        minor: '0.8',
         fullChangelog: 'https://example.test/CHANGELOG.md',
         from: oldestReleaseShown(group, tag, firstSold),
       });
-    const shown = (markdown: string) => [...markdown.matchAll(/^## (0\.7\.\d)/gm)].map((match) => match[1]);
+    const shown = (markdown: string) => [...markdown.matchAll(/^## (0\.8\.\d)/gm)].map((match) => match[1]);
 
-    expect(shown(page('core', 'v0.7.4', [4, 3, 2, 1, 0]))).toEqual(['0.7.4', '0.7.3']);
-    expect(shown(page('pro', 'v0.7.2', [2, 1, 0]))).toEqual(['0.7.2', '0.7.1']);
+    expect(shown(page('core', 'v0.8.4', [4, 3, 2, 1, 0]))).toEqual(['0.8.4', '0.8.3']);
+    expect(shown(page('pro', 'v0.8.2', [2, 1, 0]))).toEqual(['0.8.2', '0.8.1']);
     expect(
-      resolveVersions({ core: ['v0.6.0', 'v0.7.3', 'v0.7.4'], pro: ['v0.6.0', 'v0.7.1', 'v0.7.2'] }, firstSold),
-    ).toEqual([{ version: '0.7', core: 'v0.7.4', pro: 'v0.7.2' }]);
+      resolveVersions({ core: ['v0.6.0', 'v0.8.3', 'v0.8.4'], pro: ['v0.6.0', 'v0.8.1', 'v0.8.2'] }, firstSold),
+    ).toEqual([{ version: '0.8', core: 'v0.8.4', pro: 'v0.8.2' }]);
   });
 
   it('leaves out a release whose docs cannot be published, and keeps the one before it', async () => {
