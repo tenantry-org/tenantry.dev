@@ -10,7 +10,7 @@ import { ProofStrip } from '@/components/shared/proof-strip';
 import { TrackedLink } from '@/components/shared/tracked-link';
 import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
-import { latestDocsVersion, publishedSince } from '@/lib/docs-versions';
+import { latestDocsVersion } from '@/lib/docs-versions';
 
 export const metadata: Metadata = {
   title: 'Tenantry Pro: multi-tenant migrations, provisioning and jobs',
@@ -18,11 +18,6 @@ export const metadata: Metadata = {
     'For multi-tenant .NET apps: migrate and provision tenant databases or schemas, run jobs and messages as their tenant, audit changes and offboard tenants.',
   alternates: { canonical: '/pro' },
 };
-
-// Pro 0.8 replaces seeders with provisioning steps of your own (ITenantProvisioningStep<TKey>, AddProvisioningStep).
-const YOUR_STEP = publishedSince('pro', 'v0.8.0')
-  ? '.AddProvisioningStep<SeedInitialData>()       // your step, last'
-  : '.AddSeeder<DefaultDataSeeder>()               // your seeder, last';
 
 // From Tenantry Pro's guides (tenant migrations, tenant lifecycle, Hangfire, audit logging), shortened to the outcome,
 // an example and a limitation; each sample uses the API of the Pro release the site shows.
@@ -46,7 +41,7 @@ return 0;`,
     text: 'One call creates a tenant’s database or schema, migrates it and runs your own steps, such as seeding its data. Offboarding refuses a tenant that is still active, runs your export steps, then drops the database or schema, or deletes the tenant’s rows from a shared database’s tenant-owned tables in one transaction per context. A failed run is retried by running it again, so your steps must be safe to repeat.',
     caption: 'TenantOnboarding.cs',
     code: `tenant.UsePro(pro => pro
-    ${YOUR_STEP}
+    .AddProvisioningStep<SeedInitialData>()       // your step, last
     .AddDatabaseProvisioning<AppDbContext>()      // creates the database, first
     .AddMigrations<AppDbContext>());              // then migrates it
 
