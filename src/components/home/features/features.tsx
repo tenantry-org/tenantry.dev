@@ -122,10 +122,12 @@ export function Features() {
       <div className={'mt-24 max-w-2xl'}>
         <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>Open-source Core. Pro for running tenants.</h2>
         <p className={'mt-4 text-lg text-muted-foreground'}>
-          Core is free and isolates tenant data, in a shared database or a database per tenant. Pro adds the operations
-          around it: with a shared database, the tenant in Hangfire, Quartz.NET, MassTransit and Rebus work, audit
-          logging, and offboarding that deletes a tenant’s rows; with a database or schema per tenant, also
-          provisioning, migrations and health checks.
+          With a shared database or a database per tenant, everything that keeps one tenant’s data from another’s is in
+          Core, which is free: access validation, the query filters and write checks, the connection checks for a
+          database per tenant, caches and options kept per tenant, and the model checks. Pro adds a schema per tenant
+          and mixed mode, with the checks those layouts need, and the operations around tenants: the tenant in Hangfire,
+          Quartz.NET, MassTransit and Rebus work, audit logging, offboarding, and creating, migrating and checking
+          tenant databases and schemas.
         </p>
       </div>
       <div className={'mt-10 grid gap-6 lg:grid-cols-2'}>
