@@ -106,9 +106,9 @@ export function llmsTxt(pages: MarkdownPage[]): string {
   return (
     [
       '# Tenantry',
-      '> Tenantry adds tenant isolation to ASP.NET Core and EF Core applications. Tenantry Core is open source ' +
-        '(Apache-2.0); Tenantry Pro adds provisioning, migrations across tenant databases, schema per tenant and mixed ' +
-        'mode, and the tenant in background jobs and messages.',
+      '> Tenantry adds multi-tenancy, with tenant isolation, to ASP.NET Core and EF Core applications. Tenantry Core ' +
+        'is open source (Apache-2.0); Tenantry Pro adds provisioning and offboarding, migrations across tenant ' +
+        'databases, schema per tenant and mixed mode, the tenant in background jobs and messages, and audit logging.',
       `These are the docs of the newest release, Tenantry ${version} (Core ${coreTag}, Pro ${proTag}), as Markdown. ` +
         'Each page is also a web page at the same address without `.md`. Tenantry is in beta until 1.0.' +
         (older.length > 0

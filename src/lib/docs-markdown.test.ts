@@ -39,9 +39,9 @@ describe('docs as Markdown', () => {
     expect(llmsTxt(pages)).toBe(
       [
         '# Tenantry',
-        '> Tenantry adds tenant isolation to ASP.NET Core and EF Core applications. Tenantry Core is open source ' +
-          '(Apache-2.0); Tenantry Pro adds provisioning, migrations across tenant databases, schema per tenant and ' +
-          'mixed mode, and the tenant in background jobs and messages.',
+        '> Tenantry adds multi-tenancy, with tenant isolation, to ASP.NET Core and EF Core applications. Tenantry ' +
+          'Core is open source (Apache-2.0); Tenantry Pro adds provisioning and offboarding, migrations across tenant ' +
+          'databases, schema per tenant and mixed mode, the tenant in background jobs and messages, and audit logging.',
         'These are the docs of the newest release, Tenantry 0.6 (Core v0.6.2, Pro v0.6.1), as Markdown. Each page is ' +
           'also a web page at the same address without `.md`. Tenantry is in beta until 1.0. ' +
           "Earlier releases' docs: [0.5](https://tenantry.dev/docs/v0.5.md).",
