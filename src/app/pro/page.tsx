@@ -5,11 +5,11 @@ import Header from '@/components/home/header/header';
 import { Footer } from '@/components/home/footer/footer';
 import { Button } from '@/components/ui/button';
 import { CodeFigure } from '@/components/shared/code-figure';
+import { ProofStrip } from '@/components/shared/proof-strip';
 import { TrackedLink } from '@/components/shared/tracked-link';
 import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
 import { latestDocsVersion } from '@/lib/docs-versions';
-import newestRelease from '../../../newest-release.json';
 
 export const metadata: Metadata = {
   title: 'Tenantry Pro: multi-tenant migrations, provisioning and jobs',
@@ -91,20 +91,6 @@ const ALSO = [
     text: 'Connection strings read from a secrets store, kept for a period, so the lookup runs once per tenant rather than for every context.',
     href: '/docs/pro/database-per-tenant',
   },
-];
-
-// What a buyer can check for themselves. The samples are counted at the newest release's tags (newest-release.json).
-const { samples } = newestRelease;
-const PROOF = [
-  {
-    text: 'Core’s isolation tests run on every build against SQL Server, PostgreSQL, MySQL and SQLite',
-    href: '/docs/core/compatibility#databases',
-  },
-  {
-    text: `${samples.core + samples.pro} runnable samples: ${samples.core} for Core, ${samples.pro} for Pro`,
-    href: `https://github.com/tenantry-org/tenantry-pro-docs/tree/${latestDocsVersion.pro}/samples`,
-  },
-  { text: 'Core is Apache-2.0, on GitHub', href: 'https://github.com/tenantry-org/tenantry-core' },
 ];
 
 // The minor after the newest, for the example of a minor release: 0.6 → 0.7.
@@ -200,21 +186,7 @@ export default function ProPage() {
           </div>
         </section>
 
-        <section className={'border-b border-border/70 bg-surface'}>
-          <ul
-            className={
-              'mx-auto flex max-w-6xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground md:flex-row md:gap-8 md:px-8'
-            }
-          >
-            {PROOF.map((item) => (
-              <li key={item.text}>
-                <Link href={item.href} className={'hover:text-foreground hover:underline'}>
-                  {item.text}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <ProofStrip samples={'all'} />
 
         {WORKFLOWS.map((workflow, index) => (
           <section key={workflow.title} className={index > 0 ? 'border-t border-border/70' : undefined}>
