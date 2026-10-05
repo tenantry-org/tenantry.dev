@@ -3,7 +3,7 @@ title: Keeping HybridCache and output-cache entries per tenant in ASP.NET Core
 description: Two calls in AddTenantry key HybridCache entries and cached responses by tenant. What they returned for two tenants, with no tenant, after invalidation and on a second instance.
 date: 2026-10-04
 author: Oliver McNally
-versions: Tenantry 0.6.0, .NET 10 and Microsoft.Extensions.Caching.Hybrid 10.10.0
+versions: Tenantry 0.7.0, .NET 10 and Microsoft.Extensions.Caching.Hybrid 10.10.0
 tags: [dotnet, aspnetcore, caching, multitenancy]
 next:
   label: Read the caching guide
@@ -14,7 +14,7 @@ draft: true
 A `HybridCache` entry under `"orders:recent"`, or a cached response for `/catalogue`, belongs to whichever tenant filled
 it, and the next tenant to ask gets the same bytes. Putting the tenant id into every key by hand protects only the calls
 that do it. This post turns on [Tenantry Core](/docs/core)'s cache isolation in an ASP.NET Core application with two
-tenants, Acme and Globex, and shows what each cache returned. I ran it on .NET 10 with Tenantry 0.6.0, through ASP.NET
+tenants, Acme and Globex, and shows what each cache returned. I ran it on .NET 10 with Tenantry 0.7.0, through ASP.NET
 Core's test server.
 
 ```bash
@@ -43,6 +43,9 @@ var app = builder.Build();
 app.UseTenantry();
 app.UseOutputCache();
 ```
+
+The header lets any caller name any tenant, which keeps the example short. Tenantry's analyzer reports it when the
+project builds, as warning TNY2001, and an application adds an access check such as `ValidateTenantAccessByClaim`.
 
 `IsolateCaches()` wraps the `HybridCache` registered before it. With `AddHybridCache()` moved after `AddTenantry`,
 the host refused to start:
@@ -146,12 +149,19 @@ Acme's draft was stored as `t:acme:draft:7`, and Globex read nothing under the s
 `InvalidateAsync("acme")`, Acme still read `draft text`: these entries cannot be removed by tag, and stay until they
 expire.
 
-Invalidation also clears only the instance that runs it. I started a second instance of the application, B, sharing the
-first one's second-level cache, as two servers would share Redis. B read Acme's recent orders from that cache
-(`built 1`; its factory, which shares the counter, did not run). After instance A invalidated Acme, B still returned
-`built 1` from its own memory. Microsoft's `HybridCache` records the invalidation in the second level, but an instance
-keeps the copies it already holds until they expire. Where a stale copy matters, keep `Expiration` and
-`LocalCacheExpiration` short. The output cache's default store is in memory and per instance in the same way.
+On its own, invalidation clears only the instance that runs it. I started a second instance of the application, B,
+sharing the first one's second-level cache, as two servers would share Redis. B read Acme's recent orders from that
+cache (`built 1`; its factory, which shares the counter, did not run). After instance A invalidated Acme, B still
+returned `built 1` from its own memory, and its cached catalogue. Microsoft's `HybridCache` records the invalidation in
+the second level, but an instance keeps the copies it already holds until they expire. The output cache's default
+store is in memory and per instance in the same way.
+
+`BroadcastInvalidations` passes each invalidation to a handler of yours, which publishes it to the other instances
+through Redis pub/sub or a message broker; each instance applies what it receives with `InvalidateLocallyAsync`, which
+does not publish it again ([Several instances](/docs/core/tenant-stores#several-instances)). With the two instances
+connected through an in-process channel in place of Redis, A's `InvalidateAsync("acme")` reached B, and B built Acme's
+recent orders and rendered its catalogue again. An instance that misses a message keeps its copies until they expire,
+so where a stale copy matters, keep `Expiration` and `LocalCacheExpiration` short as well.
 
 Each key also gets longer by the tenant's id and a prefix, which counts against `HybridCache`'s maximum key length,
 1,024 characters by default.
