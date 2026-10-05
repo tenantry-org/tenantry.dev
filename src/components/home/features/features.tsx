@@ -39,8 +39,8 @@ const CORE = [
   'HybridCache and IDistributedCache entries (Tenantry.Caching) and cached responses kept per tenant',
   'ITenantInvalidator, which clears what Tenantry keeps for a tenant when the tenant changes',
   'The current tenant sent with HttpClient and gRPC calls, and read back only from callers you trust (Tenantry.Http, Tenantry.AspNetCore)',
-  // Core 0.6.1 tags ASP.NET Core's request metric with the tenant (tenant.TagRequestMetrics()).
-  `Log event ids to alert on, a tenant.id tag on traces, and ${publishedSince('core', 'v0.6.1') ? 'request metrics per tenant' : 'a count of how requests were resolved'}`,
+  // Core 0.7.0 tags ASP.NET Core's request metric with the tenant (tenant.TagRequestMetrics()).
+  `Log event ids to alert on, a tenant.id tag on traces, and ${publishedSince('core', 'v0.7.0') ? 'request metrics per tenant' : 'a count of how requests were resolved'}`,
   'A model check that refuses mappings it cannot isolate, and a list of unisolated entity types for your tests',
 ];
 
