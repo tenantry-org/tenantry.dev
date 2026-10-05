@@ -123,7 +123,7 @@ const QUESTIONS = [
   {
     question: 'Can I check a release’s packages?',
     answer:
-      'Core’s, from 0.8.0. Each Core release attaches its packages to its GitHub release as the release workflow built them, with their SHA-256 checksums and SBOMs, and the workflow signs a build provenance attestation for them, which shows a package was built by that workflow from the tagged commit. Check the copies on the GitHub release: NuGet.org adds its own signature to the packages it serves, so its copies do not match the checksums. Pro releases have no published checksums or attestation.',
+      'Core’s, from the first release after 0.7.0. Each Core release attaches its packages to its GitHub release as the release workflow built them, with their SHA-256 checksums and SBOMs, and the workflow signs a build provenance attestation for them, which shows a package was built by that workflow from the tagged commit. Check the copies on the GitHub release: NuGet.org adds its own signature to the packages it serves, so its copies do not match the checksums. Pro releases have no published checksums or attestation.',
     link: {
       label: 'Checking a release',
       href: 'https://github.com/tenantry-org/tenantry-core/blob/master/RELEASING.md#the-release',
@@ -138,8 +138,8 @@ const QUESTIONS = [
   {
     question: 'How does a company buy it?',
     answer:
-      'Through the checkout on this site, which Paddle runs as our merchant of record. Paddle is the only way to buy it. There are no seats or tiers.',
-    link: { label: 'Terms of Service', href: '/legal/terms' },
+      'Through the checkout on this site, which Paddle runs as our merchant of record. There is no other way to buy it, and there are no seats or tiers.',
+    link: { label: 'EULA', href: '/legal/eula' },
   },
   {
     question: 'Can I ship Pro inside software my customers install?',
