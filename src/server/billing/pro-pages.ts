@@ -121,7 +121,7 @@ export async function readEntitlement(customerId: string, now: Date = new Date()
     graceEndsAt: iso(access.graceEndsAt),
     canRestore: canRestore({ accessStatus: access.status, vestedThrough }),
     vestedThrough: iso(vestedThrough),
-    // Progress counts only while the customer has access; a lapse resets it.
+    // Progress is shown only while the customer has access; the paid time itself is kept through a lapse.
     paidTime:
       entitled && state?.run
         ? {

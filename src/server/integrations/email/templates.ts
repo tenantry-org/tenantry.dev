@@ -129,14 +129,20 @@ export function grantWithdrawnEmail(
 }
 
 /** Sent when a customer's access ends: none of their subscriptions entitles them any more. */
-export function accessRevokedEmail(to: string, siteUrl: string): EmailMessage {
+export function accessRevokedEmail(to: string, vestedThrough: Date | null, siteUrl: string): EmailMessage {
+  const what = vestedThrough
+    ? `so the package feed now serves you only your vested releases: those published on or before ${longDate(vestedThrough)}, your vested-through date, and every patch release of a minor version whose x.y.0 release is vested, as the licence agreement sets out. They stay licensed to you.`
+    : 'and no releases are vested, so the package feed now serves you none, and the releases you downloaded are no longer licensed to you, as the licence agreement sets out.';
+  const again = vestedThrough
+    ? 'You can resubscribe any time:'
+    : 'You can resubscribe any time, and the paid months you have kept still count towards 12:';
   return {
     to,
     subject: 'Your Tenantry Pro subscription has ended',
     html: layout(
       `<h1 style="font-size:20px">Your Tenantry Pro access has ended</h1>
-<p>You no longer have an active Tenantry Pro subscription, so the package feed now serves you only your vested releases: those published up to your vested-through date, and every patch release of a minor version whose x.y.0 release is vested, as the licence agreement sets out. If nothing was vested, it serves you none, and the releases you downloaded are no longer licensed to you.</p>
-<p>Your licence key keeps working either way; it does not extend your licence. You can resubscribe any time, and the paid time you have kept still counts towards 12 months:</p>
+<p>You no longer have an active Tenantry Pro subscription, ${what}</p>
+<p>Your licence key keeps working either way; it does not extend your licence. ${again}</p>
 <p><a href="${siteUrl}/#pricing" style="${BUTTON}">View pricing</a></p>`,
     ),
   };

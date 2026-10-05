@@ -84,7 +84,7 @@ export async function syncCustomer(
   if (!entitled) {
     if (!wasEntitled) return { change: 'unchanged', licence: null, entitlement };
 
-    await endAccess(customerId, email, deps);
+    await endAccess(customerId, email, entitlement.vestedThrough, deps);
     return { change: 'ended', licence: null, entitlement };
   }
 
@@ -251,11 +251,11 @@ async function forgetLicenceFailures(customerId: string, deps: BillingDeps) {
   }
 }
 
-async function endAccess(customerId: string, email: string | null, deps: BillingDeps) {
+async function endAccess(customerId: string, email: string | null, vestedThrough: Date | null, deps: BillingDeps) {
   await forgetLicenceFailures(customerId, deps);
 
   if (email) {
-    await deps.sendEmail(accessRevokedEmail(email, deps.config.siteUrl));
+    await deps.sendEmail(accessRevokedEmail(email, vestedThrough, deps.config.siteUrl));
   } else {
     console.info(`Customer access: no email on file for customer ${customerId}; skipping the revocation email.`);
   }

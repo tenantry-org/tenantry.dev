@@ -641,6 +641,25 @@ describe('the owner’s table', () => {
     expect(vested(compute({ payments, now: '2028-02-01T00:00:00Z' }))).toBe('2028-02-01T00:00:00.000Z');
   });
 
+  it('counts a free period as nothing, whatever is charged within it, and a free payment within a paid period as nothing', () => {
+    const free = payment('2027-01-01T00:00:00Z', { charged: 0 });
+    const within = payment('2027-01-15T00:00:00Z', { periodEndsAt: date('2027-02-01T00:00:00Z'), charged: 500 });
+    const later = monthly('2027-02-01T00:00:00Z', 12);
+    const at = (payments: Payment[], now: string) => compute({ payments, now });
+
+    expect(at([free, within, ...later], '2027-01-20T00:00:00Z').run).toMatchObject({
+      startedAt: date('2027-02-01T00:00:00Z'),
+      monthsPaid: 12,
+    });
+    expect(at([free, within, ...later], '2028-01-15T00:00:00Z').vestedThrough).toBeNull();
+    expect(vested(at([free, within, ...later], '2028-02-01T00:00:00Z'))).toBe('2028-02-01T00:00:00.000Z');
+
+    const paid = monthly('2027-01-01T00:00:00Z', 12);
+    const zero = payment('2027-03-10T00:00:00Z', { periodEndsAt: date('2027-04-01T00:00:00Z'), charged: 0 });
+    expect(at([...paid, zero], '2027-06-15T00:00:00Z').run).toEqual(at(paid, '2027-06-15T00:00:00Z').run);
+    expect(vested(at([...paid, zero], '2028-01-01T00:00:00Z'))).toBe('2028-01-01T00:00:00.000Z');
+  });
+
   it('counts a month bought with a 50% discount coupon in full', () => {
     const payments = monthly('2027-01-01T00:00:00Z', 12, { charged: 1950 });
 

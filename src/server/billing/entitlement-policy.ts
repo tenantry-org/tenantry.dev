@@ -308,9 +308,11 @@ class Ledger {
 
   /**
    * The share of a billing period the money kept from its payments pays for, from 0 to 1: what is kept of all they
-   * charged. Nothing if they charged nothing.
+   * charged. Nothing if its own payment charged nothing (a trial, a period discounted in full): a period nobody paid for
+   * is no paid time, whatever is charged within it.
    */
   keptShare(period: BillingPeriod): number {
+    if (period.payment.charged <= 0) return 0;
     const payments = [period.payment, ...period.within];
     const charged = sum(payments.map((payment) => Math.max(0, payment.charged)));
     if (charged <= 0) return 0;
