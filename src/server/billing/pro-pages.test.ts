@@ -96,8 +96,24 @@ describe('readEntitlement', () => {
     await expect(readEntitlement('ctm_1', new Date('2027-06-15T00:00:00Z'))).resolves.toMatchObject({
       paidTime: { monthsPaid: 12, reached: false },
     });
+    state.tables.vested_entitlements = vested('2027-07-01T00:00:00Z', 'paid_time');
     await expect(readEntitlement('ctm_1', new Date('2027-07-01T00:00:00Z'))).resolves.toMatchObject({
       paidTime: { reached: true },
+    });
+  });
+
+  it('does not say 12 months were reached in grace after a failed renewal, while nothing is vested', async () => {
+    // Stored when the renewal failed: the estimate was the end of the period then, now passed.
+    state.tables.active_subscriptions = stored('grace', {
+      grace_ends_at: '2027-07-20T00:00:00Z',
+      months_paid: 11,
+      vests_at: '2027-07-01T00:00:00Z',
+    });
+
+    await expect(readEntitlement('ctm_1', new Date('2027-07-05T00:00:00Z'))).resolves.toMatchObject({
+      access: 'grace',
+      vestedThrough: null,
+      paidTime: { monthsPaid: 11, reached: false },
     });
   });
 

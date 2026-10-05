@@ -183,7 +183,7 @@ export function computeEntitlement(input: EntitlementInput): Entitlement {
 
   return {
     access,
-    run: isEntitled(access.status) && paid ? progress(paid, vestsAt) : null,
+    run: isEntitled(access.status) && paid ? progress(paid, vestsAt, input.now) : null,
     vestedThrough: latest(grants.filter((g) => g.status === 'confirmed').map((g) => g.vestedThrough)),
     grants,
     paymentStatuses: Object.fromEntries(
@@ -520,16 +520,16 @@ function credit(part: CountedPart, at: number): number {
 
 /**
  * How far the customer is towards vesting, while they have access: their paid months (served or paid ahead), whole,
- * and when they reach 12; or, if they have not been paid that far, when they would if every month from the end of the
- * latest billing period were paid in full.
+ * and when they reach 12; or, if they have not been paid that far, when they would if every month from the later of
+ * the end of the latest billing period and now were paid in full, so the estimate is never in the past.
  */
-function progress(paid: PaidTime, vestsAt: Date | null): CurrentRun {
+function progress(paid: PaidTime, vestsAt: Date | null, now: Date): CurrentRun {
   const months = sum(paid.counted.map(({ from, to, part }) => credit(part, to) - credit(part, from)));
   return {
     startedAt: paid.startedAt,
     paidThrough: new Date(paid.counted.at(-1)!.to),
     monthsPaid: Math.floor(months + MONTHS_EPSILON),
-    vestsAt: vestsAt ?? monthsFrom(paid.billedThrough, 12 - months),
+    vestsAt: vestsAt ?? monthsFrom(new Date(Math.max(paid.billedThrough.getTime(), now.getTime())), 12 - months),
   };
 }
 

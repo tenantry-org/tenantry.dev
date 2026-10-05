@@ -127,7 +127,8 @@ export async function readEntitlement(customerId: string, now: Date = new Date()
         ? {
             monthsPaid: state.run.monthsPaid,
             vestsAt: state.run.vestsAt.toISOString(),
-            reached: state.run.vestsAt.getTime() <= now.getTime(),
+            // Reached only once something is vested: a stored estimate can pass while a failed renewal is in grace.
+            reached: vestedThrough !== null && state.run.vestsAt.getTime() <= now.getTime(),
           }
         : null,
     annualTerm: entitled && vested?.kind === 'annual_term' && vested.through.getTime() > now.getTime(),

@@ -1249,6 +1249,21 @@ describe('timing', () => {
     },
   );
 
+  it('estimates when 12 paid months are reached from now when the paid time ended in the past, as in grace', () => {
+    // Eleven months paid to 1 December 2027; the renewal failed on 1 December and the customer is in grace.
+    const payments = monthly('2027-01-01T00:00:00Z', 11);
+    const subscriptions = [running('sub_1', 'past_due', '2027-12-01T00:00:00Z')];
+    const entitlement = compute({ payments, subscriptions, now: '2027-12-20T00:00:00Z' });
+
+    expect(entitlement.access.status).toBe('grace');
+    expect(entitlement.vestedThrough).toBeNull();
+    expect(entitlement.run).toMatchObject({ monthsPaid: 11, vestsAt: date('2028-01-20T00:00:00Z') });
+    // While paid ahead, from the end of the paid time.
+    expect(compute({ payments, now: '2027-06-15T00:00:00Z' }).run).toMatchObject({
+      vestsAt: date('2028-01-01T00:00:00Z'),
+    });
+  });
+
   it('shows a returning customer the paid time from before their gap, and a lapsed one none', () => {
     const payments = monthly('2027-01-01T00:00:00Z', 3);
     expect(compute({ payments, now: '2029-05-15T00:00:00Z' }).run).toMatchObject({ monthsPaid: 3 });
