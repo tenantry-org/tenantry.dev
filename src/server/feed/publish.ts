@@ -76,8 +76,13 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
   }
 
   const security = manifest.security === true;
-  if (security && version.rc !== null) {
-    return reply(400, `Release candidate ${nuspec.version} cannot be a security patch.`);
+  // Only a patch release can be a security patch; pro_releases' check would refuse it with a server error.
+  if (security && (version.rc !== null || version.patch === 0)) {
+    return reply(
+      400,
+      `${nuspec.version} cannot be a security patch: only a patch release (x.y.Z, Z above 0, not a release ` +
+        'candidate) can.',
+    );
   }
   const declaredDate = manifest.releasedAt === undefined ? null : new Date(String(manifest.releasedAt));
   if (declaredDate && Number.isNaN(declaredDate.getTime())) {

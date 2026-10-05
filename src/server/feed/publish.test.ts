@@ -200,14 +200,16 @@ describe('handlePublish', () => {
     expect(store.recordPackage).toHaveBeenCalledWith(expect.objectContaining({ version: '1.5.0-rc.2' }));
   });
 
-  it('refuses a release candidate marked as a security patch', async () => {
+  it.each(['1.5.1-rc.1', '1.5.0-rc.1', '1.5.0'])('refuses %s marked as a security patch with 400', async (version) => {
     const response = await push({
-      'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', '1.5.1-rc.1'),
+      'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', version),
       'tenantry-release.json': JSON.stringify({ security: true }),
     });
 
     expect(response.status).toBe(400);
-    expect(await response.text()).toContain('cannot be a security patch');
+    expect(await response.text()).toBe(
+      `${version} cannot be a security patch: only a patch release (x.y.Z, Z above 0, not a release candidate) can.`,
+    );
     expect(store.ensureRelease).not.toHaveBeenCalled();
   });
 

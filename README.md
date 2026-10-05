@@ -114,7 +114,7 @@ other refusal is 400, never 409, so that `--skip-duplicate` cannot hide it: an i
 release candidate `major.minor.patch-rc.N` (N from 1, no leading zeros, lower case, no build metadata), as Pro's
 release process tags them; different bytes under a version already published (a published version never changes:
 publish a new one); a `tenantry-release.json` date outside the rules below, or a security flag that disagrees with its
-release or is set on a release candidate; a patch release whose `X.Y.0` release is not published; a package that cannot
+release or is set on an `X.Y.0` release or a release candidate; a patch release whose `X.Y.0` release is not published; a package that cannot
 be read.
 
 A release candidate is published and served like any release, and dated when it is published; it never takes its
