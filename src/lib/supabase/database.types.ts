@@ -3,31 +3,43 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type Database = {
   public: {
     Tables: {
-      customer_access: {
+      active_subscriptions: {
         Row: {
+          access_status: string;
+          conditional_through: string | null;
           customer_id: string;
-          github_invited_at: string | null;
-          github_state: string;
-          status: string;
+          grace_ends_at: string | null;
+          months_paid: number;
+          paid_through: string | null;
+          run_started_at: string | null;
           updated_at: string;
+          vests_at: string | null;
         };
         Insert: {
+          access_status?: string;
+          conditional_through?: string | null;
           customer_id: string;
-          github_invited_at?: string | null;
-          github_state?: string;
-          status?: string;
+          grace_ends_at?: string | null;
+          months_paid?: number;
+          paid_through?: string | null;
+          run_started_at?: string | null;
           updated_at?: string;
+          vests_at?: string | null;
         };
         Update: {
+          access_status?: string;
+          conditional_through?: string | null;
           customer_id?: string;
-          github_invited_at?: string | null;
-          github_state?: string;
-          status?: string;
+          grace_ends_at?: string | null;
+          months_paid?: number;
+          paid_through?: string | null;
+          run_started_at?: string | null;
           updated_at?: string;
+          vests_at?: string | null;
         };
         Relationships: [
           {
-            foreignKeyName: 'customer_access_customer_id_fkey';
+            foreignKeyName: 'active_subscriptions_customer_id_fkey';
             columns: ['customer_id'];
             isOneToOne: true;
             referencedRelation: 'customers';
@@ -88,6 +100,7 @@ export type Database = {
           created_at: string;
           customer_id: string;
           email: string;
+          is_test: boolean;
           last_event_at: string | null;
           updated_at: string;
         };
@@ -95,6 +108,7 @@ export type Database = {
           created_at?: string;
           customer_id: string;
           email: string;
+          is_test?: boolean;
           last_event_at?: string | null;
           updated_at?: string;
         };
@@ -102,86 +116,48 @@ export type Database = {
           created_at?: string;
           customer_id?: string;
           email?: string;
+          is_test?: boolean;
           last_event_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
       };
-      entitlements: {
+      feed_tokens: {
         Row: {
           created_at: string;
-          current_period_ends_at: string | null;
           customer_id: string;
-          grace_started_at: string | null;
           id: string;
+          last_used_at: string | null;
+          name: string;
+          prefix: string;
           revoked_at: string | null;
-          status: string;
-          subscription_id: string;
-          updated_at: string;
+          token_hash: string;
         };
         Insert: {
           created_at?: string;
-          current_period_ends_at?: string | null;
           customer_id: string;
-          grace_started_at?: string | null;
           id?: string;
+          last_used_at?: string | null;
+          name: string;
+          prefix: string;
           revoked_at?: string | null;
-          status: string;
-          subscription_id: string;
-          updated_at?: string;
+          token_hash: string;
         };
         Update: {
           created_at?: string;
-          current_period_ends_at?: string | null;
           customer_id?: string;
-          grace_started_at?: string | null;
           id?: string;
+          last_used_at?: string | null;
+          name?: string;
+          prefix?: string;
           revoked_at?: string | null;
-          status?: string;
-          subscription_id?: string;
-          updated_at?: string;
+          token_hash?: string;
         };
         Relationships: [
           {
-            foreignKeyName: 'entitlements_customer_id_fkey';
+            foreignKeyName: 'feed_tokens_customer_id_fkey';
             columns: ['customer_id'];
             isOneToOne: false;
-            referencedRelation: 'customers';
-            referencedColumns: ['customer_id'];
-          },
-          {
-            foreignKeyName: 'entitlements_subscription_id_fkey';
-            columns: ['subscription_id'];
-            isOneToOne: true;
-            referencedRelation: 'subscriptions';
-            referencedColumns: ['subscription_id'];
-          },
-        ];
-      };
-      github_links: {
-        Row: {
-          customer_id: string;
-          github_id: number;
-          github_login: string;
-          linked_at: string;
-        };
-        Insert: {
-          customer_id: string;
-          github_id: number;
-          github_login: string;
-          linked_at?: string;
-        };
-        Update: {
-          customer_id?: string;
-          github_id?: number;
-          github_login?: string;
-          linked_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'github_links_customer_id_fkey';
-            columns: ['customer_id'];
-            isOneToOne: true;
             referencedRelation: 'customers';
             referencedColumns: ['customer_id'];
           },
@@ -225,21 +201,18 @@ export type Database = {
           id: string;
           issued_at: string;
           jwt: string;
-          revoked: boolean;
         };
         Insert: {
           customer_id: string;
           id?: string;
           issued_at?: string;
           jwt: string;
-          revoked?: boolean;
         };
         Update: {
           customer_id?: string;
           id?: string;
           issued_at?: string;
           jwt?: string;
-          revoked?: boolean;
         };
         Relationships: [
           {
@@ -251,10 +224,247 @@ export type Database = {
           },
         ];
       };
+      offered_prices: {
+        Row: {
+          first_seen_at: string;
+          price_id: string;
+        };
+        Insert: {
+          first_seen_at?: string;
+          price_id: string;
+        };
+        Update: {
+          first_seen_at?: string;
+          price_id?: string;
+        };
+        Relationships: [];
+      };
+      payment_adjustments: {
+        Row: {
+          action: string;
+          adjustment_id: string;
+          approved_at: string | null;
+          created_at: string;
+          currency_code: string | null;
+          customer_id: string;
+          item_types: string[];
+          last_event_at: string;
+          reversed_at: string | null;
+          status: string;
+          subscription_id: string | null;
+          subtotal: number | null;
+          transaction_id: string;
+          type: string;
+          updated_at: string;
+        };
+        Insert: {
+          action: string;
+          adjustment_id: string;
+          approved_at?: string | null;
+          created_at?: string;
+          currency_code?: string | null;
+          customer_id: string;
+          item_types?: string[];
+          last_event_at: string;
+          reversed_at?: string | null;
+          status: string;
+          subscription_id?: string | null;
+          subtotal?: number | null;
+          transaction_id: string;
+          type: string;
+          updated_at?: string;
+        };
+        Update: {
+          action?: string;
+          adjustment_id?: string;
+          approved_at?: string | null;
+          created_at?: string;
+          currency_code?: string | null;
+          customer_id?: string;
+          item_types?: string[];
+          last_event_at?: string;
+          reversed_at?: string | null;
+          status?: string;
+          subscription_id?: string | null;
+          subtotal?: number | null;
+          transaction_id?: string;
+          type?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'payment_adjustments_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['customer_id'];
+          },
+        ];
+      };
+      payments: {
+        Row: {
+          billing_frequency: number;
+          billing_interval: string;
+          completed_at: string;
+          created_at: string;
+          currency_code: string;
+          customer_id: string;
+          discount: number;
+          last_event_at: string;
+          origin: string;
+          period_ends_at: string;
+          period_starts_at: string;
+          price_id: string;
+          status: string;
+          subscription_id: string;
+          subtotal: number;
+          tax: number | null;
+          total: number;
+          transaction_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          billing_frequency: number;
+          billing_interval: string;
+          completed_at: string;
+          created_at?: string;
+          currency_code: string;
+          customer_id: string;
+          discount: number;
+          last_event_at: string;
+          origin: string;
+          period_ends_at: string;
+          period_starts_at: string;
+          price_id: string;
+          status?: string;
+          subscription_id: string;
+          subtotal: number;
+          tax?: number | null;
+          total: number;
+          transaction_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          billing_frequency?: number;
+          billing_interval?: string;
+          completed_at?: string;
+          created_at?: string;
+          currency_code?: string;
+          customer_id?: string;
+          discount?: number;
+          last_event_at?: string;
+          origin?: string;
+          period_ends_at?: string;
+          period_starts_at?: string;
+          price_id?: string;
+          status?: string;
+          subscription_id?: string;
+          subtotal?: number;
+          tax?: number | null;
+          total?: number;
+          transaction_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'payments_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['customer_id'];
+          },
+        ];
+      };
+      pro_packages: {
+        Row: {
+          authors: string | null;
+          created_at: string;
+          dependency_groups: NonNullable<Json>;
+          description: string | null;
+          lower_id: string;
+          nuspec: string;
+          package_id: string;
+          sha512: string;
+          size: number;
+          storage_path: string;
+          version: string;
+        };
+        Insert: {
+          authors?: string | null;
+          created_at?: string;
+          dependency_groups?: NonNullable<Json>;
+          description?: string | null;
+          lower_id: string;
+          nuspec: string;
+          package_id: string;
+          sha512: string;
+          size: number;
+          storage_path: string;
+          version: string;
+        };
+        Update: {
+          authors?: string | null;
+          created_at?: string;
+          dependency_groups?: NonNullable<Json>;
+          description?: string | null;
+          lower_id?: string;
+          nuspec?: string;
+          package_id?: string;
+          sha512?: string;
+          size?: number;
+          storage_path?: string;
+          version?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'pro_packages_version_fkey';
+            columns: ['version'];
+            isOneToOne: false;
+            referencedRelation: 'pro_releases';
+            referencedColumns: ['version'];
+          },
+        ];
+      };
+      pro_releases: {
+        Row: {
+          created_at: string;
+          entitlement_at: string;
+          major: number;
+          minor: number;
+          patch: number;
+          published_at: string;
+          security: boolean;
+          version: string;
+        };
+        Insert: {
+          created_at?: string;
+          entitlement_at: string;
+          major: number;
+          minor: number;
+          patch: number;
+          published_at: string;
+          security?: boolean;
+          version: string;
+        };
+        Update: {
+          created_at?: string;
+          entitlement_at?: string;
+          major?: number;
+          minor?: number;
+          patch?: number;
+          published_at?: string;
+          security?: boolean;
+          version?: string;
+        };
+        Relationships: [];
+      };
       subscriptions: {
         Row: {
           created_at: string;
+          current_period_ends_at: string | null;
           customer_id: string;
+          ended_at: string | null;
+          grace_started_at: string | null;
           last_event_at: string | null;
           price_id: string | null;
           product_id: string | null;
@@ -266,7 +476,10 @@ export type Database = {
         };
         Insert: {
           created_at?: string;
+          current_period_ends_at?: string | null;
           customer_id: string;
+          ended_at?: string | null;
+          grace_started_at?: string | null;
           last_event_at?: string | null;
           price_id?: string | null;
           product_id?: string | null;
@@ -278,7 +491,10 @@ export type Database = {
         };
         Update: {
           created_at?: string;
+          current_period_ends_at?: string | null;
           customer_id?: string;
+          ended_at?: string | null;
+          grace_started_at?: string | null;
           last_event_at?: string | null;
           price_id?: string | null;
           product_id?: string | null;
@@ -298,12 +514,64 @@ export type Database = {
           },
         ];
       };
+      vested_entitlements: {
+        Row: {
+          confirmed_at: string | null;
+          created_at: string;
+          customer_id: string;
+          id: string;
+          kind: string;
+          note: string | null;
+          started_at: string;
+          status: string;
+          transaction_id: string | null;
+          updated_at: string;
+          vested_through: string;
+          withdrawn_reason: string | null;
+        };
+        Insert: {
+          confirmed_at?: string | null;
+          created_at?: string;
+          customer_id: string;
+          id?: string;
+          kind: string;
+          note?: string | null;
+          started_at: string;
+          status: string;
+          transaction_id?: string | null;
+          updated_at?: string;
+          vested_through: string;
+          withdrawn_reason?: string | null;
+        };
+        Update: {
+          confirmed_at?: string | null;
+          created_at?: string;
+          customer_id?: string;
+          id?: string;
+          kind?: string;
+          note?: string | null;
+          started_at?: string;
+          status?: string;
+          transaction_id?: string | null;
+          updated_at?: string;
+          vested_through?: string;
+          withdrawn_reason?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'vested_entitlements_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['customer_id'];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      acquire_customer_lease: { Args: { p_customer_id: string; p_seconds: number }; Returns: string };
       claim_customer_jobs: {
         Args: { p_limit: number; p_lock_seconds: number };
         Returns: {
@@ -328,15 +596,68 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      create_feed_token: {
+        Args: { p_customer_id: string; p_name: string; p_prefix: string; p_token_hash: string };
+        Returns: string;
+      };
       customers_to_reconcile: { Args: Record<PropertyKey, never>; Returns: string[] };
+      feed_customer: {
+        Args: { p_token_hash: string };
+        Returns: {
+          access_status: string;
+          customer_id: string;
+          grace_ends_at: string;
+          vested_through: string;
+        }[];
+      };
       record_customer_event: {
         Args: { p_customer_id: string; p_email: string; p_occurred_at: string };
         Returns: boolean;
       };
       record_licence_failure: { Args: { p_customer_id: string; p_error: string }; Returns: boolean };
+      record_payment: {
+        Args: {
+          p_billing_frequency: number;
+          p_billing_interval: string;
+          p_currency_code: string;
+          p_customer_id: string;
+          p_discount: number;
+          p_occurred_at: string;
+          p_origin: string;
+          p_period_ends_at: string;
+          p_period_starts_at: string;
+          p_price_id: string;
+          p_subscription_id: string;
+          p_subtotal: number;
+          p_tax: number;
+          p_total: number;
+          p_transaction_id: string;
+        };
+        Returns: boolean;
+      };
+      record_payment_adjustment: {
+        Args: {
+          p_action: string;
+          p_adjustment_id: string;
+          p_created_at: string;
+          p_currency_code: string;
+          p_customer_id: string;
+          p_item_types: string[];
+          p_occurred_at: string;
+          p_status: string;
+          p_subscription_id: string;
+          p_subtotal: number;
+          p_transaction_id: string;
+          p_type: string;
+          p_updated_at: string;
+        };
+        Returns: boolean;
+      };
       record_subscription_event: {
         Args: {
+          p_current_period_ends_at: string;
           p_customer_id: string;
+          p_ended_at: string;
           p_occurred_at: string;
           p_price_id: string;
           p_product_id: string;
@@ -347,8 +668,12 @@ export type Database = {
         };
         Returns: boolean;
       };
-      release_customer_lease: { Args: { p_lease_id: string }; Returns: undefined };
-      set_customer_access: { Args: { p_customer_id: string; p_status: string }; Returns: string };
+      revoke_feed_token: { Args: { p_customer_id: string; p_token_id: string }; Returns: boolean };
+      set_customer_entitlement: {
+        Args: { p_customer_id: string; p_grants: Json; p_payment_statuses: Json; p_state: Json };
+        Returns: string;
+      };
+      vested_through: { Args: { p_customer_id: string }; Returns: string };
     };
     Enums: {
       [_ in never]: never;

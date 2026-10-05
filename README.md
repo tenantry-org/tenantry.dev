@@ -6,37 +6,42 @@ purchase → entitlement → access pipeline for **Tenantry Pro**.
 
 ## What it does
 
-- **Marketing + pricing** — landing page and Paddle-powered pricing for Tenantry Pro.
-- **Docs** (`/docs`) — full searchable documentation via [Fumadocs](https://fumadocs.dev), sourced
-  from the `tenantry-core` and `tenantry-pro` repos (see [Docs pipeline](#docs-pipeline)).
-- **Commercial backend** — Paddle webhooks drive Supabase entitlements, an ES256 licence issuer, and
-  GitHub provisioning (org/team membership = private package-feed access).
-- **Customer portal** (`/dashboard/pro`) — Access ("Connect GitHub" and the licence key), Install (setting up the
-  private NuGet feed) and Billing (the subscriptions, with invoices and the payment method in Paddle's portal).
+- The landing page, and pricing for Tenantry Pro through Paddle.
+- The docs at `/docs`, searchable, through [Fumadocs](https://fumadocs.dev), taken from the `tenantry-core` and
+  `tenantry-pro` repositories (see [Docs pipeline](#docs-pipeline)).
+- The commercial backend: Paddle's notifications record each customer's subscriptions and payments, from which the
+  site works out what they may use, issues their licence key, and serves Tenantry Pro's packages from its own NuGet
+  feed, the package feed.
+- The customer portal at `/dashboard/pro`: Access (the releases they may use, feed tokens and the licence key),
+  Install (restoring from the package feed) and Billing (the subscriptions, with invoices and the payment method in
+  Paddle's portal).
 
 ## Architecture
 
 ```
-Paddle (merchant of record) ──webhook──▶ /api/webhook ──▶ entitlements + licence + GitHub grant
+Paddle (merchant of record) ──webhook──▶ /api/webhook ──▶ subscriptions + payments ─▶ access, entitlement, licence
                                                               (Supabase, service role)
-customer ─▶ /dashboard/pro ─▶ Connect GitHub ─▶ github_links + team membership ─▶ private package feed
-cron ─▶ /api/reconcile ─▶ reconcile access vs entitlements
+customer ─▶ /dashboard/pro ─▶ feed tokens ─▶ dotnet restore ─▶ /feed/v3 ─▶ the releases their entitlement allows
+release workflow ─▶ PUT /feed/v3/package (publish key) ─▶ pro_releases, pro_packages + the storage bucket
+cron ─▶ /api/reconcile ─▶ recompute access and entitlement, retry what failed
 ```
 
-The package feed is GitHub Packages, reached through membership of a team in the customers' GitHub org. The
-subscription system has been built and tested with it, and the site and Pro's docs describe it. A private Tenantry
-feed replaces it before subscriptions go on sale, so that a lapsed subscriber can still restore the versions released
-while they subscribed.
+The package feed (`/feed/v3/index.json`, `src/server/feed`) serves an active or in-grace subscriber every release, a
+lapsed customer the vested releases, and a lapsed customer with nothing vested nothing. Customers authenticate with
+feed tokens they create on the Access page; the licence key is never a feed credential. GitHub is only a way to sign
+in.
 
 Key code is in `src/server`, in layers whose imports point only down this list (ESLint enforces it):
 
-- `billing/` — the rules and services: who is entitled, and until when (`access-policy.ts`); keeping a customer's
-  access, GitHub membership, licence and emails in line with their entitlements (`customer-access.ts`); applying
-  Paddle's notifications (`apply-paddle-event.ts`); linking a GitHub account (`sync-github-link.ts`); the reconcile
-  run; and the Pro pages' read models, one per page, each reading only what its page shows (`pro-pages.ts`).
-- `jobs/` — the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order, and
-  the per-customer leases.
-- `integrations/` — Paddle, GitHub team provisioning (a GitHub App), email (Resend) and the licence issuer.
+- `feed/` — Tenantry Pro's NuGet v3 feed (`/feed/v3/index.json`, routed by `src/app/feed/v3`): each customer's feed
+  tokens, the read resources filtered to the releases they may use, and publishing for the release workflow.
+  `scripts/feed-e2e.sh` runs a real `dotnet restore` against it.
+- `billing/` — the rules and services: what a customer may access now and owns for good, computed from their
+  subscriptions and payments (`entitlement-policy.ts`, with the Paddle behaviour it assumes in
+  `paddle-assumptions.ts`); storing that and keeping their licence and emails in line with it (`customer-access.ts`);
+  applying Paddle's notifications (`apply-paddle-event.ts`); the reconcile run; and the Pro pages' read models, one per page, each reading only what its page shows (`pro-pages.ts`).
+- `jobs/` — the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order.
+- `integrations/` — Paddle, email (Resend) and the licence issuer.
 - `db/` — `createUserClient` (the signed-in user's session; RLS applies) and `createServiceRoleClient` (bypasses
   RLS), and the only modules that query the database: the billing tables' store, the customer jobs and the
   dashboard's reads. The clients are typed by `src/lib/supabase/database.types.ts`, which is generated from the
@@ -45,14 +50,16 @@ Key code is in `src/server`, in layers whose imports point only down this list (
 
 Modules in `src/server` import `server-only` (except `db/update-session.ts`, which the proxy runs), so a client
 component that pulls one in fails the build. The services that change a customer's access (`customer-access.ts`,
-`reconcile-customer.ts`, `apply-paddle-event.ts`, `sync-github-link.ts`) take what they use from the layers below as
+`reconcile-customer.ts`, `apply-paddle-event.ts`) take what they use from the layers below as
 their last argument (`billing/deps.ts`), defaulting to the real modules, so their tests pass an in-memory billing store
 and fakes instead of replacing modules; the read models are tested against a fake Supabase client. `src/lib` holds
 helpers for both sides, and `src/test` the fakes the tests share.
 
-The database schema, with its RLS policies and functions, is one file,
+The database schema, with its RLS policies and functions, starts with
 `supabase/migrations/20261002120000_baseline.sql`; later changes are migrations after it. Their tests are in
-`supabase/tests/database/`.
+`supabase/tests/database/` (`supabase test db`, which also passes with `--linked` against a hosted database), those
+that need the local stack in `supabase/local-tests/` (`supabase test db supabase/local-tests`), and a migration that
+moves data is tested against rows of the schema before it in `supabase/migration-tests/` (`pnpm test:migrations`).
 
 ## Develop
 
@@ -74,8 +81,8 @@ compiler (`tsc6`), so the build type-checks with TypeScript 6 and `pnpm typechec
 Dependabot skips aliased packages, so these two are updated by hand. Once typescript-eslint supports TypeScript 7, drop
 the aliases: `typescript` becomes TypeScript 7 itself, and `@typescript/native` goes.
 
-The local Supabase stack (`supabase start`) runs from `supabase/config.toml`. Signing in with GitHub and Connect
-GitHub need a GitHub OAuth app whose callback URL is `http://127.0.0.1:54321/auth/v1/callback`: put its client id and
+The local Supabase stack (`supabase start`) runs from `supabase/config.toml`. Signing in with GitHub needs a GitHub
+OAuth app whose callback URL is `http://127.0.0.1:54321/auth/v1/callback`: put its client id and
 secret in `.env.local` (`SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID` and `SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET`), where
 the CLI reads them, and restart the stack.
 
@@ -83,6 +90,66 @@ After changing a migration, rebuild the local database from the migrations, as C
 not running, then `supabase db reset`, which discards its data), and run `pnpm db:types`. CI regenerates the types
 from the migrations and fails if the committed file differs, so generate them with the Supabase CLI version its
 database job pins.
+
+## Package feed: publishing
+
+Tenantry Pro's release workflow and `scripts/feed-publish.sh` publish packages with the endpoint below. This is the
+contract both rely on; change it here and in both clients together.
+
+`PUT /feed/v3/package`, which is what `dotnet nuget push --source <site>/feed/v3/index.json --api-key <key>` sends: the
+`.nupkg` as a multipart form file, with the publish key in the `X-NuGet-ApiKey` header. The deployment holds only the
+key's SHA-256 (`FEED_PUBLISH_KEY_SHA256`); without it every push is refused.
+
+| Answer | Meaning                                                                               | What a client does  |
+| ------ | ------------------------------------------------------------------------------------- | ------------------- |
+| 201    | Published. The package's release is recorded with its first package.                  | Carry on.           |
+| 409    | This id and version is already published with exactly these bytes (the same SHA-512). | Treat as published. |
+| 400    | Refused, with the reason as text (below).                                             | Fail.               |
+| 403    | No publish key, or the wrong one.                                                     | Fail.               |
+| 413    | Larger than 4 MB (a Vercel function takes a body of at most 4.5 MB).                  | Fail.               |
+
+`dotnet nuget push --skip-duplicate` and the script treat 409 as published, so re-running a release is safe. Every
+other refusal is 400, never 409, so that `--skip-duplicate` cannot hide it: an id that is not `Tenantry.Pro` or
+`Tenantry.Pro.*`, or differs only in case from a published one; a version that is not `major.minor.patch`; different
+bytes under a version already published (a published version never changes: publish a new one); a
+`tenantry-release.json` date outside the rules below, or a security flag that disagrees with its release; a security
+patch whose `X.Y.0` is not published; a package that cannot be read.
+
+A package may carry `tenantry-release.json` at its root: `{ "releasedAt": "<ISO 8601>", "security": <bool> }`, which
+Pro's release workflow writes from the signed tag (its date, and `Security:` in its message). `releasedAt` may be at most
+3 days before the push and 5 minutes after it, and not before an earlier version's date; without it the release is dated
+when its first package is published. A security patch is dated as its `X.Y.0` for vesting, so customers whose vested
+releases include `X.Y.0` can restore the fix. The first package of a release fixes its date and flag; later packages of
+the same release are checked only for the flag.
+
+`GET /feed/v3/package` with the same header lists what the feed holds: each release's version, dates and security flag,
+with its packages' ids, sizes and SHA-512s. Feed tokens cannot read it.
+
+The publish key is a random string, generated once per environment; only its hash goes into the deployment:
+
+```bash
+key="$(openssl rand -base64 48 | tr -d '\n/+=')"   # store it in the password manager and the release workflow's secret
+printf '%s' "$key" | shasum -a 256 | cut -d' ' -f1  # FEED_PUBLISH_KEY_SHA256 for that environment
+```
+
+`FEED_PUBLISH_KEY="$key" scripts/feed-publish.sh push https://sandbox.tenantry.dev ./artifacts` pushes a folder of
+packages oldest version first, and `scripts/feed-publish.sh list https://sandbox.tenantry.dev` prints the listing.
+
+## Package feed: tokens, access and testing
+
+A customer creates and revokes feed tokens on the Access page (`src/app/dashboard/pro/actions.ts`); a token is shown
+once, only its SHA-256 is stored, and a customer holds at most 10. The feed, the Access page and the Billing page take
+what a customer may use from the same rules (`entitlement-policy.ts`: `currentAccess`, `canRestore`, `mayUseRelease`),
+so a grace period that has ended stops the feed serving every release at the moment the pages stop saying it does.
+Unauthenticated and bad-credential requests are limited by a Vercel Firewall rate limit rule on `/feed/v3`, set up in
+the dashboard (it is configuration, not code); a credential that is not shaped like a feed token is refused without a
+database query.
+
+`scripts/feed-e2e.sh` (`pnpm test:feed-e2e`) runs the whole journey against a local stack: publishing, creating tokens
+through the Access page's actions, restoring as a subscriber, a lapsed customer with vested releases and one without,
+revoking a token, and vesting through `scripts/rehearse.mjs` and reconcile. `scripts/rehearse.mjs` produces, in the
+sandbox only, the states that take a year to reach (vested, an annual term, a refund, a chargeback, an operator grant)
+and undoes them.
 
 ## Docs pipeline
 
@@ -117,11 +184,8 @@ Pro's newest published releases (their patches can differ, such as `{ core: 'v0.
 every minor from that one is shown, and each product's changelog starts at its own release sold.
 
 The same run reads what the site says about the newest release from the release itself and writes it to
-[`newest-release.json`](newest-release.json): the .NET versions Core's package targets, the number of sample folders,
-and the setup snippets of Pro's installation guide, which the Pro access page shows with the environment's GitHub org.
-The snippets must still hold the feed, the package patterns, the environment variables and the licence key's setting
-that the portal's own text names (`scripts/install-snippets.mjs`). The home, Pro and comparison pages and the portal
-take these from the file, and the version badge and the docs from `docs-versions.json`. When either file changes, the
+[`newest-release.json`](newest-release.json): the .NET versions Core's package targets and the number of sample
+folders. The home, Pro and comparison pages take these from the file, and the version badge and the docs from `docs-versions.json`. When either file changes, the
 workflow commits both to master and staging and runs the test and audit workflows on the commit, since its own pushes
 start none. Production deploys the commit once they pass. A run that finds nothing new but sees its own commit at
 master's head runs those workflows if they never ran on it, and fast-forwards staging to it; staging with commits master
@@ -130,12 +194,15 @@ few minutes the checks and the build take. Run the workflow from the Actions tab
 
 A release whose tag has no `docs` folder, or whose `CHANGELOG.md` has no section for it, is left out, and its line keeps
 the release before it. So is a release of the newest line that does not give the facts above: a nuspec without target
-frameworks, no sample folder, or an installation guide without those snippets. The run commits what it can publish, then
+frameworks, or no sample folder. The run commits what it can publish, then
 fails, with the releases left out and why in its summary, and fails again each hour until the release is fixed or
 replaced. A run that cannot reach NuGet or read a file from a tag publishes nothing. A release build fails before
-deploying, and production keeps the last deployment, if a listed tag cannot be read or its docs are incomplete. The code
-samples on the home and Pro pages are not release data: when a minor release changes the API they show, they are updated
-by hand.
+deploying, and production keeps the last deployment, if a listed tag cannot be read or its docs are incomplete. Two things
+on the site are not release data. The code samples on the home and Pro pages are updated by hand when a minor release
+changes the API they show. The instructions for restoring from the package feed (the Install page and the emails) are
+written by the site, which serves the feed, with its own address (`src/lib/install-snippets.ts`); Pro's installation
+guide uses the same source key and variable (`tenantry-pro`, `TENANTRY_FEED_TOKEN`), so the two agree whatever a
+release's guide says.
 
 If a release has not reached the site after an hour, check in this order: NuGet lists the Core version
 (`https://www.nuget.org/packages/Tenantry.Core`), or tenantry-pro-docs has the Pro tag (Pro's publish-docs job may need
@@ -182,10 +249,11 @@ that dev.to organisation. Run it from the Actions tab to retry.
 
 ## Configuration
 
-See [`.env.example`](.env.example) for the full list of environment variables (Supabase, Paddle,
-GitHub App, licensing, and email). Nothing has a default: each environment sets its own. Server code reads them
+See [`.env.example`](.env.example) for the full list of environment variables (Supabase, Paddle, licensing, the
+package feed and email). Nothing has a default: each environment sets its own. Server code reads them
 through `serverConfig()` (`src/server/config/server-config.ts`), which the server validates when it starts, and the
 browser through `publicConfig()` (`src/lib/public-config.ts`): the `NEXT_PUBLIC_` variables it uses, which are
 compiled into the build, so the build checks them too and a change needs a redeploy. (`NEXT_PUBLIC_SITE_URL` is read
 by the server only.) ESLint keeps `process.env` out of other code.
-Operational runbooks (provisioning, key rotation, reconcile) are maintained privately by the maintainers.
+Operational runbooks (setting up each environment, key rotation, reconcile) are maintained privately by the
+maintainers.

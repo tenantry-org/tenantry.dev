@@ -6,7 +6,7 @@ import { serverConfig } from '@/server/config/server-config';
 // CRON_SECRET env var is set — so this works out of the box. Manual/external triggers can POST with the
 // same bearer secret. Reconciling runs as customer jobs (see reconcile-entitlements.ts), so it also retries
 // any job that failed. It reads the request's headers, so it is never prerendered.
-export const maxDuration = 60; // reconcile makes per-customer GitHub API calls; give it headroom
+export const maxDuration = 60; // reconcile asks Paddle for each customer's payments; give it headroom
 
 function authorized(request: Request): boolean {
   return request.headers.get('authorization') === `Bearer ${serverConfig().cronSecret}`;

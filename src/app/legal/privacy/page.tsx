@@ -5,7 +5,7 @@ export const metadata = { title: 'Privacy Policy | Tenantry' };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" lastUpdated="2026-09-29">
+    <LegalPage title="Privacy Policy" lastUpdated="2026-10-04">
       <p>
         This Privacy Policy explains how {LegalEntity.name} (&quot;Tenantry&quot;, &quot;we&quot;) collects, uses, and
         protects personal data when you use our website and Services.
@@ -17,15 +17,19 @@ export default function PrivacyPage() {
           <strong>Account data:</strong> email address and authentication identifiers (via Supabase Auth).
         </li>
         <li>
-          <strong>GitHub identity:</strong> when you connect GitHub, your GitHub username and numeric id, used solely to
-          give you access to the private package feed.
+          <strong>GitHub identity:</strong> when you sign in with GitHub, the identifiers GitHub passes to Supabase
+          Auth, used only to sign you in.
         </li>
         <li>
-          <strong>Billing data:</strong> processed by Paddle.com as merchant of record. We receive subscription status
-          and customer identifiers, not payment-card details.
+          <strong>Billing data:</strong> processed by Paddle.com as merchant of record. We receive subscription status,
+          customer identifiers and, for each Tenantry Pro payment, its billing period, amounts, currency and any
+          refunds, credits or chargebacks, not payment-card details.
         </li>
         <li>
-          <strong>Entitlement records:</strong> subscription status and the licence keys issued to your account.
+          <strong>Entitlement records:</strong> subscription status, the licence keys issued to your account, and the
+          vesting worked out from your payments (each qualifying period and annual term, and the date it vests through).
+          For each feed token: the name you give it, its first few characters, when it was created and revoked, and when
+          it was last used, recorded at most once an hour. We store a hash of each feed token, not the token itself.
         </li>
         <li>
           <strong>Usage and performance data:</strong> pages visited, referring site, country, browser, device type and
@@ -38,16 +42,19 @@ export default function PrivacyPage() {
       <ul>
         <li>To provide the Services: package-feed access and licence keys.</li>
         <li>To manage subscriptions and respond to support requests.</li>
-        <li>To send service emails: when your access starts and when it ends. Paddle sends receipts and invoices.</li>
+        <li>
+          To send service emails: when your access starts and when it ends, when a feed token is created on your
+          account, and when releases become vested or your vested releases change. Paddle sends receipts and invoices.
+        </li>
         <li>To understand, in aggregate, how the website is used and how fast it is, so we can improve it.</li>
       </ul>
 
       <h2>3. Processors</h2>
       <p>
         We share data with sub-processors that operate the Services on our behalf, each under its own terms: Paddle
-        (billing, as merchant of record), Supabase (authentication and database), GitHub (package-feed access), Vercel
-        (hosting, Web Analytics and Speed Insights) and Resend (email). Some of them process data outside the UK and the
-        EEA, under appropriate safeguards such as standard contractual clauses.
+        (billing, as merchant of record), Supabase (authentication and database), GitHub (sign-in, if you use it),
+        Vercel (hosting, Web Analytics and Speed Insights) and Resend (email). Some of them process data outside the UK
+        and the EEA, under appropriate safeguards such as standard contractual clauses.
       </p>
 
       <h2>4. Cookies and analytics</h2>

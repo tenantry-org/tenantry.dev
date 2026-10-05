@@ -98,9 +98,9 @@ refresh_token_reuse_interval = 10
 enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
-# Allow/disallow manual linking of accounts: Connect GitHub and switching the GitHub account (the Pro access page)
-# link a GitHub identity to the login.
-enable_manual_linking = true
+# Allow/disallow manual linking of accounts. Nothing links an identity to a login any more (GitHub is only a way to
+# sign in), so it is off.
+enable_manual_linking = false
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
@@ -183,7 +183,7 @@ verify_enabled = true
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `slack`, `spotify`, `workos`, `zoom`.
 
-# Signing in with GitHub, and linking it on the Pro access page. Locally it needs a GitHub OAuth app whose
+# Signing in with GitHub. Locally it needs a GitHub OAuth app whose
 # callback URL is http://127.0.0.1:54321/auth/v1/callback; the CLI reads its id and secret from the environment or
 # .env.local (see the README).
 [auth.external.github]

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall, FakeTable } from '@/test/fake-supabase';
 import { testServerConfig } from '@/test/server-config';
-import { getAccessView, getBillingView, getInstallView } from './pro-pages';
+import { getAccessView, getBillingView, getInstallView, readEntitlement } from './pro-pages';
 
 const state = vi.hoisted(() => ({
   user: null as Record<string, unknown> | null,
@@ -19,9 +19,21 @@ const { paddle } = testServerConfig();
 
 const BUYER = { email: 'buyer@example.com', email_confirmed_at: '2026-09-01T00:00:00Z' };
 
-const access = (status: string, githubState = 'active', githubInvitedAt: string | null = null) => ({
-  single: { status, github_state: githubState, github_invited_at: githubInvitedAt },
+/** active_subscriptions as stored: access, the grace end in grace, and the current qualifying period. */
+const stored = (
+  status: string,
+  extra: { grace_ends_at?: string; months_paid?: number; vests_at?: string; conditional_through?: string } = {},
+) => ({
+  single: {
+    access_status: status,
+    grace_ends_at: null,
+    months_paid: 0,
+    vests_at: null,
+    conditional_through: null,
+    ...extra,
+  },
 });
+const vested = (through: string | null) => ({ single: through ? { vested_through: through } : null });
 
 // The tables a read model read, besides the customer lookup.
 const tablesRead = () => new Set(state.calls.map(({ table }) => table).filter((table) => table !== 'customers'));
@@ -33,9 +45,20 @@ beforeEach(() => {
   state.calls.length = 0;
   state.tables = {
     customers: { single: { customer_id: 'ctm_1' } },
-    customer_access: access('active'),
+    active_subscriptions: stored('active', { months_paid: 3, vests_at: '2027-07-01T00:00:00Z' }),
+    vested_entitlements: vested(null),
+    feed_tokens: {
+      list: [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          name: 'CI',
+          prefix: 'tpf_ab12',
+          created_at: '2026-10-01T09:00:00Z',
+          last_used_at: null,
+        },
+      ],
+    },
     licences: { single: { jwt: 'licence.key' } },
-    github_links: { single: { github_login: 'octocat' } },
   };
 });
 
@@ -51,114 +74,166 @@ describe.each([
   it('says no purchase was made with its email', async () => {
     state.tables.customers = {};
 
-    await expect(view()).resolves.toEqual({
-      noSubscription: true,
-      customer: false,
-      accountEmail: 'buyer@example.com',
-    });
+    await expect(view()).resolves.toEqual({ noSubscription: true, customer: false, accountEmail: 'buyer@example.com' });
     expect(tablesRead()).toEqual(new Set());
   });
 });
 
+describe('readEntitlement', () => {
+  it('gives an active customer every release, with the progress of their qualifying period', async () => {
+    await expect(readEntitlement('ctm_1')).resolves.toEqual({
+      access: 'active',
+      graceEndsAt: null,
+      canRestore: true,
+      vestedThrough: null,
+      qualifying: { monthsPaid: 3, vestsAt: '2027-07-01T00:00:00.000Z', reached: false },
+      conditionalThrough: null,
+    });
+  });
+
+  it('says whether the qualifying period has reached 12 months by now, not only whether 12 months are paid', async () => {
+    state.tables.active_subscriptions = stored('active', { months_paid: 12, vests_at: '2027-07-01T00:00:00Z' });
+
+    await expect(readEntitlement('ctm_1', new Date('2027-06-15T00:00:00Z'))).resolves.toMatchObject({
+      qualifying: { monthsPaid: 12, reached: false },
+    });
+    await expect(readEntitlement('ctm_1', new Date('2027-07-01T00:00:00Z'))).resolves.toMatchObject({
+      qualifying: { reached: true },
+    });
+  });
+
+  it('says when grace ends, and treats a grace period that has ended as lapsed, as the package feed does', async () => {
+    state.tables.active_subscriptions = stored('grace', { grace_ends_at: '2026-11-04T00:00:00Z' });
+    await expect(readEntitlement('ctm_1')).resolves.toMatchObject({
+      access: 'grace',
+      graceEndsAt: '2026-11-04T00:00:00.000Z',
+      canRestore: true,
+    });
+
+    await expect(readEntitlement('ctm_1', new Date('2026-11-04T01:00:00Z'))).resolves.toMatchObject({
+      access: 'lapsed',
+      graceEndsAt: null,
+      canRestore: false,
+    });
+  });
+
+  it('gives a lapsed customer the vested-through date, any operator grant included, and no progress', async () => {
+    state.tables.active_subscriptions = stored('lapsed', { conditional_through: '2027-01-01T00:00:00Z' });
+    state.tables.vested_entitlements = vested('2027-12-31T00:00:00Z');
+
+    await expect(readEntitlement('ctm_1')).resolves.toEqual({
+      access: 'lapsed',
+      graceEndsAt: null,
+      canRestore: true,
+      vestedThrough: '2027-12-31T00:00:00.000Z',
+      qualifying: null,
+      conditionalThrough: null,
+    });
+    expect(state.calls).toContainEqual({ table: 'vested_entitlements', method: 'eq', args: ['status', 'confirmed'] });
+    expect(state.calls).not.toContainEqual(
+      expect.objectContaining({ table: 'vested_entitlements', args: ['kind', expect.anything()] }),
+    );
+  });
+
+  it('gives a lapsed customer with nothing vested, or never recorded, nothing to restore', async () => {
+    state.tables.active_subscriptions = stored('lapsed');
+    await expect(readEntitlement('ctm_1')).resolves.toMatchObject({ access: 'lapsed', canRestore: false });
+
+    state.tables.active_subscriptions = {};
+    await expect(readEntitlement('ctm_1')).resolves.toMatchObject({ access: 'lapsed', canRestore: false });
+  });
+
+  it("shows an annual term's conditional grant while the customer has access", async () => {
+    state.tables.active_subscriptions = stored('active', {
+      months_paid: 0,
+      vests_at: '2027-10-01T00:00:00Z',
+      conditional_through: '2027-10-01T00:00:00Z',
+    });
+
+    await expect(readEntitlement('ctm_1')).resolves.toMatchObject({ conditionalThrough: '2027-10-01T00:00:00.000Z' });
+  });
+});
+
 describe('getAccessView', () => {
-  it('shows a customer with Pro their GitHub connection and licence key, and reads nothing else', async () => {
+  it('shows any customer their entitlement, live feed tokens and licence key, and reads nothing else', async () => {
     await expect(getAccessView()).resolves.toEqual({
       noSubscription: false,
-      github: { login: 'octocat', state: 'active', invitationExpiresAt: null },
+      entitlement: expect.objectContaining({ access: 'active' }),
+      tokens: [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          name: 'CI',
+          prefix: 'tpf_ab12',
+          createdAt: '2026-10-01T09:00:00.000Z',
+          lastUsedAt: null,
+        },
+      ],
       licenceKey: 'licence.key',
     });
-    expect(tablesRead()).toEqual(new Set(['customer_access', 'licences', 'github_links']));
+    expect(tablesRead()).toEqual(new Set(['active_subscriptions', 'vested_entitlements', 'feed_tokens', 'licences']));
   });
 
-  it('says when a pending org invitation lapses', async () => {
-    state.tables.customer_access = access('active', 'invited', '2026-10-18T09:00:00Z');
+  it('reads the feed tokens that are not revoked, never their hashes', async () => {
+    await getAccessView();
+
+    const tokenCalls = state.calls.filter((call) => call.table === 'feed_tokens');
+    expect(tokenCalls).toContainEqual({ table: 'feed_tokens', method: 'is', args: ['revoked_at', null] });
+    expect(tokenCalls).toContainEqual({ table: 'feed_tokens', method: 'eq', args: ['customer_id', 'ctm_1'] });
+    expect(String(tokenCalls.find((call) => call.method === 'select')?.args[0])).not.toContain('token_hash');
+  });
+
+  it('still shows a former customer their key and tokens', async () => {
+    state.tables.active_subscriptions = stored('lapsed');
 
     await expect(getAccessView()).resolves.toMatchObject({
-      github: { state: 'invited', invitationExpiresAt: '2026-10-25T09:00:00.000Z' },
+      noSubscription: false,
+      entitlement: { access: 'lapsed', canRestore: false },
+      licenceKey: 'licence.key',
+      tokens: [expect.objectContaining({ name: 'CI' })],
     });
-  });
-
-  it('shows a customer in grace their access', async () => {
-    state.tables.customer_access = access('grace');
-
-    await expect(getAccessView()).resolves.toMatchObject({ noSubscription: false });
-  });
-
-  it('shows a former customer no access, and points them to billing', async () => {
-    state.tables.customer_access = access('revoked');
-
-    await expect(getAccessView()).resolves.toEqual({
-      noSubscription: true,
-      customer: true,
-      accountEmail: 'buyer@example.com',
-    });
-  });
-
-  it('shows no access to a customer whose access was never recorded', async () => {
-    state.tables.customer_access = {};
-
-    await expect(getAccessView()).resolves.toMatchObject({ noSubscription: true, customer: true });
   });
 });
 
 describe('getInstallView', () => {
-  it('names the GitHub account to create the token from, and reads no licence', async () => {
-    await expect(getInstallView()).resolves.toEqual({ noSubscription: false, githubLogin: 'octocat' });
-    expect(tablesRead()).toEqual(new Set(['customer_access', 'github_links']));
+  it('shows the install steps to a customer the package feed serves, and reads no licence or tokens', async () => {
+    await expect(getInstallView()).resolves.toMatchObject({ noSubscription: false });
+    expect(tablesRead()).toEqual(new Set(['active_subscriptions', 'vested_entitlements']));
+
+    state.tables.active_subscriptions = stored('lapsed');
+    state.tables.vested_entitlements = vested('2027-12-31T00:00:00Z');
+    await expect(getInstallView()).resolves.toMatchObject({ noSubscription: false });
   });
 
-  it('shows a former customer no install steps', async () => {
-    state.tables.customer_access = access('revoked');
+  it('shows a former customer with nothing vested no install steps', async () => {
+    state.tables.active_subscriptions = stored('lapsed');
 
     await expect(getInstallView()).resolves.toMatchObject({ noSubscription: true, customer: true });
   });
 });
 
 describe('getBillingView', () => {
-  beforeEach(() => {
-    state.tables.customer_access = access('grace');
-    // Two past-due subscriptions: access lasts until the later one's grace ends.
-    state.tables.entitlements = {
-      list: [
-        { subscription_id: 'sub_a', status: 'grace', grace_started_at: '2026-10-01T00:00:00Z' },
-        { subscription_id: 'sub_b', status: 'grace', grace_started_at: '2026-10-05T00:00:00Z' },
-      ],
-    };
-  });
+  it('reads no licence or feed tokens, and gives the same entitlement as the Access page', async () => {
+    state.tables.subscriptions = { list: [] };
+    const billing = await getBillingView(paddle);
+    expect(tablesRead()).toEqual(new Set(['active_subscriptions', 'vested_entitlements', 'subscriptions']));
+    const access = await getAccessView();
 
-  it('reads no licence or GitHub link', async () => {
-    await getBillingView(paddle);
-
-    expect(tablesRead()).toEqual(new Set(['customer_access', 'entitlements', 'subscriptions']));
-  });
-
-  it('says when grace ends for a customer whose subscriptions are all past due', async () => {
-    await expect(getBillingView(paddle)).resolves.toMatchObject({
-      access: { status: 'grace', grace: { endsAt: '2026-11-04T00:00:00.000Z', ended: false } },
-    });
-  });
-
-  it('says when grace has ended but access has not been removed yet', async () => {
-    vi.setSystemTime(new Date('2026-11-04T01:00:00Z'));
-
-    await expect(getBillingView(paddle)).resolves.toMatchObject({ access: { grace: { ended: true } } });
-  });
-
-  it('has no grace for an active customer', async () => {
-    state.tables.customer_access = access('active');
-
-    await expect(getBillingView(paddle)).resolves.toMatchObject({ access: { status: 'active', grace: null } });
+    expect(billing).toMatchObject({ entitlement: (access as { entitlement: unknown }).entitlement });
   });
 
   it('shows billing to a former customer, and to one whose access was never recorded', async () => {
-    state.tables.customer_access = access('revoked');
+    state.tables.subscriptions = { list: [] };
+    state.tables.active_subscriptions = stored('lapsed');
     await expect(getBillingView(paddle)).resolves.toMatchObject({
       noSubscription: false,
-      access: { status: 'revoked', grace: null },
+      entitlement: { access: 'lapsed' },
     });
 
-    state.tables.customer_access = {};
-    await expect(getBillingView(paddle)).resolves.toMatchObject({ noSubscription: false, access: null });
+    state.tables.active_subscriptions = {};
+    await expect(getBillingView(paddle)).resolves.toMatchObject({
+      noSubscription: false,
+      entitlement: { access: 'lapsed' },
+    });
   });
 
   describe('subscriptions', () => {
@@ -169,16 +244,8 @@ describe('getBillingView', () => {
       product_id: 'pro_01',
       scheduled_change_at: null,
       scheduled_change_action: null,
+      current_period_ends_at: { sub_renews: '2026-11-01T00:00:00Z', sub_ends: '2026-11-15T00:00:00Z' }[id] ?? null,
       ...extra,
-    });
-
-    beforeEach(() => {
-      state.tables.entitlements = {
-        list: [
-          { subscription_id: 'sub_renews', status: 'active', current_period_ends_at: '2026-11-01T00:00:00Z' },
-          { subscription_id: 'sub_ends', status: 'active', current_period_ends_at: '2026-11-15T00:00:00Z' },
-        ],
-      };
     });
 
     it('says when each Pro subscription renews, or when a scheduled cancellation ends it', async () => {

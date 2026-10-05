@@ -73,8 +73,10 @@ async function handleJob(job: Job, handlers: JobHandlers): Promise<keyof DrainRe
       await alertOperator(
         `Job ${job.id} failed for good`,
         `Job ${job.id} (${describe(job)}, customer ${job.customerId ?? 'none'}) failed on every attempt and will ` +
-          `not be retried: ${errorMessage(error)}. Its effect is missing until someone handles it; the next ` +
-          'reconcile corrects what it can for this customer.',
+          `not be retried: ${errorMessage(error)}. Its effect is missing until someone handles it. The next ` +
+          "reconcile recomputes the customer's access and entitlement from what is recorded, and records a completed " +
+          'Pro payment Paddle lists that is missing; it does not recover a lost customer, subscription or adjustment ' +
+          'event, which must be replayed from Paddle.',
       );
     }
 
@@ -91,9 +93,6 @@ async function runJob(job: Job, handlers: JobHandlers): Promise<void> {
       return;
     case 'reconcile':
       console.info(`Reconcile ${job.customerId}:`, JSON.stringify(await handlers.reconcileCustomer(job.customerId)));
-      return;
-    case 'lease':
-      // A lease whose holder died without releasing it (customer-lease.ts), claimed once it expired: nothing to do.
       return;
     default:
       return unknownKind(job);

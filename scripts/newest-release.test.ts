@@ -22,8 +22,9 @@ describe('newest release', () => {
   it('gives the facts of a release, or the reason it cannot', () => {
     const nuspec = '<group targetFramework="net8.0" /><group targetFramework="net10.0" />';
     expect(releaseFacts('core', ['Tenantry.Samples.Aot'], nuspec)).toEqual({ dotnet: ['8', '10'], samples: 1 });
-    expect(() => releaseFacts('pro', ['Tenantry.Pro.Samples.AuditLogging'], null)).toThrow(
-      'it has no docs/installation.md',
+    expect(releaseFacts('pro', ['Tenantry.Pro.Samples.AuditLogging'])).toEqual({ samples: 1 });
+    expect(() => releaseFacts('pro', ['Tenantry.Samples.Aot'])).toThrow(
+      'samples/ has no Tenantry.Pro.Samples.* folder.',
     );
   });
 });

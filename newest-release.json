@@ -7,11 +7,5 @@
   "samples": {
     "core": 6,
     "pro": 12
-  },
-  "proInstallation": {
-    "nugetConfig": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<configuration>\n  <packageSources>\n    <clear />\n    <add key=\"nuget.org\" value=\"https://api.nuget.org/v3/index.json\" protocolVersion=\"3\" />\n    <add key=\"tenantry-pro\" value=\"https://nuget.pkg.github.com/tenantry-org/index.json\" />\n  </packageSources>\n  <packageSourceMapping>\n    <packageSource key=\"nuget.org\">\n      <package pattern=\"*\" />\n    </packageSource>\n    <packageSource key=\"tenantry-pro\">\n      <package pattern=\"Tenantry.Pro\" />\n      <package pattern=\"Tenantry.Pro.*\" />\n    </packageSource>\n  </packageSourceMapping>\n  <packageSourceCredentials>\n    <tenantry-pro>\n      <add key=\"Username\" value=\"%TENANTRY_GITHUB_USERNAME%\" />\n      <add key=\"ClearTextPassword\" value=\"%TENANTRY_GITHUB_PAT%\" />\n    </tenantry-pro>\n  </packageSourceCredentials>\n</configuration>\n",
-    "feedCredentials": "export TENANTRY_GITHUB_USERNAME=your-github-username\nexport TENANTRY_GITHUB_PAT=ghp_your_token",
-    "licenceUserSecret": "dotnet user-secrets init\ndotnet user-secrets set \"Tenantry:License\" \"<your licence key>\"",
-    "ciWorkflow": "jobs:\n  build:\n    runs-on: ubuntu-latest\n    env:\n      TENANTRY_GITHUB_USERNAME: ${{ vars.TENANTRY_GITHUB_USERNAME }}\n      TENANTRY_GITHUB_PAT: ${{ secrets.TENANTRY_GITHUB_PAT }}\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-dotnet@v4\n        with:\n          dotnet-version: 10.0.x\n      - run: dotnet restore\n      - run: dotnet build --no-restore\n      - run: dotnet test --no-build\n        env:\n          Tenantry__License: ${{ secrets.TENANTRY_LICENSE }}"
   }
 }

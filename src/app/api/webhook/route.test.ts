@@ -38,7 +38,7 @@ describe('POST /api/webhook', () => {
   });
 
   it('stores the event and answers before processing it, however slow processing is', async () => {
-    mocks.processJobs.mockReturnValue(new Promise(() => {})); // e.g. a GitHub call that never returns
+    mocks.processJobs.mockReturnValue(new Promise(() => {})); // e.g. a Paddle call that never returns
 
     const response = await POST(delivery());
 

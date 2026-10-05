@@ -2,14 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall, FakeTable } from '@/test/fake-supabase';
 import {
   customersToReconcile,
-  findCustomerIdByEmail,
-  getGithubAccount,
-  getGithubAccountHolder,
-  linkGithubAccount,
+  listGrants,
+  listPaymentAdjustments,
+  listPayments,
+  listSubscriptions,
   recordCustomerEvent,
+  recordPayment,
+  recordPaymentAdjustment,
   recordSubscriptionEvent,
-  resetGithubState,
-  setGithubState,
+  saveCustomerState,
 } from './billing-store';
 
 // The queries and function calls the store makes, against a fake client. The billing services are tested against the
@@ -29,6 +30,9 @@ vi.mock('@/server/db/service-role-client', async () => {
       fakeSupabase(state.tables, state.calls, {
         record_customer_event: () => rpcResult(state.applied),
         record_subscription_event: () => rpcResult(state.applied),
+        record_payment: () => rpcResult(state.applied),
+        record_payment_adjustment: () => rpcResult(state.applied),
+        set_customer_entitlement: () => rpcResult('lapsed'),
         customers_to_reconcile: () => rpcResult(state.customers),
       }),
   };
@@ -60,6 +64,8 @@ describe('Paddle events', () => {
         productId: 'pro_1',
         scheduledChangeAt: '2026-10-01T00:00:00Z',
         scheduledChangeAction: 'cancel',
+        currentPeriodEndsAt: null,
+        endedAt: null,
         occurredAt: '2026-09-28T11:00:00Z',
       }),
     ).resolves.toBe(true);
@@ -72,6 +78,8 @@ describe('Paddle events', () => {
       p_product_id: 'pro_1',
       p_scheduled_change_at: '2026-10-01T00:00:00Z',
       p_scheduled_change_action: 'cancel',
+      p_current_period_ends_at: null,
+      p_ended_at: null,
       p_occurred_at: '2026-09-28T11:00:00Z',
     });
   });
@@ -88,6 +96,8 @@ describe('Paddle events', () => {
         productId: 'pro_1',
         scheduledChangeAt: null,
         scheduledChangeAction: null,
+        currentPeriodEndsAt: null,
+        endedAt: null,
         occurredAt: '2026-09-28T11:00:00Z',
       }),
     ).resolves.toBe(false);
@@ -125,6 +135,8 @@ describe('Paddle events', () => {
         productId: 'pro_1',
         scheduledChangeAt: null,
         scheduledChangeAction: null,
+        currentPeriodEndsAt: null,
+        endedAt: null,
         occurredAt: '2026-09-28T11:00:00Z',
       }),
     ).rejects.toMatchObject({ code: '23503' });
@@ -137,15 +149,6 @@ describe('Paddle events', () => {
 });
 
 describe('customers', () => {
-  it('finds a customer by email, or none', async () => {
-    state.tables = { customers: { single: { customer_id: 'ctm_1' } } };
-    await expect(findCustomerIdByEmail('buyer@example.com')).resolves.toBe('ctm_1');
-    expect(state.calls).toContainEqual({ table: 'customers', method: 'eq', args: ['email', 'buyer@example.com'] });
-
-    state.tables = {};
-    await expect(findCustomerIdByEmail('nobody@example.com')).resolves.toBeNull();
-  });
-
   // One function call returns every customer to reconcile: separate table queries were each cut off at the API's
   // row limit (max_rows, 1000).
   it('reads every customer to reconcile in one call, beyond the API row limit', async () => {
@@ -156,74 +159,261 @@ describe('customers', () => {
   });
 });
 
-describe('GitHub links', () => {
-  it("reads the customer's linked account, and who holds an account", async () => {
-    state.tables = {
-      github_links: {
-        single: (filters: Record<string, unknown>) =>
-          'github_id' in filters ? { customer_id: 'ctm_2' } : { github_id: 42, github_login: 'octocat' },
-      },
-    };
+describe('the payment ledger', () => {
+  it('records a payment with its period and amounts, and says whether it was applied', async () => {
+    await expect(
+      recordPayment({
+        transactionId: 'txn_1',
+        customerId: 'ctm_1',
+        subscriptionId: 'sub_1',
+        origin: 'subscription_recurring',
+        priceId: 'pri_1',
+        billingInterval: 'month',
+        billingFrequency: 1,
+        periodStartsAt: '2027-01-01T00:00:00Z',
+        periodEndsAt: '2027-02-01T00:00:00Z',
+        subtotal: 3900,
+        discount: 0,
+        total: 4680,
+        tax: 780,
+        currencyCode: 'GBP',
+        occurredAt: '2027-01-01T00:05:00Z',
+      }),
+    ).resolves.toBe(true);
 
-    await expect(getGithubAccount('ctm_1')).resolves.toEqual({ id: 42, login: 'octocat' });
-    await expect(getGithubAccountHolder(42)).resolves.toBe('ctm_2');
-  });
-
-  it("links an account in place of the customer's previous one", async () => {
-    await expect(linkGithubAccount('ctm_1', { id: 42, login: 'octocat' })).resolves.toBe(true);
-
-    expect(state.calls).toContainEqual({
-      table: 'github_links',
-      method: 'upsert',
-      args: [{ customer_id: 'ctm_1', github_login: 'octocat', github_id: 42 }, { onConflict: 'customer_id' }],
+    expect(rpcArgs('record_payment')).toEqual({
+      p_transaction_id: 'txn_1',
+      p_customer_id: 'ctm_1',
+      p_subscription_id: 'sub_1',
+      p_origin: 'subscription_recurring',
+      p_price_id: 'pri_1',
+      p_billing_interval: 'month',
+      p_billing_frequency: 1,
+      p_period_starts_at: '2027-01-01T00:00:00Z',
+      p_period_ends_at: '2027-02-01T00:00:00Z',
+      p_subtotal: 3900,
+      p_discount: 0,
+      p_total: 4680,
+      p_currency_code: 'GBP',
+      p_tax: 780,
+      p_occurred_at: '2027-01-01T00:05:00Z',
     });
   });
 
-  it('refuses an account linked to another customer (unique github_id), and throws on other errors', async () => {
-    state.tables = { github_links: { writeError: { code: '23505', message: 'duplicate key value' } } };
-    await expect(linkGithubAccount('ctm_1', { id: 42, login: 'octocat' })).resolves.toBe(false);
+  it('records an adjustment with its item types and Paddle times, and fails as the database does', async () => {
+    const adjustment = {
+      adjustmentId: 'adj_1',
+      transactionId: 'txn_1',
+      customerId: 'ctm_1',
+      subscriptionId: null,
+      action: 'refund',
+      type: 'partial',
+      itemTypes: ['tax'],
+      status: 'approved',
+      amount: 0,
+      currencyCode: 'GBP',
+      createdAt: '2027-01-02T00:00:00Z',
+      updatedAt: '2027-01-03T00:00:00Z',
+      occurredAt: '2027-01-03T00:00:01Z',
+    };
+    await recordPaymentAdjustment(adjustment);
 
-    state.tables = { github_links: { writeError: { code: '08006', message: 'connection failure' } } };
-    await expect(linkGithubAccount('ctm_1', { id: 42, login: 'octocat' })).rejects.toMatchObject({ code: '08006' });
+    expect(rpcArgs('record_payment_adjustment')).toMatchObject({
+      p_adjustment_id: 'adj_1',
+      p_subscription_id: null,
+      p_item_types: ['tax'],
+      p_subtotal: 0,
+      p_currency_code: 'GBP',
+      p_created_at: '2027-01-02T00:00:00Z',
+      p_updated_at: '2027-01-03T00:00:00Z',
+    });
+
+    state.rpcError = { code: '23503', message: 'violates foreign key constraint' };
+    await expect(recordPaymentAdjustment(adjustment)).rejects.toMatchObject({ code: '23503' });
   });
-});
 
-describe('GitHub state', () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-01T00:00:00Z'));
-    return () => vi.useRealTimers();
-  });
+  it('reads payments, adjustments and subscriptions as the rules take them', async () => {
+    state.tables.payments = {
+      list: [
+        {
+          transaction_id: 'txn_1',
+          subscription_id: 'sub_1',
+          billing_interval: 'year',
+          billing_frequency: 1,
+          period_starts_at: '2027-01-01T00:00:00+00:00',
+          period_ends_at: '2028-01-01T00:00:00+00:00',
+          subtotal: 39000,
+          discount: 0,
+          total: 46800,
+          tax: 7800,
+        },
+        // Recorded before tax was: subtotal less discount.
+        {
+          transaction_id: 'txn_0',
+          subscription_id: 'sub_1',
+          billing_interval: 'month',
+          billing_frequency: 1,
+          period_starts_at: '2026-12-01T00:00:00+00:00',
+          period_ends_at: '2027-01-01T00:00:00+00:00',
+          subtotal: 3900,
+          discount: 1000,
+          total: 3480,
+          tax: null,
+        },
+      ],
+    };
+    state.tables.payment_adjustments = {
+      list: [
+        {
+          adjustment_id: 'adj_1',
+          transaction_id: 'txn_1',
+          action: 'chargeback',
+          type: 'full',
+          item_types: ['full'],
+          status: 'reversed',
+          approved_at: '2027-02-01T00:00:00+00:00',
+          reversed_at: '2027-03-01T00:00:00+00:00',
+          subtotal: 39000,
+        },
+        {
+          adjustment_id: 'adj_0',
+          transaction_id: 'txn_0',
+          action: 'refund',
+          type: 'partial',
+          item_types: ['partial'],
+          status: 'approved',
+          approved_at: '2027-01-02T00:00:00+00:00',
+          reversed_at: null,
+          subtotal: null,
+        },
+      ],
+    };
+    state.tables.subscriptions = {
+      list: [
+        {
+          subscription_id: 'sub_1',
+          product_id: 'pro_01',
+          status: 'past_due',
+          grace_started_at: '2027-01-01T00:00:00+00:00',
+          ended_at: null,
+        },
+      ],
+    };
 
-  const updates = () => state.calls.filter((call) => call.table === 'customer_access');
-
-  it('records an invitation with when it was sent, only while the customer has access', async () => {
-    await setGithubState('ctm_1', 'invited');
-
-    expect(updates()).toEqual([
+    await expect(listPayments('ctm_1')).resolves.toEqual([
       {
-        table: 'customer_access',
-        method: 'update',
-        args: [
+        transactionId: 'txn_1',
+        subscriptionId: 'sub_1',
+        billingInterval: 'year',
+        billingFrequency: 1,
+        periodStartsAt: new Date('2027-01-01T00:00:00Z'),
+        periodEndsAt: new Date('2028-01-01T00:00:00Z'),
+        charged: 39000,
+      },
+      expect.objectContaining({ transactionId: 'txn_0', charged: 2900 }),
+    ]);
+    await expect(listPaymentAdjustments('ctm_1')).resolves.toEqual([
+      expect.objectContaining({
+        action: 'chargeback',
+        amount: 39000,
+        approvedAt: new Date('2027-02-01T00:00:00Z'),
+        reversedAt: new Date('2027-03-01T00:00:00Z'),
+      }),
+      expect.objectContaining({ adjustmentId: 'adj_0', amount: null }),
+    ]);
+    await expect(listSubscriptions('ctm_1')).resolves.toEqual([
+      {
+        subscriptionId: 'sub_1',
+        productId: 'pro_01',
+        status: 'past_due',
+        graceStartedAt: new Date('2027-01-01T00:00:00Z'),
+        endedAt: null,
+      },
+    ]);
+  });
+
+  it('reads the computed grants as stored, leaving out operator grants', async () => {
+    state.tables = {
+      vested_entitlements: {
+        list: [
           {
-            github_state: 'invited',
-            github_invited_at: '2026-10-01T00:00:00.000Z',
-            updated_at: '2026-10-01T00:00:00.000Z',
+            kind: 'qualifying_run',
+            started_at: '2026-01-01T00:00:00Z',
+            vested_through: '2027-02-01T00:00:00Z',
+            status: 'confirmed',
+            confirmed_at: '2027-01-01T00:00:00Z',
+            transaction_id: null,
+            withdrawn_reason: null,
           },
         ],
       },
-      { table: 'customer_access', method: 'eq', args: ['customer_id', 'ctm_1'] },
-      { table: 'customer_access', method: 'in', args: ['status', ['active', 'grace']] },
+    };
+
+    await expect(listGrants('ctm_1')).resolves.toEqual([
+      {
+        kind: 'qualifying_run',
+        startedAt: new Date('2026-01-01T00:00:00Z'),
+        vestedThrough: new Date('2027-02-01T00:00:00Z'),
+        status: 'confirmed',
+        confirmedAt: new Date('2027-01-01T00:00:00Z'),
+        transactionId: null,
+        withdrawnReason: null,
+      },
     ]);
+    expect(state.calls).toContainEqual({ table: 'vested_entitlements', method: 'neq', args: ['kind', 'operator'] });
   });
 
-  it('records a member with no invitation, and forgets the state on a relink', async () => {
-    await setGithubState('ctm_1', 'active');
-    await resetGithubState('ctm_1');
+  it('stores the derived state in one call and returns the access it replaced', async () => {
+    await expect(
+      saveCustomerState('ctm_1', {
+        access: { status: 'active', graceEndsAt: null },
+        run: {
+          startedAt: new Date('2027-01-01T00:00:00Z'),
+          paidThrough: new Date('2027-03-01T00:00:00Z'),
+          monthsPaid: 2,
+          vestsAt: new Date('2028-01-01T00:00:00Z'),
+        },
+        conditionalThrough: null,
+        vestedThrough: null,
+        grants: [
+          {
+            kind: 'annual_term',
+            startedAt: new Date('2026-01-01T00:00:00Z'),
+            vestedThrough: new Date('2027-01-01T00:00:00Z'),
+            status: 'withdrawn',
+            confirmedAt: null,
+            transactionId: 'txn_0',
+            withdrawnReason: 'refund',
+          },
+        ],
+        paymentStatuses: { txn_0: 'refunded' },
+        ambiguousReversals: [],
+      }),
+    ).resolves.toBe('lapsed');
 
-    expect(updates().filter((call) => call.method === 'update')).toEqual([
-      expect.objectContaining({ args: [expect.objectContaining({ github_state: 'active', github_invited_at: null })] }),
-      expect.objectContaining({ args: [expect.objectContaining({ github_state: 'none', github_invited_at: null })] }),
-    ]);
+    expect(rpcArgs('set_customer_entitlement')).toEqual({
+      p_customer_id: 'ctm_1',
+      p_state: {
+        access_status: 'active',
+        grace_ends_at: null,
+        run_started_at: '2027-01-01T00:00:00.000Z',
+        paid_through: '2027-03-01T00:00:00.000Z',
+        months_paid: 2,
+        vests_at: '2028-01-01T00:00:00.000Z',
+        conditional_through: null,
+      },
+      p_grants: [
+        {
+          kind: 'annual_term',
+          started_at: '2026-01-01T00:00:00.000Z',
+          vested_through: '2027-01-01T00:00:00.000Z',
+          status: 'withdrawn',
+          confirmed_at: null,
+          transaction_id: 'txn_0',
+          withdrawn_reason: 'refund',
+        },
+      ],
+      p_payment_statuses: { txn_0: 'refunded' },
+    });
   });
 });

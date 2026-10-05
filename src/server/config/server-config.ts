@@ -9,6 +9,7 @@ import {
   type PublicConfig,
   readPublicConfig,
 } from '@/lib/public-config';
+import { PRODUCTION_SUPABASE_URL } from '../../../scripts/production-environment.mjs';
 
 /**
  * Tenantry.Pro's embedded licence public key (SubjectPublicKeyInfo, base64). Production licences must be
@@ -19,12 +20,11 @@ export const PRODUCTION_LICENCE_PUBLIC_KEY =
   'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdSVQSNqR05D60p4aCn6RzJnyGHMz0S2iwuT9Ekf6Z0/q92jpkcoCZRUKQjZ6Od7zCSazkaD5FXJz8YxAKKc/jA==';
 
 /**
- * Production's GitHub org and Supabase project. A sandbox server must use neither, so a sandbox purchase
- * (free, with test cards) can never add anyone to the real customer team or write to real customers'
- * records. Each environment has its own services; this makes a misconfiguration fail at startup.
+ * Production's Supabase project (scripts/production-environment.mjs). A sandbox server must not use it, so a sandbox
+ * purchase (free, with test cards) can never write to real customers' records. Each environment has its own services;
+ * this makes a misconfiguration fail at startup.
  */
-export const PRODUCTION_GITHUB_ORG = 'tenantry-org';
-export const PRODUCTION_SUPABASE_URL = 'https://xoqqgenzhqefyeyzahim.supabase.co';
+export { PRODUCTION_SUPABASE_URL };
 
 export interface EmailConfig {
   resendApiKey: string;
@@ -48,15 +48,13 @@ export interface ServerConfig extends PublicConfig {
     /** The product that is Tenantry Pro: a subscription to it entitles to Pro, and to any other product to nothing. */
     proProductId: string;
   };
-  /** The customers' org and team, and the GitHub App that manages its members. */
-  github: { org: string; team: string; app: { appId: string; privateKey: string; installationId: string } };
   /** Signs licences (licence-issuer.ts): in production, the key whose public half Tenantry.Pro embeds. */
   licenceSigningKey: KeyObject;
   /**
-   * The gate for automated provisioning (GitHub team access and licences). Only PROVISIONING_MODE=auto enables it;
-   * unset or `manual` records purchases and entitlements but grants nothing, and the operator provisions by hand.
-   * Revocation is never gated: it only ever removes access. Which customers can be provisioned is decided by the
-   * environment, not a list: each has its own Paddle account, database, GitHub org and signing key, checked here.
+   * The gate for issuing licences automatically. Only PROVISIONING_MODE=auto enables it; unset or `manual` records
+   * purchases and entitlements, and the package feed follows them, but no licence is issued until the operator does it
+   * by hand. Which customers can be issued one is decided by the environment, not a list: each has its own Paddle
+   * account, database and signing key, checked here.
    */
   provisioning: 'manual' | 'auto';
   /** Null without RESEND_API_KEY (allowed outside production): emails are then logged, not sent. */
@@ -65,13 +63,19 @@ export interface ServerConfig extends PublicConfig {
   alertEmail: string | null;
   /** The bearer secret Vercel Cron sends to /api/reconcile. */
   cronSecret: string;
+  /**
+   * The hex SHA-256 of the key the release workflow publishes packages to the feed with (its X-NuGet-ApiKey), or
+   * null: publishing is then refused. Only the hash is configured, so the key itself is only in the workflow's
+   * secrets.
+   */
+  feedPublishKeySha256: string | null;
 }
 
 /**
  * Validates the server's configuration and fails closed: it throws a `ConfigError` listing every problem, so a
  * server with a missing or inconsistent setting stops at startup (src/instrumentation.ts) instead of defaulting to
- * sandbox, recognising no purchase as Pro, provisioning into another environment's GitHub org, signing licences with
- * another environment's key, or linking to another environment's site. Nothing has a default.
+ * sandbox, recognising no purchase as Pro, writing to another environment's database, signing licences with another
+ * environment's key, or linking to another environment's site. Nothing has a default.
  */
 export function validateServerConfig(
   env: Env = process.env,
@@ -94,7 +98,7 @@ export function validateServerConfig(
     required('NEXT_PUBLIC_SITE_URL', "emails and sign-in redirects need this environment's own address"),
     problems,
   );
-  const serviceRoleKey = required('SUPABASE_SERVICE_ROLE_KEY', 'webhooks and provisioning cannot write');
+  const serviceRoleKey = required('SUPABASE_SERVICE_ROLE_KEY', 'webhooks, reconcile and the package feed cannot work');
   const apiKey = required('PADDLE_API_KEY', 'the Paddle API cannot be called');
   const webhookSecret = required('PADDLE_NOTIFICATION_WEBHOOK_SECRET', 'Paddle webhooks cannot be verified');
   const proProductId = required('PADDLE_PRO_PRODUCT_ID', 'no purchase could be recognised as Tenantry Pro');
@@ -103,18 +107,10 @@ export function validateServerConfig(
   }
   const cronSecret = required('CRON_SECRET', 'the reconcile job cannot be authorised');
 
-  const github = {
-    org: required('GITHUB_ORG', 'there is no default org, so provisioning cannot fall back to another environment’s'),
-    team: required(
-      'GITHUB_TEAM',
-      'there is no default team, so provisioning cannot fall back to another environment’s',
-    ),
-    app: {
-      appId: required('GITHUB_APP_ID', 'GitHub access can be neither granted nor revoked'),
-      privateKey: required('GITHUB_APP_PRIVATE_KEY', 'GitHub access can be neither granted nor revoked'),
-      installationId: required('GITHUB_APP_INSTALLATION_ID', 'GitHub access can be neither granted nor revoked'),
-    },
-  };
+  const feedPublishKeySha256 = value('FEED_PUBLISH_KEY_SHA256')?.toLowerCase() ?? null;
+  if (feedPublishKeySha256 && !/^[0-9a-f]{64}$/.test(feedPublishKeySha256)) {
+    problems.push('FEED_PUBLISH_KEY_SHA256 must be the hex SHA-256 of the feed publish key (64 hex digits)');
+  }
 
   const mode = value('PROVISIONING_MODE');
   const provisioning = mode?.toLowerCase() ?? 'manual';
@@ -149,11 +145,6 @@ export function validateServerConfig(
     : value('ALERT_EMAIL');
 
   if (environment === 'sandbox') {
-    if (github.org.toLowerCase() === PRODUCTION_GITHUB_ORG) {
-      problems.push(
-        `GITHUB_ORG is production's org (${PRODUCTION_GITHUB_ORG}): a sandbox purchase would grant real access`,
-      );
-    }
     if (sameOrigin(publicConfig.supabase.url, PRODUCTION_SUPABASE_URL)) {
       problems.push(
         "NEXT_PUBLIC_SUPABASE_URL is production's database: sandbox events would write real customers' records",
@@ -176,12 +167,12 @@ export function validateServerConfig(
     siteUrl,
     supabase: { ...publicConfig.supabase, serviceRoleKey },
     paddle: { ...publicConfig.paddle, apiKey, webhookSecret, proProductId },
-    github,
     licenceSigningKey,
     provisioning: provisioning as ServerConfig['provisioning'],
     email: resendApiKey ? { resendApiKey, from: from ?? '', replyTo: replyTo || null } : null,
     alertEmail: alertEmail || null,
     cronSecret,
+    feedPublishKeySha256,
   });
 }
 

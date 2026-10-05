@@ -102,18 +102,13 @@ const nextMinor = `${major}.${minor + 1}`;
 const QUESTIONS = [
   {
     question: 'What does the subscription include?',
-    answer: `Every Tenantry Pro package from a private NuGet feed, each release while you subscribe, a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. One price for your whole company, billed monthly or yearly.`,
+    answer: `Every Tenantry Pro release while you subscribe, from the package feed (a private NuGet feed run by Tenantry), a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. After 12 months of paid time across consecutive billing periods, or an annual term whose payment you keep in full, releases become vested: they stay licensed to you after the subscription ends. One price for your whole company, billed monthly or yearly.`,
   },
   {
     question: 'How does my team install it, locally and in CI?',
     answer:
-      'A subscription gives one GitHub account access to the feed. On your Pro access page, connect an account your team controls, such as a machine account, and create a read-only token from it. Add the feed to your nuget.config with that token, and share the token with your developers and CI as a secret. A classic token reads every package its account can see, which is another reason to use a machine account. Everyone in your company may use Pro. The guide covers CI and Docker builds.',
+      'Create a feed token on your Pro access page for each developer machine and CI system, and add the package feed to your nuget.config, which reads the token from an environment variable. NuGet then restores Tenantry Pro from the package feed and everything else from nuget.org. You can hold up to 10 feed tokens and revoke each one on its own. No GitHub account is needed, and everyone in your company may use Pro. The guide covers CI and Docker builds.',
     link: { label: 'Installation', href: '/docs/pro/installation' },
-  },
-  {
-    question: 'Will the package feed change?',
-    answer:
-      'Yes, before Tenantry Pro goes on sale. The packages are on GitHub Packages today, the feed the subscription system has been built and tested with, so the docs describe it. A private Tenantry feed will replace it, and after a subscription ends it will still let you restore the versions released while you subscribed.',
   },
   {
     question: 'Which versions and databases?',
@@ -153,19 +148,20 @@ const QUESTIONS = [
   },
   {
     question: 'Does it phone home?',
-    answer: 'No. The licence key is checked offline when the application starts, and it does not expire.',
+    answer:
+      'No. The licence key is checked offline when the application starts, and it does not expire. It does not decide which releases you may use: your subscription and the EULA do.',
     link: { label: 'Licensing', href: '/docs/pro/licensing' },
   },
   {
     question: 'What happens when the subscription ends?',
     answer:
-      'The versions you have keep working, and the key keeps validating. Access to the package feed ends, so keep copies of the packages you build with. Each Pro version runs on one Core minor version (Pro 0.6 on Core 0.6.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Security fixes are released as a patch to every affected minor version. Restoring them from today’s GitHub feed needs an active subscription, so after it ends, email support@tenantry.dev for the latest patch of any minor version released while you subscribed. The private feed that replaces it will let you restore those yourself.',
+      'You keep the vested releases: every release published up to your vested-through date, which 12 paid months, or an annual term whose payment you keep in full, give you, as the EULA sets out. Releases published after that date stop being licensed to you, and if nothing is vested, so do all of them. The package feed then serves you only the vested releases, or nothing. Ending a subscription never takes vested releases away; only money returned to you, by a refund, credit or chargeback, can. Your application keeps starting with the licence key either way, since the key does not enforce the subscription. Each Pro version runs on one Core minor version (Pro 0.6 on Core 0.6.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Until 1.0, security fixes are released as a patch to the latest two Pro minor versions. A security patch is vested when the first release of the minor version it patches is, so the package feed serves it to you.',
     link: { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
   },
   {
     question: 'What if Tenantry stops?',
     answer:
-      'Core stays Apache-2.0 on GitHub, and the Pro versions you have stay licensed and keep working, as when a subscription ends.',
+      'Core stays Apache-2.0 on GitHub, and the vested Pro releases stay licensed and keep working, as when a subscription ends.',
     link: { label: 'EULA', href: '/legal/eula' },
   },
 ];

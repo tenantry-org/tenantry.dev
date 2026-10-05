@@ -159,14 +159,12 @@ describe('claimJobs', () => {
       row({ id: 'evt_1', kind: 'paddle_event', event_type: 'subscription.created', payload: subscriptionCreated }),
       row({ id: 'evt_2', kind: 'paddle_event', customer_id: null, event_type: 'product.created', payload: {} }),
       row({ id: 'reconcile_ctm_2', customer_id: 'ctm_2', attempts: 3 }),
-      row({ id: 'lease_ctm_3', kind: 'lease', customer_id: 'ctm_3' }),
     ];
 
     await expect(claimJobs(5, 120)).resolves.toEqual([
       { id: 'evt_1', attempts: 1, kind: 'paddle_event', customerId: 'ctm_1', event: subscriptionCreated },
       { id: 'evt_2', attempts: 1, kind: 'paddle_event', customerId: null, event: {} },
       { id: 'reconcile_ctm_2', attempts: 3, kind: 'reconcile', customerId: 'ctm_2' },
-      { id: 'lease_ctm_3', attempts: 1, kind: 'lease', customerId: 'ctm_3' },
     ]);
     expect(state.calls).toContainEqual({
       table: 'rpc:claim_customer_jobs',
@@ -176,9 +174,9 @@ describe('claimJobs', () => {
   });
 
   it('fails on a job of a kind it does not know, rather than skip it', async () => {
-    state.claimed = [row({ id: 'job_new', kind: 'refund' })];
+    state.claimed = [row({ id: 'job_new', kind: 'lease' })];
 
-    await expect(claimJobs(5, 120)).rejects.toThrow('Job job_new is of an unknown kind: refund');
+    await expect(claimJobs(5, 120)).rejects.toThrow('Job job_new is of an unknown kind: lease');
   });
 });
 

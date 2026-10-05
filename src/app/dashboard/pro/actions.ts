@@ -1,82 +1,101 @@
 'use server';
 
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createUserClient } from '@/server/db/user-client';
-import { syncGithubLinkForCurrentUser } from '@/server/billing/sync-github-link';
-import { isLinkErrorCode, linkErrorPage } from '@/lib/link-errors';
+import { getCustomerId, isTestCustomer } from '@/server/db/customer-dashboard';
+import { getCurrentUser } from '@/server/db/current-user';
+import { confirmedEmail } from '@/server/db/customer-email';
+import { FEED_TOKEN_LIMIT, readEntitlement } from '@/server/billing/pro-pages';
+import { createFeedToken as recordFeedToken, revokeFeedToken as revokeRecordedToken } from '@/server/feed/feed-tokens';
+import { sendEmail } from '@/server/integrations/email/send';
+import { feedTokenCreatedEmail } from '@/server/integrations/email/templates';
 import { serverConfig } from '@/server/config/server-config';
 
 /**
- * Connects the customer's GitHub account.
- *
- * If they already authenticated via GitHub, the identity exists — we just (re)sync the link and grant.
- * Otherwise we start a GitHub OAuth identity-link, returning through /auth/callback which syncs.
+ * The Pro access page's feed token actions. Each acts only for the signed-in customer: the customer comes from the
+ * session (customer-dashboard.ts: getCustomerId, by the login's confirmed email), never from the browser, and the
+ * database functions they call take that customer's id, so a token id from the browser can only ever name one of
+ * theirs. Next.js accepts a server action only as a POST whose Origin is the site's own host, which is the CSRF
+ * protection the other dashboard actions rely on too. The token itself is returned once, to the browser that created
+ * it, and is never logged or stored: only its hash is (feed-tokens.ts).
  */
-export async function connectGithub() {
-  const supabase = await createUserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const alreadyHasGithub = user?.identities?.some((identity) => identity.provider === 'github');
+type Result<T> = T | { error: string };
 
-  if (alreadyHasGithub) {
-    const { reason } = await syncGithubLinkForCurrentUser();
-    if (isLinkErrorCode(reason)) redirect(linkErrorPage(reason));
-    revalidatePath('/dashboard/pro', 'layout'); // Access, Install and Billing all show this customer's state
-    return;
-  }
+/** How long a feed token's name may be (feed_tokens' check constraint). */
+const NAME_MAX = 60;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NO_ACCOUNT = 'No Tenantry Pro billing account is linked to this login';
+const FAILED = 'Something went wrong. Try again in a moment.';
 
-  await startGithubLink(supabase);
-}
+/** Creates a feed token named `name` for the signed-in customer, and returns it: the only time it is shown. */
+export async function createFeedToken(name: unknown): Promise<Result<{ token: string; prefix: string; name: string }>> {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (!trimmed) return { error: 'Give the token a name, such as the machine or CI system that will use it.' };
+  if (trimmed.length > NAME_MAX) return { error: `A token's name can be at most ${NAME_MAX} characters.` };
 
-/**
- * Moves the customer's access to another GitHub account. The login's GitHub identity is disconnected and a new
- * one linked through GitHub, which signs in whichever account the browser is signed in to there. Access stays
- * with the previous account until the new one is linked: /auth/callback then removes the previous account and
- * grants the new one (sync-github-link.ts). If the customer abandons the switch, the previous account keeps access and
- * the Access page offers Connect GitHub again.
- *
- * A login that signs in only with GitHub cannot disconnect it (Supabase keeps at least one identity), so it is
- * asked to set a password first.
- */
-export async function switchGithubAccount() {
-  const supabase = await createUserClient();
-  const { data, error } = await supabase.auth.getUserIdentities();
+  try {
+    const customerId = await getCustomerId();
+    if (!customerId) return { error: NO_ACCOUNT };
 
-  if (error) {
-    console.error('Failed to read the identities of the login:', error);
-    redirect(linkErrorPage('github-link'));
-  }
-
-  const identities = data?.identities ?? [];
-  const github = identities.find((identity) => identity.provider === 'github');
-
-  if (github) {
-    if (identities.length < 2) redirect(linkErrorPage('github-only-sign-in'));
-
-    const { error: unlinkError } = await supabase.auth.unlinkIdentity(github);
-    if (unlinkError) {
-      console.error('Failed to disconnect the GitHub identity:', unlinkError);
-      redirect(linkErrorPage('github-link'));
+    const entitlement = await readEntitlement(customerId);
+    if (!entitlement.canRestore) {
+      return {
+        error:
+          'Your subscription has ended and no releases are vested, so the package feed serves you nothing and a feed ' +
+          'token would restore nothing. Subscribe again to restore Tenantry Pro.',
+      };
     }
-  }
 
-  await startGithubLink(supabase);
+    let created: Awaited<ReturnType<typeof recordFeedToken>>;
+    try {
+      created = await recordFeedToken(customerId, trimmed);
+    } catch (error) {
+      // create_feed_token refuses an eleventh live token with a check violation; the name is checked above.
+      if (isCheckViolation(error)) {
+        return {
+          error: `You have ${FEED_TOKEN_LIMIT} feed tokens, the most you can hold at once. Revoke one you no longer use to create another.`,
+        };
+      }
+      throw error;
+    }
+
+    console.info(`Feed token ${created.id} created for customer ${customerId}.`);
+    const email = confirmedEmail(await getCurrentUser());
+    // A test customer, such as the release check's, is sent no emails.
+    if (email && !(await isTestCustomer(customerId))) {
+      // Never throws (send.ts). Tells the customer, so a token they did not create is noticed.
+      await sendEmail(feedTokenCreatedEmail(email, { name: trimmed, prefix: created.prefix }, serverConfig().siteUrl));
+    }
+
+    revalidatePath('/dashboard/pro', 'layout');
+    return { token: created.token, prefix: created.prefix, name: trimmed };
+  } catch (error) {
+    console.error('Creating a feed token failed:', error);
+    return { error: FAILED };
+  }
 }
 
-// Starts a GitHub OAuth identity link, which returns through /auth/callback.
-async function startGithubLink(supabase: Awaited<ReturnType<typeof createUserClient>>) {
-  const { data, error } = await supabase.auth.linkIdentity({
-    provider: 'github',
-    options: { redirectTo: `${serverConfig().siteUrl}/auth/callback?next=/dashboard/pro` },
-  });
+/** Revokes one of the signed-in customer's feed tokens at once; their others keep working. */
+export async function revokeFeedToken(tokenId: unknown): Promise<Result<{ revoked: true }>> {
+  if (typeof tokenId !== 'string' || !UUID.test(tokenId)) return { error: 'Feed token not found.' };
 
-  if (error) {
-    console.error('Failed to start GitHub identity link:', error);
-    redirect(linkErrorPage('github-link'));
+  try {
+    const customerId = await getCustomerId();
+    if (!customerId) return { error: NO_ACCOUNT };
+
+    if (!(await revokeRecordedToken(customerId, tokenId))) {
+      return { error: 'Feed token not found. It may have been revoked already.' };
+    }
+
+    console.info(`Feed token ${tokenId} revoked by customer ${customerId}.`);
+    revalidatePath('/dashboard/pro', 'layout');
+    return { revoked: true };
+  } catch (error) {
+    console.error('Revoking a feed token failed:', error);
+    return { error: FAILED };
   }
+}
 
-  if (data?.url) redirect(data.url);
+function isCheckViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23514';
 }

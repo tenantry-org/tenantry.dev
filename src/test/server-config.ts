@@ -17,16 +17,13 @@ export function testServerConfig(overrides: Partial<ServerConfig> = {}): ServerC
       proProductId: 'pro_01',
     },
     checkoutEnabled: true,
-    github: {
-      org: 'tenantry-sandbox',
-      team: 'pro-customers',
-      app: { appId: '1', privateKey: 'app-key', installationId: '2' },
-    },
     licenceSigningKey: privateKey,
     provisioning: 'auto',
     email: { resendApiKey: 're_test', from: 'Tenantry <noreply@example.com>', replyTo: 'support@example.com' },
     alertEmail: 'ops@example.com',
     cronSecret: 'cron-secret',
+    // The SHA-256 of 'publish-key'.
+    feedPublishKeySha256: 'e8d9f85fc129e2165c7c8bb1d8878428335d12491f89d98092c91b11f7331788',
     ...overrides,
   };
 }

@@ -2,8 +2,10 @@ import { Webhooks } from '@paddle/paddle-node-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaddleEventJson } from '@/server/db/customer-jobs';
 import { fakeBillingDeps, type FakeBillingDeps } from '@/test/fake-billing-deps';
-import { adjustmentEvent, customerEvent, subscriptionEvent } from '@/test/paddle-events';
+import { adjustmentEvent, customerEvent, subscriptionEvent, transactionEvent } from '@/test/paddle-events';
 import { memory } from '@/test/memory-billing-store';
+import { testServerConfig } from '@/test/server-config';
+import { syncCustomer } from './customer-access';
 import { applyPaddleEvent } from './apply-paddle-event';
 
 // The in-memory store applies a subscription or customer event unless a newer one was applied already, as the
@@ -19,7 +21,7 @@ function emailSubjects(): string[] {
   return deps.sendEmail.mock.calls.map(([message]) => message.subject);
 }
 
-const WELCOME = 'Welcome to Tenantry Pro: connect GitHub to get access';
+const WELCOME = 'Welcome to Tenantry Pro: create a feed token to install it';
 const ENDED = 'Your Tenantry Pro subscription has ended';
 
 const created = subscriptionEvent({
@@ -45,23 +47,21 @@ describe('applyPaddleEvent', () => {
     deps = fakeBillingDeps();
     memory.reset();
     memory.state.emails.set('ctm_01', 'buyer@example.com');
-    memory.linkGithub('ctm_01', 'octocat');
   });
 
   it('keeps a cancelled subscription revoked when an older update is delivered after the cancellation', async () => {
     await applyPaddleEvent(delivered(created), deps);
     await applyPaddleEvent(delivered(cancelled), deps);
 
-    expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
+    expect(emailSubjects()).toEqual([WELCOME, ENDED]);
     vi.clearAllMocks();
 
     await applyPaddleEvent(delivered(earlierUpdate), deps);
 
-    expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
-    expect(memory.liveLicences('ctm_01')).toEqual([]);
-    expect(deps.github.grantAccess).not.toHaveBeenCalled();
+    expect(memory.state.subscriptions.get('sub_01')?.status).toBe('canceled');
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
+    expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
@@ -79,9 +79,7 @@ describe('applyPaddleEvent', () => {
     );
 
     expect(memory.state.subscriptions.get('sub_01')).toBeDefined();
-    expect(memory.state.entitlements.size).toBe(0);
-    expect(memory.state.access.size).toBe(0);
-    expect(deps.github.grantAccess).not.toHaveBeenCalled();
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
@@ -97,10 +95,8 @@ describe('applyPaddleEvent', () => {
     });
     await applyPaddleEvent(delivered(movedAway), deps);
 
-    expect(memory.state.entitlements.get('sub_01')).toMatchObject({ status: 'revoked', graceStartedAt: null });
-    expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
-    expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.liveLicences('ctm_01')).toEqual([]);
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
+    expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(emailSubjects()).toEqual([ENDED]);
     vi.clearAllMocks();
 
@@ -118,8 +114,7 @@ describe('applyPaddleEvent', () => {
       deps,
     );
 
-    expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
-    expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
@@ -151,9 +146,8 @@ describe('applyPaddleEvent', () => {
       deps,
     );
 
-    expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('active');
-    expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+    expect(memory.state.subscriptions.get('sub_01')?.productId).toBe('pro_02');
+    expect(memory.state.access.get('ctm_01')).toBe('active');
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
@@ -192,8 +186,6 @@ describe('applyPaddleEvent', () => {
     await applyPaddleEvent(delivered(cancelled), deps);
     await applyPaddleEvent(delivered(cancelled), deps);
 
-    expect(deps.github.grantAccess).toHaveBeenCalledOnce();
-    expect(deps.github.revokeAccess).toHaveBeenCalledOnce();
     expect(memory.state.licences).toHaveLength(1);
     expect(emailSubjects()).toEqual([WELCOME, ENDED]);
   });
@@ -218,19 +210,18 @@ describe('applyPaddleEvent', () => {
     });
   });
 
-  it('applies the same events in order: access granted, then revoked', async () => {
+  it('applies the same events in order: access granted, then ended', async () => {
     await applyPaddleEvent(delivered(earlierUpdate), deps);
-    expect(deps.github.grantAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.liveLicences('ctm_01')).toHaveLength(1);
+    expect(memory.state.access.get('ctm_01')).toBe('active');
+    expect(memory.licences('ctm_01')).toHaveLength(1);
 
     await applyPaddleEvent(delivered(cancelled), deps);
-    expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
-    expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
-    expect(memory.liveLicences('ctm_01')).toEqual([]);
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
+    expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(emailSubjects()).toEqual([WELCOME, ENDED]);
   });
 
-  it('keeps a customer with two subscriptions in the team, with a licence, when one is cancelled', async () => {
+  it('keeps access for a customer with two subscriptions, with a licence, when one is cancelled', async () => {
     const second = { subscriptionId: 'sub_02', periodEndsAt: '2026-10-15T00:00:00Z' };
     await applyPaddleEvent(delivered(created), deps);
     await applyPaddleEvent(
@@ -247,21 +238,15 @@ describe('applyPaddleEvent', () => {
     );
 
     // Access started once, with the first subscription.
-    expect(deps.github.grantAccess).toHaveBeenCalledOnce();
     expect(emailSubjects()).toEqual([WELCOME]);
     vi.clearAllMocks();
 
     await applyPaddleEvent(delivered(cancelled), deps);
 
-    expect(memory.state.entitlements.get('sub_01')?.status).toBe('revoked');
-    expect(memory.state.access.get('ctm_01')).toEqual({
-      status: 'active',
-      githubState: 'active',
-      githubInvitedAt: null,
-    });
-    expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+    expect(memory.state.subscriptions.get('sub_01')?.status).toBe('canceled');
+    expect(memory.state.access.get('ctm_01')).toBe('active');
     expect(deps.sendEmail).not.toHaveBeenCalled();
-    expect(memory.liveLicences('ctm_01')).toHaveLength(1);
+    expect(memory.licences('ctm_01')).toHaveLength(1);
 
     // Access ends with the last subscription.
     await applyPaddleEvent(
@@ -277,13 +262,8 @@ describe('applyPaddleEvent', () => {
       deps,
     );
 
-    expect(deps.github.revokeAccess).toHaveBeenCalledExactlyOnceWith('octocat');
-    expect(memory.state.access.get('ctm_01')).toEqual({
-      status: 'revoked',
-      githubState: 'none',
-      githubInvitedAt: null,
-    });
-    expect(memory.liveLicences('ctm_01')).toEqual([]);
+    expect(memory.state.access.get('ctm_01')).toBe('lapsed');
+    expect(memory.licences('ctm_01')).toHaveLength(1); // kept: the key does not end with the subscription
     expect(emailSubjects()).toEqual([ENDED]);
   });
 
@@ -291,8 +271,8 @@ describe('applyPaddleEvent', () => {
     memory.state.emails.delete('ctm_01');
 
     await expect(applyPaddleEvent(delivered(earlierUpdate), deps)).rejects.toMatchObject({ code: '23503' });
-    expect(memory.state.entitlements.size).toBe(0);
-    expect(deps.github.grantAccess).not.toHaveBeenCalled();
+    expect(memory.state.subscriptions.size).toBe(0);
+    expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
   describe('payment failure', () => {
@@ -323,15 +303,16 @@ describe('applyPaddleEvent', () => {
       await applyPaddleEvent(delivered(created), deps);
       await applyPaddleEvent(delivered(renewalFailed), deps);
 
-      expect(memory.state.entitlements.get('sub_01')).toMatchObject({
-        status: 'grace',
-        graceStartedAt: new Date('2026-10-01T00:05:00Z'),
+      expect(memory.state.subscriptions.get('sub_01')).toMatchObject({
+        status: 'past_due',
+        graceStartedAt: '2026-10-01T00:05:00Z',
       });
-      expect(memory.liveLicences('ctm_01')).toHaveLength(1);
+      expect(memory.state.access.get('ctm_01')).toBe('grace');
+      expect(memory.licences('ctm_01')).toHaveLength(1);
 
       vi.setSystemTime(new Date('2026-10-08T00:10:00Z'));
       await applyPaddleEvent(delivered(retryFailed), deps);
-      expect(memory.state.entitlements.get('sub_01')?.graceStartedAt).toEqual(new Date('2026-10-01T00:05:00Z'));
+      expect(memory.state.subscriptions.get('sub_01')?.graceStartedAt).toBe('2026-10-01T00:05:00Z');
 
       await applyPaddleEvent(
         delivered(
@@ -344,9 +325,8 @@ describe('applyPaddleEvent', () => {
         ),
         deps,
       );
-      expect(memory.state.entitlements.get('sub_01')).toMatchObject({ status: 'active', graceStartedAt: null });
-      expect(memory.state.access.get('ctm_01')?.status).toBe('active');
-      expect(deps.github.revokeAccess).not.toHaveBeenCalled();
+      expect(memory.state.subscriptions.get('sub_01')).toMatchObject({ status: 'active', graceStartedAt: null });
+      expect(memory.state.access.get('ctm_01')).toBe('active');
     });
 
     it('does not restore access for a past-due event processed after grace has ended', async () => {
@@ -366,14 +346,19 @@ describe('applyPaddleEvent', () => {
         deps,
       );
 
-      expect(memory.state.access.get('ctm_01')?.status).toBe('revoked');
-      expect(deps.github.revokeAccess).toHaveBeenCalledWith('octocat');
+      expect(memory.state.access.get('ctm_01')).toBe('lapsed');
     });
   });
 
   describe('refunds and chargebacks', () => {
     const adjusted = (options: Parameters<typeof adjustmentEvent>[0]) =>
       applyPaddleEvent(delivered(adjustmentEvent(options)), deps);
+
+    // txn_01 pays sub_01's current billing period, September 2026.
+    beforeEach(async () => {
+      await applyPaddleEvent(delivered(transactionEvent({ eventId: 'evt_paid' })), deps);
+      vi.clearAllMocks();
+    });
 
     it('cancels the subscription at once when a full refund is approved, and tells the operator', async () => {
       await adjusted({ eventId: 'evt_refund', action: 'refund', status: 'approved' });
@@ -428,6 +413,124 @@ describe('applyPaddleEvent', () => {
       expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
+    it('does not cancel for a full refund of an earlier billing period, and tells the operator', async () => {
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_october',
+            transactionId: 'txn_02',
+            period: { startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-11-01T00:00:00Z' },
+          }),
+        ),
+        deps,
+      );
+      vi.clearAllMocks();
+
+      await adjusted({ eventId: 'evt_goodwill', action: 'refund', status: 'approved', transactionId: 'txn_01' });
+
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Paddle refund of an earlier paid billing period for customer ctm_01',
+        expect.stringContaining('was not cancelled'),
+      );
+    });
+
+    it('cancels on the first chargeback of any payment, so charging back each month after the next renews fails', async () => {
+      // Monthly from September to December 2026; each month charged back once the next has renewed.
+      const months = ['2026-09-01', '2026-10-01', '2026-11-01', '2026-12-01', '2027-01-01'];
+      for (let n = 1; n < 4; n++) {
+        await applyPaddleEvent(
+          delivered(
+            transactionEvent({
+              eventId: `evt_month_${n}`,
+              transactionId: `txn_m${n}`,
+              period: { startsAt: `${months[n]}T00:00:00Z`, endsAt: `${months[n + 1]}T00:00:00Z` },
+            }),
+          ),
+          deps,
+        );
+        const previous = n === 1 ? 'txn_01' : `txn_m${n - 1}`;
+        await adjusted({ eventId: `evt_cb_${n}`, action: 'chargeback', status: 'approved', transactionId: previous });
+        if (n === 1) {
+          expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
+          expect(deps.alertOperator).toHaveBeenCalledWith(
+            'Subscription sub_01 cancelled after a chargeback',
+            expect.any(String),
+          );
+        }
+      }
+    });
+
+    it('cancels for a full refund of the only paid period, though a later transaction charged nothing', async () => {
+      // A subscription change Paddle billed at nothing, after the paid month.
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_free_change',
+            transactionId: 'txn_free',
+            origin: 'subscription_update',
+            total: '0',
+            period: { startsAt: '2026-09-15T00:00:00Z', endsAt: '2026-10-01T00:00:00Z' },
+          }),
+        ),
+        deps,
+      );
+      vi.clearAllMocks();
+
+      await adjusted({ eventId: 'evt_refund_paid', action: 'refund', status: 'approved', transactionId: 'txn_01' });
+
+      expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
+    });
+
+    it('does not cancel for a refund of a payment not recorded, and tells the operator', async () => {
+      await adjusted({ eventId: 'evt_unknown', action: 'refund', status: 'approved', transactionId: 'txn_unknown' });
+
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Paddle refund of an earlier paid billing period for customer ctm_01',
+        expect.stringContaining('txn_unknown'),
+      );
+    });
+
+    it('tells the operator about a reversal that cannot be told apart from a second record of another', async () => {
+      for (const id of ['first', 'second']) {
+        await adjusted({
+          eventId: `evt_cb_${id}`,
+          action: 'chargeback',
+          type: 'partial',
+          subtotal: '1000',
+          status: 'approved',
+          occurredAt: '2026-09-10T00:00:00Z',
+          transactionId: 'txn_01',
+        });
+      }
+      await adjusted({
+        eventId: 'evt_cb_first',
+        action: 'chargeback',
+        type: 'partial',
+        subtotal: '1000',
+        status: 'reversed',
+        occurredAt: '2026-09-12T00:00:00Z',
+        transactionId: 'txn_01',
+      });
+      vi.clearAllMocks();
+
+      await adjusted({
+        eventId: 'evt_reverse',
+        action: 'chargeback_reverse',
+        type: 'partial',
+        subtotal: '1000',
+        status: 'approved',
+        occurredAt: '2026-09-12T00:20:00Z',
+        transactionId: 'txn_01',
+      });
+
+      expect(deps.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Paddle reversal to check for customer ctm_01',
+        expect.stringContaining('adj_evt_reverse'),
+      );
+    });
+
     it('tells the operator about a refund with no subscription, changing nothing', async () => {
       await adjusted({ eventId: 'evt_orphan', action: 'refund', status: 'approved', subscriptionId: null });
 
@@ -451,6 +554,311 @@ describe('applyPaddleEvent', () => {
       await expect(adjusted({ eventId: 'evt_down', action: 'refund', status: 'approved' })).rejects.toThrow(
         'Paddle unavailable',
       );
+    });
+  });
+
+  describe('payments and perpetual entitlement', () => {
+    // Monthly renewals of sub_01 from January 2027, each delivered when its period starts.
+    const renewal = (month: number, extra: Partial<Parameters<typeof transactionEvent>[0]> = {}) => {
+      const startsAt = new Date(Date.UTC(2027, month, 1)).toISOString();
+      const endsAt = new Date(Date.UTC(2027, month + 1, 1)).toISOString();
+      return transactionEvent({
+        eventId: `evt_txn_${month}`,
+        transactionId: `txn_${month}`,
+        occurredAt: startsAt,
+        origin: month === 0 ? 'web' : 'subscription_recurring',
+        period: { startsAt, endsAt },
+        ...extra,
+      });
+    };
+    const year = Array.from({ length: 12 }, (_, month) => renewal(month));
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('records each completed Pro payment with its period, amounts and origin', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+
+      await applyPaddleEvent(delivered(year[0]), deps);
+
+      expect(memory.state.payments.get('txn_0')).toEqual({
+        transactionId: 'txn_0',
+        customerId: 'ctm_01',
+        subscriptionId: 'sub_01',
+        origin: 'web',
+        priceId: 'pri_01month',
+        billingInterval: 'month',
+        billingFrequency: 1,
+        periodStartsAt: '2027-01-01T00:00:00.000Z',
+        periodEndsAt: '2027-02-01T00:00:00.000Z',
+        subtotal: 3900,
+        discount: 0,
+        total: 3900,
+        tax: 0,
+        currencyCode: 'GBP',
+        occurredAt: '2027-01-01T00:00:00.000Z',
+        status: 'paid',
+      });
+      // No access recorded yet (the subscription event follows), so no current run is shown, but the payment counts.
+      expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({ run: null, vestedThrough: null });
+    });
+
+    it('vests after 12 paid months, as the reconcile after the 12th month finds, however the events were delivered', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      await applyPaddleEvent(delivered(created), deps);
+      // Delivered in reverse, each twice: the ledger is the same.
+      for (const event of [...year].reverse()) {
+        await applyPaddleEvent(delivered(event), deps);
+        await applyPaddleEvent(delivered(event), deps);
+      }
+
+      vi.setSystemTime(new Date('2027-12-31T23:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+      expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({
+        vestedThrough: null,
+        run: { startedAt: new Date('2027-01-01T00:00:00Z'), monthsPaid: 12 },
+      });
+
+      vi.setSystemTime(new Date('2028-01-01T04:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toEqual(new Date('2028-01-01T00:00:00Z'));
+      expect(memory.state.payments.size).toBe(12);
+    });
+
+    it('ignores a transaction with no billing period, no subscription or another product', async () => {
+      for (const event of [
+        transactionEvent({ eventId: 'evt_once', period: null }),
+        transactionEvent({ eventId: 'evt_nosub', subscriptionId: null }),
+        transactionEvent({ eventId: 'evt_other', productId: 'pro_02' }),
+      ]) {
+        await applyPaddleEvent(delivered(event), deps);
+      }
+
+      expect(memory.state.payments.size).toBe(0);
+      expect(memory.state.entitlementStates.size).toBe(0);
+    });
+
+    it('keeps the qualifying period through a goodwill refund of an earlier month: 12 months kept vest', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      await applyPaddleEvent(delivered(created), deps);
+      for (let month = 0; month < 10; month++) await applyPaddleEvent(delivered(renewal(month)), deps);
+
+      vi.setSystemTime(new Date('2027-10-15T00:00:00Z'));
+      await applyPaddleEvent(
+        delivered(
+          adjustmentEvent({
+            eventId: 'evt_goodwill',
+            action: 'refund',
+            status: 'approved',
+            transactionId: 'txn_2',
+            occurredAt: '2027-10-15T00:00:00Z',
+          }),
+        ),
+        deps,
+      );
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+
+      for (let month = 10; month < 13; month++) await applyPaddleEvent(delivered(renewal(month)), deps);
+      vi.setSystemTime(new Date('2028-02-01T04:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+
+      // 13 months paid, March refunded: 12 months kept, from 1 January 2027 to 1 January 2028.
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toEqual(new Date('2028-01-01T00:00:00Z'));
+    });
+
+    it('records a Pro payment at a price that is not offered as not counting, and alerts the operator', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      await applyPaddleEvent(delivered(created), deps);
+
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_annual_special',
+            transactionId: 'txn_special',
+            interval: 'year',
+            priceId: 'pri_01special',
+            period: { startsAt: '2027-01-01T00:00:00Z', endsAt: '2028-01-01T00:00:00Z' },
+          }),
+        ),
+        deps,
+      );
+
+      expect(memory.state.payments.get('txn_special')?.priceId).toBe('pri_01special');
+      expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({
+        conditionalThrough: null,
+        run: null,
+        vestedThrough: null,
+      });
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Pro payment at a price not offered, for customer ctm_01',
+        expect.stringContaining('txn_special'),
+      );
+
+      vi.setSystemTime(new Date('2028-01-02T00:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toBeNull();
+    });
+
+    it('counts a renewal at a price offered before the prices changed, without alerting', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      await applyPaddleEvent(delivered(created), deps);
+      await applyPaddleEvent(delivered(year[0]), deps);
+      deps.config = testServerConfig({
+        paddle: { ...testServerConfig().paddle, prices: { month: 'pri_02month', year: 'pri_02year' } },
+      });
+      vi.clearAllMocks();
+
+      for (const event of year.slice(1)) await applyPaddleEvent(delivered(event), deps);
+      vi.setSystemTime(new Date('2028-01-01T04:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toEqual(new Date('2028-01-01T00:00:00Z'));
+      expect(deps.alertOperator).not.toHaveBeenCalled();
+    });
+
+    it('fails a payment whose customer is not recorded yet, so the worker retries it', async () => {
+      memory.state.emails.clear();
+
+      await expect(applyPaddleEvent(delivered(year[0]), deps)).rejects.toMatchObject({ code: '23503' });
+    });
+
+    it('records an annual payment as a conditional grant to the end of its term', async () => {
+      vi.setSystemTime(new Date('2027-03-01T00:10:00Z'));
+
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_annual',
+            transactionId: 'txn_annual',
+            interval: 'year',
+            origin: 'web',
+            period: { startsAt: '2027-03-01T00:00:00Z', endsAt: '2028-03-01T00:00:00Z' },
+          }),
+        ),
+        deps,
+      );
+
+      expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({
+        conditionalThrough: new Date('2028-03-01T00:00:00Z'),
+        vestedThrough: null,
+      });
+    });
+
+    it('records refunds and chargebacks and recomputes: a refunded month no longer counts', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      for (const event of year) await applyPaddleEvent(delivered(event), deps);
+
+      // A full refund of March, created pending and approved later; delivered approved first.
+      const approved = adjustmentEvent({
+        eventId: 'evt_refund_approved',
+        action: 'refund',
+        status: 'approved',
+        transactionId: 'txn_2',
+        createdAt: '2027-03-05T00:00:00Z',
+        occurredAt: '2027-03-08T00:00:00Z',
+      });
+      const pending = adjustmentEvent({
+        eventId: 'evt_refund_pending',
+        eventType: 'adjustment.created',
+        action: 'refund',
+        status: 'pending_approval',
+        transactionId: 'txn_2',
+        occurredAt: '2027-03-05T00:00:00Z',
+      });
+      // Both events describe one adjustment.
+      (pending.data as { id: string }).id = (approved.data as { id: string }).id;
+      vi.setSystemTime(new Date('2027-03-10T00:00:00Z'));
+      await applyPaddleEvent(delivered(approved), deps);
+      await applyPaddleEvent(delivered(pending), deps);
+
+      const [adjustment] = memory.state.adjustments.values();
+      expect(adjustment).toMatchObject({
+        status: 'approved',
+        approvedAt: '2027-03-08T00:00:00Z',
+        amount: 3900,
+        currencyCode: 'GBP',
+      });
+      expect(memory.state.payments.get('txn_2')?.status).toBe('refunded');
+
+      vi.setSystemTime(new Date('2028-01-02T00:00:00Z'));
+      await syncCustomer('ctm_01', deps);
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toBeNull();
+    });
+
+    it('records the time a cancelled subscription ended, which ends its last period', async () => {
+      vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
+      await applyPaddleEvent(delivered(created), deps);
+      await applyPaddleEvent(delivered(year[0]), deps);
+
+      await applyPaddleEvent(
+        delivered(
+          subscriptionEvent({
+            eventId: 'evt_cancelled_2027',
+            eventType: 'subscription.canceled',
+            occurredAt: '2027-01-10T00:00:00Z',
+            status: 'canceled',
+          }),
+        ),
+        deps,
+      );
+
+      expect(memory.state.subscriptions.get('sub_01')?.endedAt).toBe('2027-01-10T00:00:00Z');
+      expect(memory.state.entitlementStates.get('ctm_01')?.run).toBeNull();
+    });
+  });
+
+  describe('amounts', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2027-01-20T00:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('records what a payment charged and an adjustment returned, so half refunded counts as half a month', async () => {
+      await applyPaddleEvent(delivered(created), deps);
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_january',
+            transactionId: 'txn_january',
+            occurredAt: '2027-01-01T00:00:00Z',
+            total: '4680',
+            tax: '780',
+            period: { startsAt: '2027-01-01T00:00:00Z', endsAt: '2027-01-31T00:00:00Z' },
+          }),
+        ),
+        deps,
+      );
+      await applyPaddleEvent(
+        delivered(
+          adjustmentEvent({
+            eventId: 'evt_half',
+            action: 'refund',
+            type: 'partial',
+            status: 'approved',
+            transactionId: 'txn_january',
+            subtotal: '1950',
+            occurredAt: '2027-01-10T00:00:00Z',
+          }),
+        ),
+        deps,
+      );
+
+      expect(memory.state.payments.get('txn_january')).toMatchObject({ total: 4680, tax: 780 });
+      expect([...memory.state.adjustments.values()][0]).toMatchObject({ amount: 1950 });
+      // 3900 charged before tax, 1950 returned: the first half of the 30-day period.
+      expect(memory.state.entitlementStates.get('ctm_01')?.run).toMatchObject({
+        paidThrough: new Date('2027-01-16T00:00:00Z'),
+      });
+      expect(memory.state.payments.get('txn_january')?.status).toBe('partially_refunded');
     });
   });
 });

@@ -1,36 +1,56 @@
 import { describe, expect, it } from 'vitest';
-import newestRelease from '../../newest-release.json';
-import { snippetProblems } from '../../scripts/install-snippets.mjs';
 import {
   ciWorkflow,
-  feedCredentials,
-  FEED_USERNAME_VARIABLE,
-  licenceUserSecret,
+  dockerBuild,
+  dockerRestore,
+  FEED_SOURCE_KEY,
+  FEED_TOKEN_VARIABLE,
+  feedTokenPowerShell,
+  feedTokenShell,
+  feedUrl,
+  LICENCE_ENV_VARIABLE,
   nugetConfig,
 } from './install-snippets';
 
-// The snippets are the newest Pro installation guide's (newest-release.json, written by the docs-versions workflow,
-// which refuses a guide whose snippets fail snippetProblems).
 describe('install snippets', () => {
-  it('hold what the pages rely on', () => {
-    expect(snippetProblems(newestRelease.proInstallation)).toEqual([]);
-  });
-
-  it('point the feed at the environment’s org', () => {
-    const config = nugetConfig('tenantry-sandbox');
+  it('point the package source at this deployment’s feed', () => {
+    expect(feedUrl('https://sandbox.tenantry.dev')).toBe('https://sandbox.tenantry.dev/feed/v3/index.json');
+    const config = nugetConfig('https://sandbox.tenantry.dev');
     expect(config).toContain(
-      '<add key="tenantry-pro" value="https://nuget.pkg.github.com/tenantry-sandbox/index.json" />',
+      `<add key="${FEED_SOURCE_KEY}" value="https://sandbox.tenantry.dev/feed/v3/index.json" protocolVersion="3" />`,
     );
-    expect(config).not.toContain('tenantry-org');
+    expect(config).not.toContain('nuget.pkg.github.com');
   });
 
-  it('set the credentials for the connected GitHub account, or a placeholder', () => {
-    expect(feedCredentials('octocat')).toContain(`export ${FEED_USERNAME_VARIABLE}=octocat`);
-    expect(feedCredentials(null)).toContain(`export ${FEED_USERNAME_VARIABLE}=your-github-username`);
+  it('send only Tenantry Pro’s packages to the feed, and nuget.org nothing else', () => {
+    const sources = [...nugetConfig('https://tenantry.dev').matchAll(/<add key="([^"]+)" value="https/g)].map(
+      (match) => match[1],
+    );
+    expect(sources).toEqual(['nuget.org', FEED_SOURCE_KEY]);
+    expect(nugetConfig('https://tenantry.dev')).toMatch(
+      new RegExp(
+        `<packageSource key="${FEED_SOURCE_KEY}">\\s*<package pattern="Tenantry.Pro" />\\s*<package pattern="Tenantry.Pro.\\*" />\\s*</packageSource>`,
+      ),
+    );
   });
 
-  it('are the guide’s CI job and user-secrets commands', () => {
-    expect(ciWorkflow).toBe(newestRelease.proInstallation.ciWorkflow);
-    expect(licenceUserSecret).toBe(newestRelease.proInstallation.licenceUserSecret);
+  it('read the feed token from the environment, never holding one', () => {
+    expect(nugetConfig('https://tenantry.dev')).toContain(
+      `<add key="ClearTextPassword" value="%${FEED_TOKEN_VARIABLE}%" />`,
+    );
+    for (const snippet of [nugetConfig('https://tenantry.dev'), ciWorkflow, dockerRestore, dockerBuild]) {
+      expect(snippet).not.toMatch(/tpf_[A-Za-z0-9_-]{20,}/);
+    }
+    expect(feedTokenShell).toBe(`export ${FEED_TOKEN_VARIABLE}=tpf_your_feed_token`);
+    expect(feedTokenPowerShell).toContain(`'${FEED_TOKEN_VARIABLE}', 'tpf_your_feed_token', 'User'`);
+  });
+
+  it('take the token from CI secrets and Docker build secrets, and restore in locked mode', () => {
+    expect(ciWorkflow).toContain(`${FEED_TOKEN_VARIABLE}: \${{ secrets.${FEED_TOKEN_VARIABLE} }}`);
+    expect(ciWorkflow).toContain(`${LICENCE_ENV_VARIABLE}: \${{ secrets.TENANTRY_LICENSE }}`);
+    expect(ciWorkflow).toContain('dotnet restore --locked-mode');
+    expect(dockerRestore).toContain(`--mount=type=secret,id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE}`);
+    expect(dockerRestore).toContain('--locked-mode');
+    expect(dockerBuild).toContain(`--secret id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE}`);
   });
 });

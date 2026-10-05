@@ -1,4 +1,5 @@
--- Subscription events: one that occurred before the last one applied, delivered after it, changes nothing.
+-- Subscription events: one that occurred before the last one applied, delivered after it, changes nothing; a past-due
+-- subscription keeps when it first became past due; a cancelled one records when it ended.
 -- Run with `supabase test db` against the local database.
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -7,51 +8,84 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(10);
+select plan(16);
 
 insert into public.customers (customer_id, email) values ('ctm_sub', 'sub@example.com');
 
 select is(
-  public.record_subscription_event('sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, null, '2026-09-28 11:00:00+00'),
+  public.record_subscription_event(
+    'sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, null, null, null, '2026-09-28 11:00:00+00'),
   true, 'the first event for a subscription is applied');
 select is(
-  public.record_subscription_event('sub_1', 'ctm_sub', 'canceled', 'pri_1', 'pro_1', null, null, '2026-09-28 12:00:00+00'),
+  public.record_subscription_event(
+    'sub_1', 'ctm_sub', 'canceled', 'pri_1', 'pro_1', null, null, null, null, '2026-09-28 12:00:00+00'),
   true, 'a newer event is applied');
 select is(
-  public.record_subscription_event('sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, null, '2026-09-28 11:30:00+00'),
+  public.record_subscription_event(
+    'sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, null, null, null, '2026-09-28 11:30:00+00'),
   false, 'an update that occurred before the cancellation, delivered after it, is not applied');
 select results_eq(
   $$select status, last_event_at from public.subscriptions where subscription_id = 'sub_1'$$,
   $$values ('canceled'::text, '2026-09-28 12:00:00+00'::timestamptz)$$,
   'so the subscription stays cancelled');
 select is(
-  public.record_subscription_event('sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, null, '2026-09-28 12:00:00+00'),
+  public.record_subscription_event(
+    'sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', null, null, null, null, '2026-09-28 12:00:00+00'),
   true, 'an event at the same instant as the last one is applied');
 
 -- Paddle's timestamps, such as a scheduled change's effective_at, have microseconds and a Z.
 select is(
   public.record_subscription_event(
-    'sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', '2026-10-28T12:00:00.123456Z', 'cancel', '2026-09-28 13:00:00+00'),
+    'sub_1', 'ctm_sub', 'active', 'pri_1', 'pro_1', '2026-10-28T12:00:00.123456Z', 'cancel', '2026-10-28T12:00:00Z', null,
+    '2026-09-28 13:00:00+00'),
   true, 'an event with a scheduled cancellation is applied');
 select results_eq(
-  $$select scheduled_change_at, scheduled_change_action from public.subscriptions where subscription_id = 'sub_1'$$,
-  $$values ('2026-10-28 12:00:00.123456+00'::timestamptz, 'cancel'::text)$$,
+  $$select scheduled_change_at, scheduled_change_action, current_period_ends_at
+    from public.subscriptions where subscription_id = 'sub_1'$$,
+  $$values ('2026-10-28 12:00:00.123456+00'::timestamptz, 'cancel'::text, '2026-10-28 12:00:00+00'::timestamptz)$$,
   'the scheduled change records when it takes effect and what it is');
 
+-- Grace starts at the first past-due event and is kept by later ones; any other status clears it.
+select is(
+  public.record_subscription_event(
+    'sub_3', 'ctm_sub', 'past_due', 'pri_1', 'pro_1', null, null, '2026-11-01', null, '2026-10-01 00:05:00+00'),
+  true, 'a past-due event is applied');
+select is(
+  public.record_subscription_event(
+    'sub_3', 'ctm_sub', 'past_due', 'pri_1', 'pro_1', null, null, '2026-11-01', null, '2026-10-08 00:05:00+00'),
+  true, 'and another a week later');
+select is(
+  (select grace_started_at from public.subscriptions where subscription_id = 'sub_3'),
+  '2026-10-01 00:05:00+00'::timestamptz, 'a later past-due event keeps when grace started');
+select is(
+  public.record_subscription_event(
+    'sub_3', 'ctm_sub', 'canceled', 'pri_1', 'pro_1', null, null, null, '2026-10-31 00:05:00+00',
+    '2026-10-31 00:05:00+00'),
+  true, 'then the cancellation');
+select results_eq(
+  $$select status, grace_started_at, ended_at from public.subscriptions where subscription_id = 'sub_3'$$,
+  $$values ('canceled'::text, null::timestamptz, '2026-10-31 00:05:00+00'::timestamptz)$$,
+  'cancellation clears grace and records when it ended');
 select throws_ok(
-  $$select public.record_subscription_event('sub_2', 'ctm_unknown', 'active', 'pri_1', 'pro_1', null, null, now())$$,
+  $$update public.subscriptions set grace_started_at = now() where subscription_id = 'sub_3'$$,
+  '23514', null, 'only a past-due subscription has a grace start');
+
+select throws_ok(
+  $$select public.record_subscription_event(
+    'sub_2', 'ctm_unknown', 'active', 'pri_1', 'pro_1', null, null, null, null, now())$$,
   '23503', null,
   'a subscription event for a customer that does not exist yet fails, so it is retried');
 
 select ok(
   has_function_privilege(
     'service_role',
-    'public.record_subscription_event(text, text, text, text, text, timestamptz, text, timestamptz)',
+    'public.record_subscription_event(
+      text, text, text, text, text, timestamptz, text, timestamptz, timestamptz, timestamptz)',
     'execute'),
   'the service role can record subscription events');
 set local role authenticated;
 select throws_ok(
-  $$select public.record_subscription_event('sub_1', 'ctm_sub', 'active', null, null, null, null, now())$$,
+  $$select public.record_subscription_event('sub_1', 'ctm_sub', 'active', null, null, null, null, null, null, now())$$,
   '42501', null,
   'signed-in users cannot');
 set local role postgres;

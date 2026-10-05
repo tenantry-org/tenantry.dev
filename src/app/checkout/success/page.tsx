@@ -17,8 +17,8 @@ export default function SuccessPage() {
           </div>
           <h1 className={'mt-8 text-3xl font-bold tracking-tight md:text-4xl'}>Thanks for subscribing</h1>
           <p className={'mt-4 text-lg text-muted-foreground'}>
-            Next, connect your GitHub account to get the private package feed. Your licence key is on the same page. The
-            subscription can take a minute to show there.
+            Next, create a feed token on your Pro access page: NuGet uses it to restore Tenantry Pro from the package
+            feed. Your licence key is on the same page. The subscription can take a minute to show there.
           </p>
           <div className={'mt-10'}>
             <Suspense fallback={<NextStepButton signedIn={false} />}>
@@ -41,9 +41,9 @@ function NextStepButton({ signedIn }: Readonly<{ signedIn: boolean }>) {
   return (
     <Button size={'lg'} asChild={true}>
       {signedIn ? (
-        <Link href={'/dashboard/pro'}>Connect GitHub</Link>
+        <Link href={'/dashboard/pro'}>Create a feed token</Link>
       ) : (
-        <Link href={'/login'}>Log in to connect GitHub</Link>
+        <Link href={'/login'}>Log in to create a feed token</Link>
       )}
     </Button>
   );

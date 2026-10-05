@@ -5,8 +5,8 @@ import type { DrainResult } from '@/server/jobs/worker';
 import { processJobs } from '@/server/billing/process-jobs';
 
 /**
- * The reconcile run (the daily cron, /api/reconcile): queues a reconcile job for every customer who is entitled, has
- * a GitHub link or has a live licence, then runs the due jobs. The worker runs each reconcile (reconcile-customer.ts)
+ * The reconcile run (the daily cron, /api/reconcile): queues a reconcile job for every customer whose state may need
+ * correcting (customers_to_reconcile), then runs the due jobs. The worker runs each reconcile (reconcile-customer.ts)
  * in order with that customer's Paddle events and never alongside one, so reconciling cannot race a webhook: it sees
  * the customer's entitlements as the events before it left them. Jobs the run does not reach, or that fail and back
  * off, are picked up by later runs and webhooks.
