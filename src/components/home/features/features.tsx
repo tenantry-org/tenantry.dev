@@ -1,32 +1,35 @@
 import Link from 'next/link';
-import { ArrowRight, Check, Layers, ServerCog, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { ArrowRight, Check, Database, ListChecks, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { LogoMark } from '@/components/brand/logo';
 import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 import { ProOffer } from '@/constants/pro-offer';
 import { publishedSince } from '@/lib/docs-versions';
 import { cn } from '@/lib/utils';
 
-// From Tenantry Core's README ("Why Tenantry?" and "Tenantry and Tenantry.Pro"), for the release the docs show.
+// What is specific to Tenantry, from Tenantry Core's docs for the release the site shows: efcore-integration.md (write
+// isolation, database per tenant, TenantModel), efcore-advanced.md (models that cannot be isolated), analyzers.md (from
+// Core 0.7.0), tenant-resolution.md and access-control.md.
 const PRINCIPLES = [
   {
-    icon: Layers,
-    title: 'Your DbContext stays yours',
-    text: 'One call, options.UseTenantry(), isolates any DbContext: no base class, no interface, no SaveChanges override. Pooled contexts too, with a database per tenant.',
+    icon: ShieldCheck,
+    title: 'Writes are checked, not only reads',
+    text: 'SaveChanges refuses another tenant’s entity before anything is written. TenantId is a concurrency token, so an update or delete of another tenant’s row by its id matches no row and the save fails. ExecuteUpdate cannot set TenantId.',
   },
   {
-    icon: ShieldCheck,
-    title: 'Fails closed',
-    text: 'With no tenant, queries match nothing. Writes to another tenant’s rows are rejected before saving, and the stored tenant is part of every UPDATE and DELETE, so a forged key changes nothing.',
+    icon: Database,
+    title: 'A database per tenant, pooled or not',
+    text: 'AddDbContextPerTenantDatabase connects each context, or each pooled lease, to the current tenant’s database. Before the context opens a connection and before every command, a guard checks that the connection was set for the tenant current at that moment, and throws if not.',
+  },
+  {
+    icon: ListChecks,
+    // Core 0.7.0 adds the analyzers.
+    title: publishedSince('core', 'v0.7.0') ? 'Model checks and build warnings' : 'Model checks',
+    text: `UseTenantry() refuses a model it cannot isolate, such as a tenant-owned entity whose base type is not tenant-owned. TenantModel.FindUnisolatedEntityTypes lists the entity types still to mark tenant-owned or shared, for a test that fails when one is added.${publishedSince('core', 'v0.7.0') ? ' The build warns about an entity with a TenantId that is not tenant-owned (TNY1001), IgnoreQueryFilters() on a tenant-owned entity (TNY1002), and a tenant read from the request with no access validator (TNY2001).' : ''}`,
   },
   {
     icon: SlidersHorizontal,
     title: 'Your keys, your registry',
-    text: 'A Guid, int, string or any parsable tenant key. Resolve it from a header, subdomain, host name, route value, claim or a resolver of your own, and find a tenant by its slug or custom domain.',
-  },
-  {
-    icon: ServerCog,
-    title: 'HTTP and beyond',
-    text: `ASP.NET Core middleware and access validation, and the same isolation in workers, console and desktop apps. ${DOTNET_SUPPORT}; Native AOT for every Core package except Tenantry.EfCore.`,
+    text: 'A Guid, int, string or any parsable tenant key, resolved from a header, subdomain, host name, route value, claim or a resolver of your own, and found in your own store by id, slug or custom domain. Access validation refuses a request for a tenant the caller does not belong to.',
   },
 ];
 
@@ -34,7 +37,7 @@ const PRINCIPLES = [
 const CORE = [
   'Tenant resolution, your tenant store and access validation',
   'Suspended tenants refused in requests and in RunInScopeAsync (ValidateTenantActivity)',
-  'Worker scopes for background work as a tenant',
+  'Worker scopes for background work as a tenant, and the same isolation in console and desktop apps',
   'Options per tenant, authentication settings included (Tenantry.Options)',
   'HybridCache and IDistributedCache entries (Tenantry.Caching) and cached responses kept per tenant',
   'ITenantInvalidator, which clears what Tenantry keeps for a tenant when the tenant changes',
@@ -42,6 +45,7 @@ const CORE = [
   // Core 0.7.0 tags ASP.NET Core's request metric with the tenant (tenant.TagRequestMetrics()).
   `Log event ids to alert on, a tenant.id tag on traces, and ${publishedSince('core', 'v0.7.0') ? 'request metrics per tenant' : 'a count of how requests were resolved'}`,
   'A model check that refuses mappings it cannot isolate, and a list of unisolated entity types for your tests',
+  `${DOTNET_SUPPORT}; Native AOT for every Core package except Tenantry.EfCore`,
 ];
 
 function Edition({
