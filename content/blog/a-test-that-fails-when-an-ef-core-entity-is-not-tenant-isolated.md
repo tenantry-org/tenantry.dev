@@ -1,6 +1,6 @@
 ---
 title: A test that fails when an EF Core entity is not tenant-isolated
-description: An xUnit test that lists the entity types with no tenant isolation, first from EF Core's model and then with Tenantry, what it caught, and what Tenantry refuses or logs without it.
+description: An xUnit test that lists the entity types with no tenant filter, over EF Core's model and then with Tenantry. What it caught, and what Tenantry refuses or logs without it.
 date: 2026-10-04
 author: Oliver McNally
 versions: Tenantry 0.7.0, .NET 10, EF Core 10.0.12, xUnit v3 3.2.2 and SQLite
@@ -41,12 +41,13 @@ public class TenantFilterTests
 }
 ```
 
-The test builds the model and stops there: it opens no connection and needs no tenant or application services. EF Core
-takes a hierarchy's filter from its root and loads an owned type with its owner, so the test looks at the other types
-only.
+The test builds the model and stops there: it opens no connection and needs no tenant or application services. It
+skips derived and owned types: EF Core applies a hierarchy's filter from its root type, and loads an owned type with
+its owner.
 
-The context filters `Order` and `Customer` by tenant, and every tenant reads `Country` and `Currency`. Then I added a
-`Note` entity without a filter. The test failed:
+The context filters `Order` and `Customer` by tenant, with `HasQueryFilter(o => o.TenantId == tenantId)` on a tenant
+id the context takes in its constructor; the test passes none, as it only reads the model. Every tenant reads
+`Country` and `Currency`. Then I added a `Note` entity without a filter. The test failed:
 
 ```text
 TenantFilterTests.EveryEntityTypeHasAQueryFilterOrIsShared [FAIL]
@@ -81,7 +82,7 @@ public class TenantIsolationTests
 ```
 
 `TenantModel.FindUnisolatedEntityTypes` returns the entity types that are neither tenant-owned nor marked as shared by
-every tenant. Here `Order` and `Customer` are tenant-owned, and the shared types are marked in place of a list in the
+every tenant. Here `Order` and `Customer` are tenant-owned. The shared types are marked rather than listed in the
 test, one in the model and one with an attribute:
 
 ```csharp
@@ -120,8 +121,9 @@ Tenantry.EfCore.TenantIsolationViolationException : Entity 'Invoice' is tenant-o
 ITenantEntity<String> on 'Document'.
 ```
 
-In the running application the same exception came from the context's first use, `EnsureCreatedAsync` in mine. The
-[EF Core guide](/docs/core/efcore-advanced#models-that-cannot-be-isolated) lists the other models Tenantry refuses.
+In the running application the same exception came when the context first built its model, at `EnsureCreatedAsync`
+in mine. The [EF Core guide](/docs/core/efcore-advanced#models-that-cannot-be-isolated) lists the other models
+Tenantry refuses.
 
 ## A write to another tenant's row
 
@@ -149,14 +151,15 @@ means a request tried to write across tenants and failed.
 The test reads the model, and the model says nothing about the queries the application runs. In Acme's scope,
 `db.Orders.CountAsync()` returned 1 and `db.Orders.IgnoreQueryFilters().CountAsync()` returned 2, Globex's order
 included. SQL sent with `Database.SqlQuery` read every tenant's rows too. Tenantry's
-[analyzers](/docs/core/analyzers) report both calls when the project builds: `IgnoreQueryFilters()` on a tenant-owned
-entity as warning TNY1002, and `SqlQuery` as TNY1003, which is info by default. TNY1001 reports an entity with a
-`TenantId` property that does not implement `ITenantEntity<TKey>`; `Note`, with no `TenantId`, was not reported.
+[analyzers](/docs/core/analyzers) report both calls: `IgnoreQueryFilters()` on a tenant-owned entity as warning
+TNY1002, printed when the project builds, and `SqlQuery` as TNY1003. That one is info by default, so an IDE marks the
+call but `dotnet build` does not print it unless `.editorconfig` raises it to a warning. TNY1001 reports an entity with
+a `TenantId` property that does not implement `ITenantEntity<TKey>`; `Note`, with no `TenantId`, was not reported.
 
 The test also passed for a context whose options do not call `UseTenantry()`, which isolates nothing.
 
 The same model check can run in the application. With `OnUnmarkedEntityType` set to `Reject`, the context with `Note`
-threw at its first save:
+threw at its first query or save; `EnsureCreatedAsync` before it went through:
 
 ```csharp
 builder.Services.AddTenantry<string>(tenant => tenant
