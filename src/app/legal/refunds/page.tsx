@@ -4,7 +4,7 @@ export const metadata = { title: 'Refund Policy | Tenantry' };
 
 export default function RefundsPage() {
   return (
-    <LegalPage title="Refund Policy" lastUpdated="2026-10-05">
+    <LegalPage title="Refund Policy" lastUpdated="2026-10-06">
       <p>
         Tenantry Pro is sold through our merchant of record, Paddle.com. Refunds are handled in accordance with this
         policy and Paddle&apos;s buyer terms.

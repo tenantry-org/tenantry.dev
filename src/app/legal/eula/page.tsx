@@ -5,7 +5,7 @@ export const metadata = { title: 'End User Licence Agreement | Tenantry Pro' };
 
 export default function EulaPage() {
   return (
-    <LegalPage title="End User Licence Agreement (Tenantry Pro)" lastUpdated="2026-10-05">
+    <LegalPage title="End User Licence Agreement (Tenantry Pro)" lastUpdated="2026-10-06">
       <p>
         This End User Licence Agreement (&quot;EULA&quot;) is between you (or the entity you represent) and{' '}
         {LegalEntity.name}, {LegalEntity.registration}, whose registered office is at {LegalEntity.address}, the
