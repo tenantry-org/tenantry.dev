@@ -69,9 +69,8 @@ public class AppDbContext : DbContext, IMultiTenantDbContext
 }
 ```
 
-`TenantMismatchMode.Throw` and `TenantNotSetMode.Throw` are Finbuckle's defaults, which its own
-`MultiTenantDbContext` base class returned too; a context that implements `IMultiTenantDbContext` itself has to
-declare both. Every Finbuckle result below is with these two modes unless it names another.
+`TenantMismatchMode.Throw` and `TenantNotSetMode.Throw` are Finbuckle's defaults, and what its `MultiTenantDbContext`
+base class sets; a context that implements `IMultiTenantDbContext` itself has to declare both. Every Finbuckle result below is with these two modes unless it names another.
 
 The Tenantry context loses the constructor parameter, the three properties, the model configuration and both
 overrides:
@@ -124,9 +123,10 @@ With `TenantNotSetMode.Overwrite`, the same save went through and moved the row.
 An instance that already carries `TenantId = "globex"`, because the request body or the calling code set it, passed
 with or without `EnforceMultiTenantOnTracking` and moved the row in the same way, under every combination of the two
 modes. One that carries another tenant's id, `TenantId = "acme"` in Globex's context, was refused under
-`TenantMismatchMode.Throw` (`MultiTenantException: 1 modified entities with Tenant Id mismatch.`), as was a loaded
-order whose `TenantId` was changed. Under `Ignore` the instance was saved as it was, changing Acme's order from
-Globex's context, and under `Overwrite` it was saved with Globex's id, moving the order.
+`TenantMismatchMode.Throw`: `MultiTenantException: 1 modified entities with Tenant Id mismatch.` Under `Ignore` it was
+saved as it was, so Globex's request changed Acme's order, and under `Overwrite` it was saved with Globex's id, which
+moved the order to Globex. A Globex order loaded in Globex's context and given `TenantId = "acme"` was refused under
+`Throw` in the same way; under `Ignore` it moved to Acme, and under `Overwrite` it stayed Globex's.
 
 Under Tenantry, the instance without a tenant id was refused before anything was written:
 
@@ -162,8 +162,8 @@ page does not mention this case. Tenantry returned an empty list. Code or tests 
 exception to find a missing tenant get no rows after the move, and no error.
 
 Inserting with no tenant fails in both. Finbuckle threw `MultiTenantException: MultiTenant Entity cannot be attached
-if TenantInfo is null.` (without `EnforceMultiTenantOnTracking`, "cannot be changed" in place of "cannot be attached"),
-under every combination of the two modes, and Tenantry threw `TenantNotResolvedException`.
+if TenantInfo is null.` under every combination of the two modes; without `EnforceMultiTenantOnTracking` the message
+says "cannot be changed" instead. Tenantry threw `TenantNotResolvedException`.
 
 ## A bulk update that sets TenantId
 
@@ -202,7 +202,7 @@ identifier the store does not know has no tenant.
 
 Neither library isolates SQL that does not start from a `DbSet`. In Acme's context, `Database.SqlQuery` over the
 `Orders` table returned both tenants' rows under each library. `Orders.FromSql` returned only Acme's, because EF Core
-composes query filters onto it. Tenantry's analyzer notes the `SqlQuery` call when the project builds, as TNY1003, at
-info level.
+composes query filters onto it. Tenantry's analyzer marks the `SqlQuery` call as TNY1003, at info level, which an IDE
+shows on the call; `dotnet build` prints it only when `.editorconfig` raises it to a warning.
 
 The guide below covers the rest of the move: tenant types and stores, resolvers, per-tenant options and a checklist.
