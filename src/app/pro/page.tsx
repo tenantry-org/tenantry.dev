@@ -153,7 +153,7 @@ const QUESTIONS = [
 export default function ProPage() {
   return (
     <>
-      <Header />
+      <Header pricingHref={'#pricing'} />
       <main>
         <section className={'border-b border-border/70'}>
           <div className={'mx-auto max-w-6xl px-4 pb-16 pt-16 md:px-8 md:pt-24'}>

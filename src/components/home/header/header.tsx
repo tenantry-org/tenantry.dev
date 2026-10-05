@@ -11,7 +11,8 @@ const NAV = [
   { label: 'GitHub', href: 'https://github.com/tenantry-org/tenantry-core', external: true },
 ];
 
-export default function Header() {
+/** The site header; a page with its own pricing block passes `pricingHref` so Pricing stays on the page. */
+export default function Header({ pricingHref = '/#pricing' }: Readonly<{ pricingHref?: string }>) {
   return (
     <header className={'sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md'}>
       <div className={'mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-4 md:px-8'}>
@@ -24,7 +25,7 @@ export default function Header() {
               <Link
                 key={item.label}
                 className={'transition-colors hover:text-foreground'}
-                href={item.href}
+                href={item.label === 'Pricing' ? pricingHref : item.href}
                 target={item.external ? '_blank' : undefined}
                 rel={item.external ? 'noopener noreferrer' : undefined}
               >
