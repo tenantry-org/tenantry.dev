@@ -45,7 +45,8 @@ app.UseOutputCache();
 ```
 
 The header lets any caller name any tenant, which keeps the example short. Tenantry's analyzer reports it when the
-project builds, as warning TNY2001, and an application adds an access check such as `ValidateTenantAccessByClaim`.
+project builds, as warning TNY2001. A real application adds an access check, such as `ValidateTenantAccessByClaim`,
+which also clears the warning.
 
 `IsolateCaches()` wraps the `HybridCache` registered before it. With `AddHybridCache()` moved after `AddTenantry`,
 the host refused to start:
