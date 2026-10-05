@@ -1,6 +1,6 @@
 import { LegalPage } from '@/components/legal/legal-page';
 
-export const metadata = { title: 'Refund Policy — Tenantry' };
+export const metadata = { title: 'Refund Policy | Tenantry' };
 
 export default function RefundsPage() {
   return (

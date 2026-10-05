@@ -1,7 +1,7 @@
 import { LegalPage } from '@/components/legal/legal-page';
 import { LegalEntity } from '@/constants/legal-entity';
 
-export const metadata = { title: 'Terms of Service — Tenantry' };
+export const metadata = { title: 'Terms of Service | Tenantry' };
 
 export default function TermsPage() {
   return (

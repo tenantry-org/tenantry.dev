@@ -1,7 +1,7 @@
 import { LegalPage } from '@/components/legal/legal-page';
 import { LegalEntity } from '@/constants/legal-entity';
 
-export const metadata = { title: 'End User Licence Agreement — Tenantry Pro' };
+export const metadata = { title: 'End User Licence Agreement | Tenantry Pro' };
 
 export default function EulaPage() {
   return (

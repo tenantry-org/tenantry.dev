@@ -1,7 +1,7 @@
 import { LegalPage } from '@/components/legal/legal-page';
 import { LegalEntity } from '@/constants/legal-entity';
 
-export const metadata = { title: 'Privacy Policy — Tenantry' };
+export const metadata = { title: 'Privacy Policy | Tenantry' };
 
 export default function PrivacyPage() {
   return (
