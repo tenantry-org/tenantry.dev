@@ -162,7 +162,7 @@ const QUESTIONS = [
   {
     question: 'What if Tenantry stops?',
     answer:
-      'Core stays Apache-2.0 on GitHub, and the vested Pro releases stay licensed and keep working, as when a subscription ends.',
+      'Core stays Apache-2.0 on GitHub, and the vested Pro releases stay licensed and keep working, as when a subscription ends. If Tenantry fully ceases commercial operations and the package feed goes offline permanently, you can request copies of the packages of your vested releases, with a copy of the source code of those releases, by email to support@tenantry.dev.',
     link: { label: 'EULA', href: '/legal/eula' },
   },
 ];

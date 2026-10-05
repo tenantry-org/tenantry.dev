@@ -110,6 +110,11 @@ export default function EulaPage() {
         systems, and you must keep them secret. Unlike your licence key, a feed token may not be included in an
         application you distribute.
       </p>
+      <p>
+        If Tenantry fully ceases commercial operations and the package feed goes offline permanently, you may request,
+        by email to <a href="mailto:support@tenantry.dev">support@tenantry.dev</a>, copies of the packages of the vested
+        releases, with a copy of the source code of those releases.
+      </p>
 
       <h2>4. Distribution in your applications</h2>
       <p>
