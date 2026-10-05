@@ -3,7 +3,7 @@ title: Deleting one tenant's data from a shared EF Core database
 description: Offboarding a tenant whose rows sit in many tables of a shared database, with foreign keys between them. What Tenantry Pro's offboarding deleted, refused and reported, and what it leaves to you.
 date: 2026-10-04
 author: Oliver McNally
-versions: Tenantry Core and Pro 0.6.0, .NET 10, EF Core 10.0.12 and SQLite
+versions: Tenantry Core and Pro 0.7.0, .NET 10, EF Core 10.0.12 and SQLite
 tags: [dotnet, efcore, multitenancy, database]
 next:
   label: Read about offboarding a tenant
@@ -12,18 +12,43 @@ draft: true
 ---
 
 When a customer leaves, or asks for its data to be erased, its rows in a shared database are spread over every
-tenant-owned table, with foreign keys between them. Deleting them by hand means a `DELETE` per table, in an order the
-foreign keys accept, in one transaction, and a change to that code for each tenant-owned table added later. This post
-offboards one tenant with Tenantry Pro and shows what happened to its rows and to the other tenant's.
+tenant-owned table, with foreign keys between them. Deleting them means a `DELETE` per table, in an order the foreign
+keys accept, in one transaction. This post does it by hand, then offboards the same tenant with Tenantry Pro, and shows
+what happened to its rows and to the other tenant's.
 
 The database is SQLite, with two tenants, Acme and Globex. Each has one customer, three orders and six order lines.
 `Order` references `Customer`, and `OrderLine` references `Order`, both with `DeleteBehavior.Restrict`, so the database
 refuses to delete a row that another still references. All three implement `ITenantEntity<string>`.
 
-Tenantry Core does not delete a tenant's rows. It gives you the tenant's scope and filtered contexts, and leaves the
-order of the deletes, the transaction and the list of tables to your code.
+## By hand
 
-## Registration
+Tenantry Core does not delete a tenant's rows, but in the tenant's scope each `ExecuteDelete` is filtered to that
+tenant, so the deletion is a few lines:
+
+```csharp
+await using (var scope = scopes.CreateScope(globex))
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await using var transaction = await db.Database.BeginTransactionAsync(ct);
+    await db.OrderLines.ExecuteDeleteAsync(ct);
+    await db.Orders.ExecuteDeleteAsync(ct);
+    await db.Customers.ExecuteDeleteAsync(ct);
+    await transaction.CommitAsync(ct);
+}
+```
+
+```sql
+DELETE FROM "OrderLines" AS "o" WHERE @ef_filter__p2 AND "o"."TenantId" = @ef_filter__p1
+DELETE FROM "Orders" AS "o" WHERE @ef_filter__p2 AND "o"."TenantId" = @ef_filter__p1
+DELETE FROM "Customers" AS "c" WHERE @ef_filter__p2 AND "c"."TenantId" = @ef_filter__p1
+```
+
+It deleted Globex's rows and left Acme's. Globex was already suspended, so the code uses `CreateScope`, which checks
+nothing; `RunInScopeAsync` refuses a suspended tenant. The tables and their order are written out by hand, so a
+tenant-owned table added later is left behind until someone adds it here, and an export before the deletion, or
+clearing what the application caches for the tenant after it, is more code of your own.
+
+## With Tenantry Pro
 
 ```csharp
 services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString).UseTenantry());
@@ -37,8 +62,8 @@ services.AddTenantry<string>(tenant => tenant
 ```
 
 `AddDeprovisioningStep` adds a step of your own, here an export. `AddSharedDataDeletion` adds the step that deletes
-the tenant's rows from every tenant-owned table of `AppDbContext`. Offboarding runs your steps first, then the
-deletion, then clears what Tenantry caches for the tenant.
+the tenant's rows from every tenant-owned table of `AppDbContext`. Offboarding invalidates the tenant, runs your steps,
+then the deletion, then invalidates the tenant again.
 
 The export step is resolved in the tenant's scope, so its context reads that tenant's rows only:
 
@@ -82,7 +107,7 @@ On the first attempt the export folder did not exist. The result reported each s
 
 ```text
 Succeeded: False
-ExportTenantData   Failed    DirectoryNotFoundException: Could not find a part of the path '…/exports/globex-20261004-022212188.json'.
+ExportTenantData   Failed    DirectoryNotFoundException: Could not find a part of the path '…/exports/globex-20261005-034038184.json'.
 DeleteSharedData   NotRun
 ClearCaches        NotRun
 ```
@@ -112,24 +137,29 @@ Afterwards the tables held Acme's one customer, three orders and six lines, and 
 
 Running it a third time succeeded too: the deletion found 0 rows. The export ran again and found no orders. Had it
 written to a fixed file name, it would have replaced the real export with an empty one; with a new name per run, the
-folder kept both, of 721 and 2 bytes. Tenantry does not tell a step that the shared rows are already gone.
+folder kept both, of 535 and 2 bytes. Tenantry does not tell a step that the shared rows are already gone.
 
 Removing Globex from the tenant store comes after a successful result, and is the application's job: the store is
 yours.
 
 ## What it refuses, and what it leaves
 
-The deletion fails, and deletes nothing, when a table that is not tenant-owned references a tenant's row. I added a
-`Referrals` table, shared by every tenant, with a foreign key to `Customers` and one row pointing at Globex's
-customer. The delete from `Customers` failed, and the transaction was rolled back:
+The deletion looks only at tenant-owned tables. A row of another table that references a tenant's row is left to the
+database's foreign key. I added a `Referrals` table, shared by every tenant, with a foreign key to `Customers` and one
+row pointing at Globex's customer. With `ON DELETE RESTRICT` (`DeleteBehavior.Restrict`), the delete from `Customers`
+failed, and the transaction was rolled back:
 
 ```text
 DeleteSharedData   Failed    SqliteException: SQLite Error 19: 'FOREIGN KEY constraint failed'.
 ClearCaches        NotRun
 ```
 
-Every Globex row was still there. The same happens when tenant-owned tables reference each other in a cycle. With
-`Customers` and `Addresses` pointing at each other, the step failed before sending any SQL:
+Every Globex row was still there, and so was the referral. `NO ACTION` (`DeleteBehavior.NoAction`) failed in the same
+way. With `ON DELETE CASCADE` the step succeeded and the referral was deleted with the customer, and with `SET NULL` it
+succeeded and the referral stayed, its `CustomerId` cleared.
+
+Tenant-owned tables that reference each other in a cycle fail the step too. With `Customers` and `Addresses` pointing
+at each other, it failed before sending any SQL:
 
 ```text
 DeleteSharedData   Failed    InvalidOperationException: The tenant's rows were not deleted: the tables Addresses,
@@ -137,8 +167,11 @@ Customers reference each other in a cycle, which no order of DELETE statements c
 deprovisioning step of your own.
 ```
 
-Rows in tables without a `TenantId` stay, and so does anything outside the database, such as uploaded files or a
+Other rows in tables without a `TenantId` stay, and so does anything outside the database, such as uploaded files or a
 search index. Each needs a deprovisioning step of your own, added before the deletion.
 
-The last step, `ClearCaches`, invalidates the tenant through `ITenantInvalidator<TKey>`, which clears the caches of
-the instance that runs it. Other instances of the application keep their cached copies until they expire.
+Offboarding invalidates the tenant through `ITenantInvalidator<TKey>` before its first step, before it even checks
+that the tenant is suspended, and the last step, `ClearCaches`, invalidates it again. Invalidating clears the caches
+of the instance that runs it. With Tenantry Core's `BroadcastInvalidations`, it is also published to the application's
+other instances; without it, they keep their cached copies until those expire. In these runs, a broadcast handler
+saw Globex invalidated once in each refused or failed offboarding, and twice in each that succeeded.
