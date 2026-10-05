@@ -60,17 +60,18 @@ export default function EulaPage() {
         full is twelve, whatever the number of days in them. A paid period that is part of a billing period counts for
         the calendar months it covers from the start of the billing period: the first half of a monthly billing period
         is half a paid month. Time in which paid periods overlap, as when you change plan or hold two subscriptions,
-        counts once, for the paid period that began first. Your paid time (all your paid periods together) starts at the
-        start of your first paid period. It vests when the paid months you have served, up to the present time, add up
-        to 12 (&quot;12 paid months&quot;). Once it has vested, its vested-through date is the end of the paid time you
-        have served: the latest time, up to the present, that one of your paid periods covers. The date moves on as
-        further paid time is served, in the same subscription or a later one; between subscriptions it stays at the end
-        of your last paid period; and it is never later than the present time. For example, if you pay for six months,
-        have no subscription for two years and then pay for six more months, your paid time vests at the end of the
-        twelfth monthly billing period, and your vested-through date is then that day, so the releases published during
-        the two years are vested too. If half of the sixth month&apos;s payment had been refunded, that month would be
-        half a paid month, and your paid time would vest halfway through a thirteenth monthly billing period, when half
-        of its days have been served, if you kept paying.
+        counts once, as the larger of the credits the paid periods give it, so a payment you keep never reduces your
+        paid months. Your paid time (all your paid periods together) starts at the start of your first paid period. It
+        vests when the paid months you have served, up to the present time, add up to 12 (&quot;12 paid months&quot;).
+        Once it has vested, its vested-through date is the end of the paid time you have served: the latest time, up to
+        the present, that one of your paid periods covers. The date moves on as further paid time is served, in the same
+        subscription or a later one; between subscriptions it stays at the end of your last paid period; and it is never
+        later than the present time. For example, if you pay for six months, have no subscription for two years and then
+        pay for six more months, your paid time vests at the end of the twelfth monthly billing period, and your
+        vested-through date is then that day, so the releases published during the two years are vested too. If half of
+        the sixth month&apos;s payment had been refunded, that month would be half a paid month, and your paid time
+        would vest halfway through a thirteenth monthly billing period, when half of its days have been served, if you
+        kept paying.
       </p>
       <p>
         A full refund of your subscription&apos;s latest paid billing period, or a chargeback of any of its payments,

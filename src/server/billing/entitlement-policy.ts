@@ -41,8 +41,8 @@ import { isAnnualTerm, REVERSAL_RECORD_WINDOW_MS } from '@/server/billing/paddle
  *   months it covers from the period's start, up to the period's months: a monthly period kept in full is one paid
  *   month, half of it kept is half a month, and an annual period kept for its first 181 days, from 1 January, is six.
  * - The customer's paid time is the counted parts of all their billing periods. It adds up across gaps: separate
- *   subscriptions, with or without time between them, all count. Where counted parts overlap, the time counts once, by
- *   the part that began first. It starts at the start of its first counted part.
+ *   subscriptions, with or without time between them, all count. Where counted parts overlap, the time counts once, as
+ *   the largest credit any of them gives it, so a kept payment never lowers the count. It starts at the start of its first counted part.
  * - It vests when the paid time served (the counted parts before now) reaches 12 paid months by that count. From then
  *   on it is vested through the end of the paid time served: the latest moment before now that paid time covers. In a
  *   gap that stays where the last paid period ended; a later paid period moves it on as it is served. It is never
@@ -545,9 +545,9 @@ function servedThrough(paid: PaidTime, now: number): number {
   return Math.min(last.to, now);
 }
 
-// The counted parts cut where they meet or overlap into stretches, each counted by the part that began first (the
-// longer on a tie), in order, so overlapping time counts once and a part counts only time no earlier part covers.
-// Neighbouring stretches counted by the same part are joined.
+// The counted parts cut where they meet or overlap into stretches, each counted once, by the part that credits it the
+// most (the earliest on a tie), in order, so a kept payment can never lower what the others count. Neighbouring
+// stretches counted by the same part are joined.
 function onceEach(parts: CountedPart[]): Stretch[] {
   const edges = [...new Set(parts.flatMap(({ from, to }) => [from, to]))].sort((a, b) => a - b);
   const stretches: Stretch[] = [];
@@ -555,9 +555,8 @@ function onceEach(parts: CountedPart[]): Stretch[] {
     const [from, to] = [edges[i], edges[i + 1]];
     const covering = parts.filter((part) => part.from <= from && part.to >= to);
     if (covering.length === 0) continue;
-    const part = covering.reduce((first, next) =>
-      next.from < first.from || (next.from === first.from && next.to > first.to) ? next : first,
-    );
+    const gain = (part: CountedPart) => credit(part, to) - credit(part, from);
+    const part = covering.reduce((best, next) => (gain(next) > gain(best) ? next : best));
     const last = stretches.at(-1);
     if (last && last.to === from && last.part === part) last.to = to;
     else stretches.push({ from, to, part });

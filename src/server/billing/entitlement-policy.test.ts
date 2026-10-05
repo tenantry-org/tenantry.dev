@@ -953,12 +953,49 @@ describe('what counts as money returned', () => {
       }),
     ]);
 
-    // Both kept: the overlapping days count once, so 12 months are served on 1 January 2028, not earlier.
+    // Both kept: the overlapping days count once, each as the larger credit of the two months covering it. Where a
+    // short month of one subscription overlaps a long one of the other, that is a little more than a calendar month's
+    // share, so 12 paid months are reached two days early, on 29 December 2027 at 20:03.
     const both = (now: string) =>
       compute({ payments: [...first, ...second], subscriptions: [running('sub_1'), running('sub_2')], now });
-    expect(both('2027-12-31T23:59:59Z').vestedThrough).toBeNull();
-    expect(both('2027-12-31T23:59:59Z').run).toMatchObject({ monthsPaid: 12, vestsAt: date('2028-01-01T00:00:00Z') });
-    expect(vested(both('2028-01-01T00:00:00Z'))).toBe('2028-01-01T00:00:00.000Z');
+    expect(both('2027-12-29T20:03:00Z').vestedThrough).toBeNull();
+    expect(both('2027-12-29T20:03:00Z').run).toMatchObject({ vestsAt: date('2027-12-29T20:03:25.714Z') });
+    expect(confirmedRuns(both('2028-01-01T00:00:00Z'))).toEqual([
+      expect.objectContaining({ confirmedAt: date('2027-12-29T20:03:25.714Z') }),
+    ]);
+  });
+
+  describe('a kept payment on another subscription for time already paid for', () => {
+    const year = monthly('2027-01-01T00:00:00Z', 12, { subscriptionId: 'sub_1' });
+    const subscriptions = [running('sub_1'), running('sub_2')];
+    const at = (payments: Payment[], now: string) => compute({ payments, subscriptions, now });
+
+    it('never takes vesting away: a year with a month from 15 January kept beside it vests on the same day', () => {
+      const extra = payment('2027-01-15T00:00:00Z', { subscriptionId: 'sub_2' });
+
+      expect(vested(at(year, '2028-01-01T00:00:00Z'))).toBe('2028-01-01T00:00:00.000Z');
+      expect(at([...year, extra], '2027-12-31T23:59:59Z').vestedThrough).toBeNull();
+      expect(vested(at([...year, extra], '2028-01-01T00:00:00Z'))).toBe('2028-01-01T00:00:00.000Z');
+    });
+
+    it('counts January and February as two paid months beside a month from 15 January', () => {
+      const two = monthly('2027-01-01T00:00:00Z', 2, { subscriptionId: 'sub_1' });
+      const extra = payment('2027-01-15T00:00:00Z', { subscriptionId: 'sub_2' });
+
+      // 1 to 15 February is 14 of February's 28 days (half a month) and 14 of the other month's 31: it counts as half.
+      expect(at([...two, extra], '2027-03-05T00:00:00Z').run).toMatchObject({ monthsPaid: 2 });
+    });
+
+    it('vests a year with a month from 15 November beside it at most half a day early', () => {
+      const extra = payment('2027-11-15T00:00:00Z', { subscriptionId: 'sub_2' });
+
+      // 1 to 15 December counts as 14 of the other month's 30 days rather than 14 of December's 31: 14/930 of a month
+      // more, which December serves in 11 hours and 12 minutes.
+      expect(at([...year, extra], '2027-12-31T12:47:59Z').vestedThrough).toBeNull();
+      expect(confirmedRuns(at([...year, extra], '2028-01-01T00:00:00Z'))).toEqual([
+        expect.objectContaining({ confirmedAt: date('2027-12-31T12:48:00Z') }),
+      ]);
+    });
   });
 });
 
