@@ -236,6 +236,73 @@ describe('the owner’s table', () => {
   describe('annual plans', () => {
     const term = annual('2027-01-01T00:00:00Z');
 
+    it('grants no term for a payment at the yearly price shorter than a year: it counts only as paid time', () => {
+      // A prorated charge for a plan change, at the yearly price, for the last six months of the term.
+      const prorated = payment('2027-07-01T00:00:00Z', {
+        months: 6,
+        billingInterval: 'year',
+        billingFrequency: 1,
+        priceId: 'pri_01year',
+        charged: 500,
+      });
+      const refund = adjustment(term, 'refund', '2027-07-02T00:00:00Z');
+      const at = (now: string) =>
+        compute({ payments: [term, prorated], adjustments: [refund], now, endedAt: '2027-07-02T00:00:00Z' });
+
+      for (const now of ['2027-07-03T00:00:00Z', '2028-02-01T00:00:00Z']) {
+        expect(at(now).vestedThrough).toBeNull();
+        expect(at(now).grants).toEqual([
+          expect.objectContaining({ kind: 'annual_term', transactionId: term.transactionId, status: 'withdrawn' }),
+        ]);
+      }
+      // A period 3 days short of the year, as month-end billing gives, is still a whole year.
+      const monthEnd = annual('2027-01-31T00:00:00Z', { periodEndsAt: date('2028-01-28T00:00:00Z') });
+      expect(vested(compute({ payments: [monthEnd], now: '2027-02-01T00:00:00Z' }))).toBe('2028-01-28T00:00:00.000Z');
+    });
+
+    it('lets the full payment decide a term that a small charge was also stamped with', () => {
+      // Paddle stamps a 500 charge with the same whole-year period as the 39000 payment.
+      const small = annual('2027-01-01T00:00:00Z', { charged: 500 });
+      const now = '2027-07-03T00:00:00Z';
+      const annualGrants = (entitlement: Entitlement) => entitlement.grants.filter((g) => g.kind === 'annual_term');
+
+      // The small charge refunded, the full payment kept: vested, whichever order the payments are listed in.
+      const smallRefunded = adjustment(small, 'refund', '2027-07-02T00:00:00Z');
+      for (const payments of [
+        [term, small],
+        [small, term],
+      ]) {
+        const entitlement = compute({ payments, adjustments: [smallRefunded], now });
+        expect(vested(entitlement)).toBe('2028-01-01T00:00:00.000Z');
+        expect(annualGrants(entitlement)).toEqual([
+          expect.objectContaining({ transactionId: term.transactionId, status: 'confirmed' }),
+        ]);
+      }
+
+      // The full payment refunded, the small charge kept: no term is vested at once.
+      const termRefunded = adjustment(term, 'refund', '2027-07-02T00:00:00Z');
+      for (const payments of [
+        [term, small],
+        [small, term],
+      ]) {
+        const entitlement = compute({ payments, adjustments: [termRefunded], now, endedAt: '2027-07-02T00:00:00Z' });
+        expect(entitlement.vestedThrough).toBeNull();
+        expect(annualGrants(entitlement)).toEqual([
+          expect.objectContaining({ transactionId: term.transactionId, status: 'withdrawn' }),
+        ]);
+      }
+
+      // Two equal payments for one term, one of them refunded: the one kept decides.
+      const again = annual('2027-01-01T00:00:00Z');
+      const againRefunded = adjustment(again, 'refund', '2027-07-02T00:00:00Z');
+      for (const payments of [
+        [term, again],
+        [again, term],
+      ]) {
+        expect(vested(compute({ payments, adjustments: [againRefunded], now }))).toBe('2028-01-01T00:00:00.000Z');
+      }
+    });
+
     it.each(['2027-01-01T00:00:00Z', '2027-01-02T00:00:00Z', '2027-12-31T23:59:59Z', '2029-01-01T00:00:00Z'])(
       'kept in full: at %s the grant is confirmed from the payment, vested through the term end',
       (now) => {

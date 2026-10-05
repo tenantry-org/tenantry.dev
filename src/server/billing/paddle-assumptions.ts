@@ -35,7 +35,8 @@ export function continuesRun(billedThrough: Date, periodStartsAt: Date): boolean
  * at the change. Paddle's docs say the billing period resets to a year from the change; they do not show that
  * transaction's period. Every completed Pro transaction with a billing period is recorded whatever its origin, the
  * annual term overlaps the month in progress, and overlapping periods count once (entitlement-policy.ts), so the
- * month in progress stays counted. A transaction counts as an annual term when its price bills yearly.
+ * month in progress stays counted. A transaction is an annual term when its price bills yearly and its billing period
+ * is a whole year (entitlement-policy.ts: annualTerms).
  */
 export function isAnnualTerm(billingInterval: string, billingFrequency: number): boolean {
   return (

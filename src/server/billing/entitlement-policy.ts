@@ -179,7 +179,7 @@ export function computeEntitlement(input: EntitlementInput): Entitlement {
       },
     ];
   });
-  const grants = dedupe([...runGrants, ...ledger.annualTerms()]);
+  const grants = [...runGrants, ...ledger.annualTerms()].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
   return {
     access,
@@ -369,17 +369,27 @@ class Ledger {
   }
 
   /**
-   * A grant for each annual payment that charged something: confirmed when paid (from its billing period's start)
-   * through the term's end while nothing of it is returned, and withdrawn otherwise.
+   * A grant for each annual term: confirmed when paid (from its billing period's start) through the term's end while
+   * nothing of its payment is returned, and withdrawn otherwise. An annual term is a payment at an offer price that
+   * bills yearly, that charged something, and whose billing period is a whole year (12 calendar months, less the
+   * month-end tolerance). A shorter payment at a yearly price, such as a prorated charge for a plan change, grants no
+   * term: it counts only as paid time, like any other payment.
+   *
+   * vested_entitlements keeps one grant per term start, so of two annual terms with the same start, one decides: the
+   * one that charged more, then the later-ending, then the one kept over one withdrawn, then the lower transaction id.
+   * A small charge stamped with the whole year's period can therefore neither grant the year nor, refunded, take away
+   * the year that the full payment, kept, granted.
    */
   annualTerms(): Grant[] {
-    return this.input.payments
-      .filter(
-        (payment) =>
-          this.isOffered(payment) &&
-          payment.charged > 0 &&
-          isAnnualTerm(payment.billingInterval, payment.billingFrequency),
-      )
+    const terms = new Map<number, Payment>();
+    for (const payment of this.input.payments.filter((p) => this.isAnnualTerm(p))) {
+      const start = payment.periodStartsAt.getTime();
+      const other = terms.get(start);
+      if (!other || this.decidesTerm(payment, other)) terms.set(start, payment);
+    }
+
+    return [...terms.values()]
+      .sort((a, b) => a.periodStartsAt.getTime() - b.periodStartsAt.getTime())
       .map((payment) => {
         const returned = this.returned(payment);
         const grant: Grant = {
@@ -408,6 +418,26 @@ class Ledger {
     const endedAt = this.input.subscriptions.find((sub) => sub.subscriptionId === payment.subscriptionId)?.endedAt;
     if (!endedAt || endedAt >= payment.periodEndsAt) return payment.periodEndsAt;
     return new Date(Math.max(endedAt.getTime(), payment.periodStartsAt.getTime()));
+  }
+
+  private isAnnualTerm(payment: Payment): boolean {
+    return (
+      this.isOffered(payment) &&
+      payment.charged > 0 &&
+      isAnnualTerm(payment.billingInterval, payment.billingFrequency) &&
+      payment.periodEndsAt.getTime() >= addMonths(payment.periodStartsAt, 12).getTime() - MONTH_END_TOLERANCE_MS
+    );
+  }
+
+  // Whether `payment` decides its term over `other`, an annual term with the same start (annualTerms).
+  private decidesTerm(payment: Payment, other: Payment): boolean {
+    const kept = (p: Payment) => (sum(Object.values(this.returned(p))) > 0 ? 0 : 1);
+    return (
+      (payment.charged - other.charged ||
+        payment.periodEndsAt.getTime() - other.periodEndsAt.getTime() ||
+        kept(payment) - kept(other) ||
+        other.transactionId.localeCompare(payment.transactionId)) > 0
+    );
   }
 
   /** Whether the payment was at one of the prices Pro is offered at. */
@@ -558,24 +588,4 @@ function withdraw(grant: Grant, reason: 'refund' | 'chargeback'): Grant {
 
 function latest(dates: Date[]): Date | null {
   return dates.length === 0 ? null : new Date(Math.max(...dates.map((date) => date.getTime())));
-}
-
-// One grant per kind and start, as vested_entitlements keys them: of two annual payments for the same term start, the
-// later-ending wins, and a withdrawn one over a kept one on a tie.
-function dedupe(grants: Grant[]): Grant[] {
-  const byKey = new Map<string, Grant>();
-
-  for (const grant of grants) {
-    const key = `${grant.kind}:${grant.startedAt.getTime()}`;
-    const existing = byKey.get(key);
-    if (
-      !existing ||
-      grant.vestedThrough > existing.vestedThrough ||
-      (grant.vestedThrough.getTime() === existing.vestedThrough.getTime() && grant.status === 'withdrawn')
-    ) {
-      byKey.set(key, grant);
-    }
-  }
-
-  return [...byKey.values()].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 }
