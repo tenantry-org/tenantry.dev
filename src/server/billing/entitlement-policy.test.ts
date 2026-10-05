@@ -965,6 +965,40 @@ describe('what counts as money returned', () => {
     ]);
   });
 
+  describe('a duplicate charge for a period already paid for', () => {
+    const year = monthly('2027-01-01T00:00:00Z', 12);
+    const may = year[4];
+    const term = annual('2027-01-01T00:00:00Z');
+    const nows = ['2027-05-20T00:00:00Z', '2027-12-31T23:59:59Z', '2028-01-01T00:00:00Z', '2028-03-01T00:00:00Z'];
+    const same = (a: Payment[], b: Payment[], adjustments: PaymentAdjustment[]) => {
+      for (const now of nows) {
+        const withDuplicate = compute({ payments: b, adjustments, now });
+        const without = compute({ payments: a, now });
+        expect(withDuplicate.vestedThrough).toEqual(without.vestedThrough);
+        expect(withDuplicate.run).toEqual(without.run);
+        expect(withDuplicate.grants).toEqual(without.grants);
+      }
+    };
+
+    it('changes nothing when refunded in full, monthly or annual', () => {
+      const mayAgain = payment(may.periodStartsAt.toISOString());
+      same(year, [...year, mayAgain], [adjustment(mayAgain, 'refund', '2027-05-03T00:00:00Z')]);
+
+      const termAgain = annual('2027-01-01T00:00:00Z');
+      same([term], [term, termAgain], [adjustment(termAgain, 'refund', '2027-01-03T00:00:00Z')]);
+      // Whichever of the two is listed first, and whichever the refund is of.
+      same([term], [termAgain, term], [adjustment(termAgain, 'refund', '2027-01-03T00:00:00Z')]);
+    });
+
+    it('changes nothing when kept', () => {
+      same(year, [...year, payment(may.periodStartsAt.toISOString())], []);
+      const termAgain = annual('2027-01-01T00:00:00Z');
+      const kept = compute({ payments: [term, termAgain], now: '2027-06-01T00:00:00Z' });
+      expect(kept.vestedThrough).toEqual(compute({ payments: [term], now: '2027-06-01T00:00:00Z' }).vestedThrough);
+      expect(kept.run).toEqual(compute({ payments: [term], now: '2027-06-01T00:00:00Z' }).run);
+    });
+  });
+
   describe('a kept payment on another subscription for time already paid for', () => {
     const year = monthly('2027-01-01T00:00:00Z', 12, { subscriptionId: 'sub_1' });
     const subscriptions = [running('sub_1'), running('sub_2')];

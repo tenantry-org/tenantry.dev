@@ -316,17 +316,24 @@ class Ledger {
     const payments = [period.payment, ...period.within];
     const charged = sum(payments.map((payment) => Math.max(0, payment.charged)));
     if (charged <= 0) return 0;
-    const kept = sum(
-      payments.map((payment) => Math.max(0, payment.charged - sum(Object.values(this.returned(payment))))),
-    );
-    return Math.min(1, kept / charged);
+    return Math.min(1, sum(payments.map((payment) => this.kept(payment))) / charged);
+  }
+
+  /** What is kept of what the payment charged: nothing below zero. */
+  kept(payment: Payment): number {
+    return Math.max(0, payment.charged - sum(Object.values(this.returned(payment))));
   }
 
   /**
    * The billing periods of the payments at the offer prices: each payment whose period does not lie within the period
-   * of another payment of the same subscription billed at the same interval, with those that do. Of two payments for
-   * the same period, the one that charged more holds it (then the lower transaction id), so the grouping does not
-   * depend on the order of the ledger.
+   * of another payment of the same subscription billed at the same interval, with those that do. Of payments for the
+   * same period, the one that charged more holds it, then the one with more kept (then the lower transaction id), so
+   * the grouping does not depend on the order of the ledger.
+   *
+   * A payment for the same period as the one holding it, that charged at least as much, is a duplicate charge, not a
+   * charge within the period: it is a billing period of its own, so money returned from it takes nothing from the
+   * other. Its kept time counts once with the other's (`onceEach`), and of two annual terms for one period the kept one
+   * decides (`annualTerms`).
    */
   billingPeriods(): BillingPeriod[] {
     const payments = this.input.payments
@@ -338,6 +345,7 @@ class Ledger {
             (a.periodEndsAt.getTime() - a.periodStartsAt.getTime()) ||
           a.periodStartsAt.getTime() - b.periodStartsAt.getTime() ||
           b.charged - a.charged ||
+          this.kept(b) - this.kept(a) ||
           a.transactionId.localeCompare(b.transactionId),
       );
 
@@ -351,7 +359,12 @@ class Ledger {
           p.periodStartsAt <= payment.periodStartsAt &&
           p.periodEndsAt >= payment.periodEndsAt,
       );
-      if (holder) holder.within.push(payment);
+      const duplicate =
+        holder &&
+        holder.payment.periodStartsAt.getTime() === payment.periodStartsAt.getTime() &&
+        holder.payment.periodEndsAt.getTime() === payment.periodEndsAt.getTime() &&
+        payment.charged >= holder.payment.charged;
+      if (holder && !duplicate) holder.within.push(payment);
       else periods.push({ payment, within: [] });
     }
     return periods;

@@ -38,7 +38,8 @@ export default function EulaPage() {
         period of any of your Tenantry Pro subscriptions, at a monthly or yearly price this site has offered, gives a
         paid period: the part of that billing period that the money kept from its payments pays for, counted from the
         start of the billing period. A payment for part of a billing period you have already paid for, such as a
-        prorated charge, adds no time: its money counts together with the billing period&apos;s payment. A billing
+        prorated charge, adds no time: its money counts together with the billing period&apos;s payment. A refund of a
+        duplicate charge for a billing period you have already paid for is not money returned for that period. A billing
         period whose payments you keep in full gives the whole billing period, even if the subscription was cancelled or
         paused before the period ended. If part of the money has been returned to you, the paid period is the same share
         of the billing period as the share of the money you kept: if half of a month&apos;s payment is refunded, the
