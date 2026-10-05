@@ -2,9 +2,10 @@ import { cacheLife } from 'next/cache';
 import { ImageResponse } from 'next/og';
 import { SHIELD, WORDMARK } from '@/components/brand/logo-paths';
 
-// The social preview image of every page that sets none of its own, built once at build time. Its colours are the
-// site's dark theme (src/styles/globals.css), and its fonts the site's own, Inter and JetBrains Mono, fetched from
-// Google Fonts as next/font fetches them, but as TrueType, which ImageResponse reads (it cannot read WOFF2).
+// The social preview image of every page that sets none of its own, prerendered at build time and regenerated every 30
+// days (the cacheLife('max') of its fonts). Its colours are the site's dark theme (src/styles/globals.css), and its
+// fonts the site's own, Inter and JetBrains Mono, fetched from Google Fonts as next/font fetches them, but as TrueType,
+// which ImageResponse reads (it cannot read WOFF2).
 
 export const alt = 'Tenantry: multi-tenancy for ASP.NET Core and EF Core';
 export const size = { width: 1200, height: 630 };
