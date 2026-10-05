@@ -49,9 +49,9 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
               Create one on the{' '}
               <Link className={'text-link underline underline-offset-4'} href={ACCESS_PAGE}>
                 Access page
-              </Link>{' '}
-              for each developer machine and CI system, named after where it is used, so you can revoke one without
-              affecting the others. The token is shown once, when you create it.
+              </Link>
+              , for example one for each developer machine and CI system, named after where it is used, so you can
+              revoke one without affecting the others. The token is shown once, when you create it.
             </p>
           </Step>
 

@@ -64,8 +64,9 @@ export function FeedTokensCard({ tokens, canCreate, limit }: Readonly<Props>) {
       </CardHeader>
       <CardContent className={'p-0 pt-4 flex flex-col gap-4 text-sm'}>
         <p className={'text-muted-foreground'}>
-          NuGet sends a feed token to the package feed as its password. Create one for each developer machine and CI
-          system, so you can revoke one without affecting the others. The{' '}
+          NuGet sends a feed token to the package feed as its password. Up to {limit} can exist at once, and how you use
+          them is up to you: one for each developer machine and CI system lets you revoke one without affecting the
+          others. They are for your company&apos;s use only, or yours if you are a single developer. The{' '}
           <Link className={'text-link underline underline-offset-4'} href={'/dashboard/pro/install'}>
             Install page
           </Link>{' '}

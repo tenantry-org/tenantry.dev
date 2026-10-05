@@ -107,7 +107,7 @@ const QUESTIONS = [
   {
     question: 'How does my team install it, locally and in CI?',
     answer:
-      'Create a feed token on your Pro access page for each developer machine and CI system, and add the package feed to your nuget.config, which reads the token from an environment variable. NuGet then restores Tenantry Pro from the package feed and everything else from nuget.org. You can hold up to 10 feed tokens and revoke each one on its own. No GitHub account is needed, and everyone in your company may use Pro. The guide covers CI and Docker builds.',
+      'Create a feed token on your Pro access page and add the package feed to your nuget.config, which reads the token from an environment variable. NuGet then restores Tenantry Pro from the package feed and everything else from nuget.org. Up to 10 feed tokens can exist at once, and how you use them is up to you: one for each developer machine and CI system, so you can revoke each on its own, or fewer, shared. They are for your company’s use only, or yours if you are a single developer. No GitHub account is needed, and everyone in your company may use Pro. The guide covers CI and Docker builds.',
     link: { label: 'Installation', href: '/docs/pro/installation' },
   },
   {

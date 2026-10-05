@@ -37,6 +37,13 @@ describe('AccessPanel', () => {
     expect(html).not.toMatch(/github/i);
   });
 
+  it('says how many tokens can exist at once, that their use is up to the customer, and whose use they are for', () => {
+    const html = render(view());
+
+    expect(html).toContain('Up to 10 can exist at once, and how you use them is up to you');
+    expect(html).toContain('They are for your company&#x27;s use only, or yours if you are a single developer.');
+  });
+
   it('shows the licence key, and the access and progress towards vesting', () => {
     const html = render(view());
 

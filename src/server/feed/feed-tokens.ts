@@ -5,8 +5,8 @@ import { type FeedDeps, defaultFeedDeps } from '@/server/feed/deps';
 /**
  * Feed tokens: the per-customer credentials NuGet sends to the feed (as the basic-auth password). A token is 32 random
  * bytes, base64url, after a `tpf_` prefix that makes a leaked one recognisable; only its SHA-256 is stored, so it is
- * shown once, when created. A customer holds up to 10 (one per developer or CI system), named, and revokes each on its
- * own. The licence key is never a feed credential: it ships inside customers' applications.
+ * shown once, when created. A customer holds up to 10 at once, named, uses them as they choose, and revokes each on
+ * its own. The licence key is never a feed credential: it ships inside customers' applications.
  */
 
 const TOKEN_PREFIX = 'tpf_';
