@@ -70,10 +70,10 @@ export async function HeroSection() {
             for your existing ASP.NET Core and EF Core apps
           </h1>
           <p className={'mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground'}>
-            Add options.UseTenantry() to the DbContext you already have, with no base class, and queries on tenant-owned
-            entities are filtered to the current tenant. Saves that would change another tenant’s rows fail without
-            changing them. With no tenant, queries return nothing and, by default, saves of tenant-owned entities are
-            refused.
+            Add options.UseTenantry() to the DbContext you already have, pooled or not, with no base class, and queries
+            on tenant-owned entities are filtered to the current tenant. Saves that would change another tenant’s rows
+            fail without changing them. With no tenant, those queries return nothing and, by default, saves of
+            tenant-owned entities are refused.
           </p>
           <div className={'mt-8 flex flex-wrap items-center gap-3'}>
             <Button asChild size={'lg'}>
