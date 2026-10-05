@@ -21,7 +21,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
       'Whatever your SaveChanges override checks',
       'Throws by default; TenantMismatchMode can ignore or overwrite it instead',
       'Saved with that TenantId. ABP sets TenantId from the current tenant when the entity object is created, and does not check it on save; its docs say changing it moves the entity to that tenant, and advise setting it only in the entity’s constructor',
-      'Throws, and the stored TenantId is in the WHERE clause of every UPDATE and DELETE that SaveChanges sends, so a forged key matches no row',
+      'Throws before anything is written. For updates and deletes, the database also checks the stored tenant, attached entities included, so a forged key changes no row',
     ],
   },
   {
