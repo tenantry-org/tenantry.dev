@@ -62,7 +62,7 @@ export async function HeroSection() {
               'mt-6 text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-[3.25rem] lg:leading-[1.08]'
             }
           >
-            <span className={'text-link'}>Fail-closed tenant isolation</span> for your existing ASP.NET Core and EF Core
+            <span className={'text-link'}>Fail-closed multi-tenancy</span> for your existing ASP.NET Core and EF Core
             apps
           </h1>
           <p className={'mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground'}>

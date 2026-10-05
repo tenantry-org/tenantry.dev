@@ -11,7 +11,7 @@ const CORE_SOURCE = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareSourceCode',
   name: 'Tenantry Core',
-  description: 'Tenant isolation for ASP.NET Core and EF Core applications.',
+  description: 'Multi-tenancy for ASP.NET Core and EF Core applications, with tenant isolation that fails closed.',
   url: SITE_ORIGIN,
   codeRepository: 'https://github.com/tenantry-org/tenantry-core',
   programmingLanguage: 'C#',

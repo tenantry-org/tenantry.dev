@@ -12,8 +12,9 @@ import { latestDocsVersion } from '@/lib/docs-versions';
 import newestRelease from '../../../newest-release.json';
 
 export const metadata: Metadata = {
-  title: 'Tenantry Pro: the tenant in jobs and messages, audit logging, onboarding and migrations',
-  description: `Tenantry Pro runs Hangfire, Quartz.NET, MassTransit and Rebus work as its tenant, records each tenant's changes, onboards and offboards tenants in one call, and migrates every tenant database or schema as a deployment step. For a shared database, a database or schema per tenant, or a mix. One price for your whole company.`,
+  title: 'Tenantry Pro: multi-tenant migrations, provisioning and jobs',
+  description:
+    'For multi-tenant .NET apps: migrate and provision tenant databases or schemas, run jobs and messages as their tenant, audit changes and offboard tenants.',
   alternates: { canonical: '/pro' },
 };
 
