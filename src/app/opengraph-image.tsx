@@ -19,7 +19,7 @@ const COLOURS = {
 };
 
 const HEADLINE = ['Multi-tenancy', 'for ASP.NET Core and EF Core'] as const;
-const SUBLINE = 'Open-source tenant isolation for EF Core, with Tenantry Pro for running tenants';
+const SUBLINE = 'One call on your DbContext scopes queries and saves to the current tenant, and fails closed';
 const ADDRESS = 'tenantry.dev';
 
 // The full logo, as the header draws it (src/components/brand/logo.tsx), with the wordmark in the foreground colour.
