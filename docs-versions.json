@@ -1,9 +1,9 @@
 {
   "versions": [
     {
-      "version": "0.6",
-      "core": "v0.6.0",
-      "pro": "v0.6.0"
+      "version": "0.7",
+      "core": "v0.7.0",
+      "pro": "v0.7.0"
     }
   ]
 }
