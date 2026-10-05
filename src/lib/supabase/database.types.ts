@@ -430,6 +430,7 @@ export type Database = {
           minor: number;
           patch: number;
           published_at: string;
+          rc: number | null;
           security: boolean;
           version: string;
         };
@@ -440,6 +441,7 @@ export type Database = {
           minor: number;
           patch: number;
           published_at: string;
+          rc?: number | null;
           security?: boolean;
           version: string;
         };
@@ -450,6 +452,7 @@ export type Database = {
           minor?: number;
           patch?: number;
           published_at?: string;
+          rc?: number | null;
           security?: boolean;
           version?: string;
         };

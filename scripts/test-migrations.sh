@@ -27,6 +27,7 @@ test_migration 20261005100000_feed_access 20261005090000 || status=1
 test_migration 20261005120000_money_kept 20261005100000 || status=1
 test_migration 20261005140000_test_customers 20261005130000 || status=1
 test_migration 20261005160000_annual_term_vests_when_paid 20261005150000 || status=1
+test_migration 20261005170000_release_candidates 20261005160000 || status=1
 
 supabase db reset --local >/dev/null
 exit $status

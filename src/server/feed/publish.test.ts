@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nuspec, zip } from '@/test/zip';
 import type { FeedDeps, FeedStore } from './deps';
 import { handlePublish, handlePublishedList } from './publish';
+import { parseVersion } from './version';
 
 // What `dotnet nuget push` sends: a PUT of the .nupkg as multipart form data, with the key in X-NuGet-ApiKey.
 
@@ -22,7 +23,7 @@ beforeEach(() => {
     revokeFeedTokenRecord: vi.fn(),
     recordedPackageHash: vi.fn(async () => null),
     listPublishedReleases: vi.fn(async () => []),
-    // As pro_releases does: the first package records the release; a security patch needs its X.Y.0.
+    // As pro_releases does: the first package records the release; a security patch needs its X.Y.0 release.
     ensureRelease: vi.fn(
       async (release: { version: string; minor: number; major: number; security: boolean; publishedAt: string }) => {
         if (release.security && !releases.has(`${release.major}.${release.minor}.0`)) {
@@ -35,10 +36,11 @@ beforeEach(() => {
     recordPackage: vi.fn(async () => true),
     recordedPackageId: vi.fn(async () => null),
     listReleases: vi.fn(async () =>
-      [...releases].map(([version, release]) => {
-        const [major, minor, patch] = version.split('.').map(Number);
-        return { version, major, minor, patch, publishedAt: new Date(release.publishedAt) };
-      }),
+      [...releases].map(([version, release]) => ({
+        version,
+        ...parseVersion(version)!,
+        publishedAt: new Date(release.publishedAt),
+      })),
     ),
   };
   deps = {
@@ -81,6 +83,7 @@ describe('handlePublish', () => {
       major: 1,
       minor: 4,
       patch: 0,
+      rc: null,
       publishedAt: '2028-06-01T00:00:00.000Z',
       security: false,
     });
@@ -146,10 +149,58 @@ describe('handlePublish', () => {
 
   it.each([
     ['another package id', { 'Other.nuspec': nuspec('Other.Package', '1.0.0') }],
-    ['a prerelease version', { 'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', '1.5.0-beta.1') }],
     ['no nuspec', { 'readme.md': 'hello' }],
   ])('refuses %s', async (_, files) => {
     expect((await push(files)).status).toBe(400);
+  });
+
+  it.each([
+    '1.5.0-beta.1',
+    '1.5.0-rc',
+    '1.5.0-rc.0',
+    '1.5.0-rc.01',
+    '1.5.0-RC.1',
+    '1.5.0-rc.1.2',
+    '1.5.0-rc1',
+    '1.5.0-rc.1+build.5',
+    '1.5.0+build.5',
+    '1.5',
+    '01.5.0',
+    '1.5.0.1',
+    '1.5.0-rc.99999999999999999999',
+  ])('refuses the version %s, which Pro does not release', async (version) => {
+    const response = await push({ 'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', version) });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('is not a major.minor.patch version or a major.minor.patch-rc.N candidate');
+    expect(store.ensureRelease).not.toHaveBeenCalled();
+  });
+
+  it('publishes a release candidate as a release, its number recorded', async () => {
+    const response = await push({ 'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', '1.5.0-rc.2') });
+
+    expect(response.status).toBe(201);
+    expect(store.ensureRelease).toHaveBeenCalledWith({
+      version: '1.5.0-rc.2',
+      major: 1,
+      minor: 5,
+      patch: 0,
+      rc: 2,
+      publishedAt: '2028-06-01T00:00:00.000Z',
+      security: false,
+    });
+    expect(store.recordPackage).toHaveBeenCalledWith(expect.objectContaining({ version: '1.5.0-rc.2' }));
+  });
+
+  it('refuses a release candidate marked as a security patch', async () => {
+    const response = await push({
+      'Tenantry.Pro.nuspec': nuspec('Tenantry.Pro', '1.5.1-rc.1'),
+      'tenantry-release.json': JSON.stringify({ security: true }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('cannot be a security patch');
+    expect(store.ensureRelease).not.toHaveBeenCalled();
   });
 
   it('dates the release from its manifest, and records a security patch once its X.Y.0 is published', async () => {
@@ -293,6 +344,17 @@ describe('release dates', () => {
     releases.set('9.10.0', { security: false, publishedAt: '2028-05-31T18:00:00Z' });
 
     expect((await dated('9.9.0', '2028-05-31T00:00:00Z')).status).toBe(400);
+    expect((await dated('9.9.0', '2028-05-31T13:00:00Z')).status).toBe(201);
+  });
+
+  it('dates a release no earlier than its candidates, and a candidate no earlier than the ones before it', async () => {
+    releases.set('9.9.0-rc.1', { security: false, publishedAt: '2028-05-31T06:00:00Z' });
+    releases.set('9.9.0-rc.2', { security: false, publishedAt: '2028-05-31T12:00:00Z' });
+    // Later in SemVer's order than 9.9.0 and its candidates, so it bounds none of them.
+    releases.set('9.10.0-rc.1', { security: false, publishedAt: '2028-05-31T18:00:00Z' });
+
+    expect((await dated('9.9.0', '2028-05-31T11:00:00Z')).status).toBe(400);
+    expect((await dated('9.9.0-rc.3', '2028-05-31T11:00:00Z')).status).toBe(400);
     expect((await dated('9.9.0', '2028-05-31T13:00:00Z')).status).toBe(201);
   });
 

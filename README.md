@@ -110,14 +110,22 @@ key's SHA-256 (`FEED_PUBLISH_KEY_SHA256`); without it every push is refused.
 
 `dotnet nuget push --skip-duplicate` and the script treat 409 as published, so re-running a release is safe. Every
 other refusal is 400, never 409, so that `--skip-duplicate` cannot hide it: an id that is not `Tenantry.Pro` or
-`Tenantry.Pro.*`, or differs only in case from a published one; a version that is not `major.minor.patch`; different
-bytes under a version already published (a published version never changes: publish a new one); a
-`tenantry-release.json` date outside the rules below, or a security flag that disagrees with its release; a security
-patch whose `X.Y.0` is not published; a package that cannot be read.
+`Tenantry.Pro.*`, or differs only in case from a published one; a version that is neither `major.minor.patch` nor a
+release candidate `major.minor.patch-rc.N` (N from 1, no leading zeros, lower case, no build metadata), as Pro's
+release process tags them; different bytes under a version already published (a published version never changes:
+publish a new one); a `tenantry-release.json` date outside the rules below, or a security flag that disagrees with its
+release or is set on a release candidate; a security patch whose `X.Y.0` release is not published; a package that cannot
+be read.
+
+A release candidate is published and served like any release, and dated the same way. The feed lists versions in
+SemVer's order, each candidate before its release, so NuGet restores a candidate only when the version or range asked
+for allows prereleases (`0.8.0-rc.1`, `0.8.0-*`), never for a range such as `0.*`. Search leaves candidates out unless
+asked for `prerelease=true` and `semVerLevel=2.0.0`.
 
 A package may carry `tenantry-release.json` at its root: `{ "releasedAt": "<ISO 8601>", "security": <bool> }`, which
 Pro's release workflow writes from the signed tag (its date, and `Security:` in its message). `releasedAt` may be at most
-3 days before the push and 5 minutes after it, and not before an earlier version's date; without it the release is dated
+3 days before the push and 5 minutes after it, and not before an earlier version's date (a candidate is earlier than its
+release); without it the release is dated
 when its first package is published. A security patch is dated as its `X.Y.0` for vesting, so customers whose vested
 releases include `X.Y.0` can restore the fix. The first package of a release fixes its date and flag; later packages of
 the same release are checked only for the flag.
@@ -133,7 +141,7 @@ printf '%s' "$key" | shasum -a 256 | cut -d' ' -f1  # FEED_PUBLISH_KEY_SHA256 fo
 ```
 
 `FEED_PUBLISH_KEY="$key" scripts/feed-publish.sh push https://sandbox.tenantry.dev ./artifacts` pushes a folder of
-packages oldest version first, and `scripts/feed-publish.sh list https://sandbox.tenantry.dev` prints the listing.
+packages oldest version first, each release candidate before its release, and `scripts/feed-publish.sh list https://sandbox.tenantry.dev` prints the listing.
 
 ## Package feed: tokens, access and testing
 

@@ -3,6 +3,7 @@ import { canRestore, currentAccess, mayUseRelease } from '@/server/billing/entit
 import type { FeedPackage } from '@/server/db/package-feed';
 import { type FeedDeps, defaultFeedDeps } from '@/server/feed/deps';
 import { feedTokenFrom, hashFeedToken, isFeedTokenShape } from '@/server/feed/feed-tokens';
+import { compareVersions } from '@/server/feed/version';
 import { FEED_PATH } from '@/lib/install-snippets';
 
 /**
@@ -11,7 +12,9 @@ import { FEED_PATH } from '@/lib/install-snippets';
  * releases they may use (entitlement-policy.ts: mayUseRelease): every release while they have access; after a lapse,
  * those their vested-through date covers (a security patch dated as its minor's X.Y.0); nothing for a lapsed customer
  * who never vested. Hidden versions are absent from the version lists, registrations and search, not only refused on
- * download, so a restore never resolves a version it cannot download.
+ * download, so a restore never resolves a version it cannot download. A release candidate (version.ts) is served as
+ * any release published when it was; versions are listed in SemVer's order, a candidate before its release, and NuGet
+ * restores a candidate only when the version or range asked for allows prereleases.
  *
  *   index.json                                   service index (no credentials needed)
  *   flat/{id}/index.json                         PackageBaseAddress/3.0.0: the versions
@@ -92,9 +95,7 @@ export function serviceIndex(base: string) {
 
 // The packages the customer may use, oldest version first.
 function visible(customer: Parameters<typeof mayUseRelease>[0], packages: FeedPackage[]): FeedPackage[] {
-  return packages
-    .filter((pkg) => mayUseRelease(customer, pkg.entitlementAt))
-    .sort((a, b) => a.major - b.major || a.minor - b.minor || a.patch - b.patch);
+  return packages.filter((pkg) => mayUseRelease(customer, pkg.entitlementAt)).sort(compareVersions);
 }
 
 async function flat(base: string, packages: FeedPackage[], file: string[], deps: FeedDeps): Promise<Response> {
@@ -195,16 +196,21 @@ function contentUrl(base: string, pkg: FeedPackage): string {
   return `${base}/flat/${pkg.lowerId}/${pkg.version}/${pkg.lowerId}.${pkg.version}.nupkg`;
 }
 
-// Search over the six or so package ids: by id, case-insensitively; every release is stable, so `prerelease` and
-// `semVerLevel` change nothing.
+// Search over the six or so package ids: by id, case-insensitively. A release candidate's version (x.y.z-rc.N) is a
+// prerelease, and SemVer 2.0.0 by its dotted label, so it is included only with prerelease=true and semVerLevel=2.0.0,
+// as NuGet's search API has it; a package with nothing else is then left out.
 function search(base: string, packages: FeedPackage[], url: URL) {
   const query = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+  const candidates =
+    url.searchParams.get('prerelease')?.toLowerCase() === 'true' &&
+    /^2(\.|$)/.test(url.searchParams.get('semVerLevel') ?? '');
   const skip = Math.max(0, Number.parseInt(url.searchParams.get('skip') ?? '0', 10) || 0);
   const take = Math.min(100, Math.max(0, Number.parseInt(url.searchParams.get('take') ?? '20', 10) || 20));
 
   const byId = new Map<string, FeedPackage[]>();
   for (const pkg of packages) {
     if (query && !pkg.lowerId.includes(query)) continue;
+    if (pkg.rc !== null && !candidates) continue;
     byId.set(pkg.lowerId, [...(byId.get(pkg.lowerId) ?? []), pkg]);
   }
   const results = [...byId.values()].sort((a, b) => a[0].lowerId.localeCompare(b[0].lowerId));

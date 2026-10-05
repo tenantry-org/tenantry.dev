@@ -7,6 +7,7 @@
 #   Tenantry.Pro.FeedProbe<run> 1.<n>.0      released 20 seconds before the run started
 #   Tenantry.Pro.FeedProbe<run> 1.<n>.1      a security patch, released 10 seconds before, dated as 1.<n>.0
 #   Tenantry.Pro.FeedProbe<run> 1.<n+1>.0    released when the run started
+#   Tenantry.Pro.FeedProbe<run> 1.<n+2>.0-rc.1  a release candidate, released when the run started
 #
 # <run> is the run's start time and <n> grows with it, so each run publishes packages and releases of its own to the
 # same database, later than every earlier run's (the feed refuses a release dated before an earlier version's, or more
@@ -14,7 +15,8 @@
 #
 #   computed  lapsed, with 12 paid months that scripts/rehearse.mjs backdates and /api/reconcile vests; then a
 #             chargeback withdraws the vesting and `undo` removes what the script wrote
-#   active    a subscriber: restores 1.<n+1>.0 for 1.*, with a lock file whose hash matches the package, and a
+#   active    a subscriber: restores 1.<n+1>.0 for 1.*, not the release candidate, which 1.*-* and its own version
+#             restore; with a lock file whose hash matches the package, and a
 #             locked-mode restore from an empty package folder downloads it again through the redirect; a second token
 #             restores until it is revoked through the Access page's action, and then fails
 #   vested    lapsed, vested through 15 seconds before the run by an operator grant (scripts/rehearse.mjs): creates a
@@ -51,7 +53,7 @@ work="$(mktemp -d)"
 run_id="$(date +%s)"
 probe_id="Tenantry.Pro.FeedProbe$run_id"
 n=$((run_id - 1790000000))
-v_first="1.$n.0" v_patch="1.$n.1" v_next="1.$((n + 1)).0"
+v_first="1.$n.0" v_patch="1.$n.1" v_next="1.$((n + 1)).0" v_rc="1.$((n + 2)).0-rc.1"
 # An ISO 8601 UTC time, `seconds` before the run started (BSD date, then GNU).
 iso_before() {
   local at=$((run_id - $1))
@@ -199,6 +201,7 @@ pack() {
 pack "$v_first" "$(iso_before 20)" false
 pack "$v_patch" "$(iso_before 10)" true
 pack "$v_next" "$(iso_before 0)" false
+pack "$v_rc" "$(iso_before 0)" false
 
 # push VERSION KEY: dotnet nuget push to the feed. A rerun against the same database finds the packages published
 # already, which --skip-duplicate accepts.
@@ -206,7 +209,7 @@ push() {
   dotnet nuget push "$work/nupkgs/$probe_id.$1.nupkg" --source tenantry --api-key "$2" \
     --configfile "$work/nuget.config" --skip-duplicate 2>&1
 }
-for version in "$v_first" "$v_patch" "$v_next"; do
+for version in "$v_first" "$v_patch" "$v_next" "$v_rc"; do
   if output="$(push "$version" "$publish_key")"; then
     pass "dotnet nuget push publishes $version"
   else
@@ -237,7 +240,7 @@ fi
 # The operator's script: pushing the release again changes nothing, and the listing shows what the feed holds.
 if output="$(FEED_PUBLISH_KEY="$publish_key" bash "$repo/scripts/feed-publish.sh" push "$site" "$work/nupkgs" 2>&1)"; then
   check 'scripts/feed-publish.sh pushes a published release again as unchanged' \
-    '[[ "$output" == *"0 published, 3 already published."* ]]' "$output"
+    '[[ "$output" == *"0 published, 4 already published."* ]]' "$output"
 else
   fail 'scripts/feed-publish.sh pushes a published release again as unchanged' "$output"
 fi
@@ -388,6 +391,16 @@ if output="$(restore "$dir" --locked-mode)"; then
 else
   fail 'a locked-mode restore downloads it again, through the redirect' "$output"
 fi
+# The release candidate: only a version or range that allows prereleases restores it.
+for range in '1.*-*' "$v_rc"; do
+  dir="$(consumer active "$range")"
+  if output="$(restore "$dir")"; then
+    check "an active customer restores $range as the release candidate $v_rc" '[[ "$(probe "$dir" resolved)" == $v_rc ]]' \
+      "$output"
+  else
+    fail "an active customer restores $range as the release candidate $v_rc" "$output"
+  fi
+done
 
 # The redirect itself, and a 404.
 auth="Authorization: Basic $(printf 'e2e:%s' "$(token active)" | openssl base64 -A)"

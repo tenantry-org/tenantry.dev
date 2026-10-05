@@ -5,6 +5,7 @@ import { computeEntitlement } from '@/server/billing/entitlement-policy';
 import type { FeedDeps, FeedStore } from './deps';
 import { hashFeedToken } from './feed-tokens';
 import { DOWNLOAD_URL_SECONDS, handleFeedRequest, serveFeed } from './nuget-feed';
+import { parseVersion } from './version';
 
 // The feed's resources against an in-memory store: what each customer sees, the shape of each answer as the NuGet
 // server API documents it (https://learn.microsoft.com/en-us/nuget/api/overview), and the headers that keep one
@@ -20,14 +21,11 @@ function release(
   entitlementAt = publishedAt,
   extra: Partial<FeedPackage> = {},
 ): FeedPackage {
-  const [major, minor, patch] = version.split('.').map(Number);
   return {
     packageId: id,
     lowerId: id.toLowerCase(),
     version,
-    major,
-    minor,
-    patch,
+    ...parseVersion(version)!,
     publishedAt: new Date(publishedAt),
     entitlementAt: new Date(entitlementAt),
     storagePath: `${id.toLowerCase()}/${version}/${id.toLowerCase()}.${version}.nupkg`,
@@ -409,6 +407,85 @@ describe('search', () => {
     expect((await (await get('query?skip=1&take=1', 'active')).json()).data.map((r: { id: string }) => r.id)).toEqual([
       'Tenantry.Pro.EfCore',
     ]);
+  });
+});
+
+describe('release candidates', () => {
+  // Tenantry.Pro 1.4.0, two candidates of 1.6.0 and then 1.6.0; Tenantry.Pro.Audit has only a candidate so far.
+  const WITH_CANDIDATES: FeedPackage[] = [
+    release('Tenantry.Pro', '1.6.0', '2028-05-20T12:00:00Z'),
+    release('Tenantry.Pro', '1.6.0-rc.2', '2028-05-10T12:00:00Z'),
+    release('Tenantry.Pro', '1.4.0', '2027-11-20T12:00:00Z'),
+    release('Tenantry.Pro', '1.6.0-rc.1', '2028-05-01T12:00:00Z'),
+    release('Tenantry.Pro.Audit', '1.7.0-rc.1', '2028-05-25T12:00:00Z'),
+  ];
+
+  beforeEach(() => {
+    store.listFeedPackages.mockImplementation(async (lowerId?: string) =>
+      WITH_CANDIDATES.filter((pkg) => lowerId === undefined || pkg.lowerId === lowerId),
+    );
+  });
+
+  it('lists each candidate before its release, in SemVer order, in the version list and the registration', async () => {
+    expect(await versions('active')).toEqual(['1.4.0', '1.6.0-rc.1', '1.6.0-rc.2', '1.6.0']);
+
+    const registration = await (await get('registration/tenantry.pro/index.json', 'active')).json();
+    expect(registration.items[0]).toMatchObject({ lower: '1.4.0', upper: '1.6.0', count: 4 });
+    expect(
+      registration.items[0].items.map((leaf: { catalogEntry: { version: string } }) => leaf.catalogEntry.version),
+    ).toEqual(['1.4.0', '1.6.0-rc.1', '1.6.0-rc.2', '1.6.0']);
+    expect(await versions('active', 'tenantry.pro.audit')).toEqual(['1.7.0-rc.1']);
+  });
+
+  it('serves a candidate, its leaf and its nuspec', async () => {
+    const download = await get('flat/tenantry.pro/1.6.0-rc.2/tenantry.pro.1.6.0-rc.2.nupkg', 'active');
+    expect(download.status).toBe(302);
+    expect(download.headers.get('location')).toBe(
+      'https://storage.example.com/signed/tenantry.pro/1.6.0-rc.2/tenantry.pro.1.6.0-rc.2.nupkg?token=t',
+    );
+
+    const leaf = await (await get('registration/tenantry.pro/1.6.0-rc.2.json', 'active')).json();
+    expect(leaf.packageContent).toBe(`${BASE}/flat/tenantry.pro/1.6.0-rc.2/tenantry.pro.1.6.0-rc.2.nupkg`);
+    expect(await (await get('flat/tenantry.pro/1.6.0-rc.2/tenantry.pro.nuspec', 'active')).text()).toBe(
+      '<package>tenantry.pro 1.6.0-rc.2</package>',
+    );
+  });
+
+  it('applies the vested-through date to a candidate as to any release published when it was', async () => {
+    // Vested through 15 May 2028: both candidates of 1.6.0, not 1.6.0 itself.
+    CUSTOMERS.vestedMay = {
+      customerId: 'ctm_vested_may',
+      access: lapsed,
+      vestedThrough: new Date('2028-05-15T00:00:00Z'),
+    };
+
+    expect(await versions('vestedMay')).toEqual(['1.4.0', '1.6.0-rc.1', '1.6.0-rc.2']);
+    expect((await get('flat/tenantry.pro/1.6.0/tenantry.pro.1.6.0.nupkg', 'vestedMay')).status).toBe(404);
+    expect((await get('flat/tenantry.pro/1.6.0-rc.2/tenantry.pro.1.6.0-rc.2.nupkg', 'vestedMay')).status).toBe(302);
+    delete CUSTOMERS.vestedMay;
+  });
+
+  it('leaves candidates out of search unless prerelease and SemVer 2.0.0 results are asked for', async () => {
+    const ids = (body: { data: { id: string }[] }) => body.data.map((result) => result.id);
+    const versionsOf = (body: { data: { versions: { version: string }[] }[] }) =>
+      body.data.map((result) => result.versions.map((v) => v.version));
+
+    for (const query of [
+      'query',
+      'query?prerelease=true',
+      'query?semVerLevel=2.0.0',
+      'query?prerelease=false&semVerLevel=2.0.0',
+    ]) {
+      const stable = await (await get(query, 'active')).json();
+      expect(ids(stable)).toEqual(['Tenantry.Pro']);
+      expect(stable.data[0].version).toBe('1.6.0');
+      expect(versionsOf(stable)).toEqual([['1.4.0', '1.6.0']]);
+    }
+
+    const all = await (await get('query?prerelease=true&semVerLevel=2.0.0', 'active')).json();
+    expect(ids(all)).toEqual(['Tenantry.Pro', 'Tenantry.Pro.Audit']);
+    expect(all.data[0].version).toBe('1.6.0');
+    expect(versionsOf(all)).toEqual([['1.4.0', '1.6.0-rc.1', '1.6.0-rc.2', '1.6.0'], ['1.7.0-rc.1']]);
   });
 });
 

@@ -2,6 +2,7 @@ import 'server-only';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { type FeedDeps, defaultFeedDeps } from '@/server/feed/deps';
 import { parseNuspec, readRootFiles } from '@/server/feed/nupkg';
+import { compareVersions, parseVersion } from '@/server/feed/version';
 
 /**
  * Publishing a package to the feed (PackagePublish/2.0.0): what `dotnet nuget push --source <feed>/index.json
@@ -9,19 +10,21 @@ import { parseNuspec, readRootFiles } from '@/server/feed/nupkg';
  * workflow holds the key; the server knows only its hash (FEED_PUBLISH_KEY_SHA256).
  *
  * A package is accepted if its id is Tenantry.Pro or Tenantry.Pro.*, in the casing it was first published with, its
- * version is major.minor.patch, and that id and version are not published yet. Publishing the same package again (the
- * same bytes, by SHA-512) answers 409, which `dotnet nuget push --skip-duplicate` and scripts/feed-publish.sh treat as
- * done, so a release can be pushed again safely. A different package under an id and version already published
+ * version is major.minor.patch or a release candidate major.minor.patch-rc.N (version.ts), and that id and version are
+ * not published yet. A release candidate is published and served like any release. Publishing the same package again
+ * (the same bytes, by SHA-512) answers 409, which `dotnet nuget push --skip-duplicate` and scripts/feed-publish.sh
+ * treat as done, so a release can be pushed again safely. A different package under an id and version already published
  * answers 400, which no client treats as done: a published version never changes. Its release is recorded with
  * the first of its packages (pro_releases). The release date is when that first package is published, unless the
  * package carries a `tenantry-release.json` at its root, which may give:
  *   releasedAt  the release's date (ISO 8601), such as the signed tag's date, for a release published later. It may
  *               be at most MAX_BACKDATE_DAYS before now, at most five minutes ahead, and not before any earlier
- *               version's date: otherwise a release could be dated under customers' vested dates and be served to
- *               them. It is ignored, and not checked, when the release is recorded already by another of its
- *               packages. Without it, a release is dated now, or as the newest earlier release if that is later.
- *   security    true for a security patch, which the feed dates as its minor's X.Y.0 (recorded first) by the
- *               release record's own rule, whatever releasedAt says
+ *               version's date (in SemVer's order, a candidate before its release): otherwise a release could be dated
+ *               under customers' vested dates and be served to them. It is ignored, and not checked, when the release
+ *               is recorded already by another of its packages. Without it, a release is dated now, or as the newest
+ *               earlier release if that is later.
+ *   security    true for a security patch, which the feed dates as its minor's X.Y.0 release (recorded first) by the
+ *               release record's own rule, whatever releasedAt says. A release candidate is never one.
  *
  * Packages are limited to 4 MB: a Vercel function takes a request body of at most 4.5 MB. Pro's packages are well
  * under 1 MB.
@@ -37,7 +40,6 @@ export const MAX_BACKDATE_DAYS = 3;
 const MAX_FORWARD_DATE_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PACKAGE_ID = /^Tenantry\.Pro(\.[A-Za-z0-9]+)*$/;
-const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 export async function handlePublish(request: Request, deps: FeedDeps = defaultFeedDeps): Promise<Response> {
   if (!isPublisher(request, deps)) return reply(403, 'A valid publish key is required.');
@@ -66,11 +68,16 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
     return reply(400, `The package cannot be read: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  const version = VERSION.exec(nuspec.version);
+  const version = parseVersion(nuspec.version);
   if (!PACKAGE_ID.test(nuspec.id)) return reply(400, `${nuspec.id} is not a Tenantry Pro package id.`);
-  if (!version) return reply(400, `${nuspec.version} is not a major.minor.patch version.`);
+  if (!version) {
+    return reply(400, `${nuspec.version} is not a major.minor.patch version or a major.minor.patch-rc.N candidate.`);
+  }
 
   const security = manifest.security === true;
+  if (security && version.rc !== null) {
+    return reply(400, `Release candidate ${nuspec.version} cannot be a security patch.`);
+  }
   const declaredDate = manifest.releasedAt === undefined ? null : new Date(String(manifest.releasedAt));
   if (declaredDate && Number.isNaN(declaredDate.getTime())) {
     return reply(400, 'tenantry-release.json has an invalid releasedAt.');
@@ -86,17 +93,12 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
   const duplicate = await duplicateReply(nuspec.id, nuspec.version, sha512.toString('base64'), deps);
   if (duplicate) return duplicate;
 
-  const [major, minor, patch] = [Number(version[1]), Number(version[2]), Number(version[3])];
   const releases = await deps.store.listReleases();
   // A release already recorded (by another of its packages) keeps its date, so this package's is not checked.
   const releaseRecorded = releases.some((release) => release.version === nuspec.version);
   const newestEarlier = Math.max(
     ...releases
-      .filter(
-        (release) =>
-          release.major < major ||
-          (release.major === major && (release.minor < minor || (release.minor === minor && release.patch < patch))),
-      )
+      .filter((release) => compareVersions(release, version) < 0)
       .map((release) => release.publishedAt.getTime()),
   );
   const now = deps.now().getTime();
@@ -122,9 +124,7 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
   try {
     const release = await deps.store.ensureRelease({
       version: nuspec.version,
-      major,
-      minor,
-      patch,
+      ...version,
       publishedAt: releasedAt.toISOString(),
       security,
     });
@@ -137,7 +137,10 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
   } catch (error) {
     // The release's trigger refuses a security patch whose X.Y.0 is not recorded.
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23503') {
-      return reply(400, `Security patch ${nuspec.version} needs its ${version[1]}.${version[2]}.0 published first.`);
+      return reply(
+        400,
+        `Security patch ${nuspec.version} needs its ${version.major}.${version.minor}.0 published first.`,
+      );
     }
     throw error;
   }

@@ -33,6 +33,8 @@ export interface FeedPackage {
   major: number;
   minor: number;
   patch: number;
+  /** The release candidate's number, or null for a release (pro_releases.rc). */
+  rc: number | null;
   publishedAt: Date;
   /** The date a vested customer's vested-through date is compared with (pro_releases.entitlement_at). */
   entitlementAt: Date;
@@ -71,7 +73,7 @@ export async function listFeedPackages(lowerId?: string): Promise<FeedPackage[]>
   let query = supabase
     .from('pro_packages')
     .select(
-      'package_id,lower_id,version,storage_path,description,authors,dependency_groups,pro_releases(major,minor,patch,published_at,entitlement_at)',
+      'package_id,lower_id,version,storage_path,description,authors,dependency_groups,pro_releases(major,minor,patch,rc,published_at,entitlement_at)',
     );
   if (lowerId !== undefined) query = query.eq('lower_id', lowerId);
 
@@ -89,6 +91,7 @@ export async function listFeedPackages(lowerId?: string): Promise<FeedPackage[]>
         major: release.major,
         minor: release.minor,
         patch: release.patch,
+        rc: release.rc,
         publishedAt: new Date(release.published_at),
         entitlementAt: new Date(release.entitlement_at),
         storagePath: row.storage_path,
@@ -151,6 +154,8 @@ export interface ReleaseRecord {
   major: number;
   minor: number;
   patch: number;
+  /** The release candidate's number, or null for a release. */
+  rc: number | null;
   publishedAt: string;
   security: boolean;
 }
@@ -167,6 +172,7 @@ export async function ensureRelease(release: ReleaseRecord): Promise<{ security:
       major: release.major,
       minor: release.minor,
       patch: release.patch,
+      rc: release.rc,
       published_at: release.publishedAt,
       security: release.security,
       // Set by the pro_releases_entitlement_at trigger; the column is not null, so a value is needed here.
@@ -188,10 +194,10 @@ export async function ensureRelease(release: ReleaseRecord): Promise<{ security:
 
 /** Every recorded release, with when it was published. */
 export async function listReleases(): Promise<
-  { version: string; major: number; minor: number; patch: number; publishedAt: Date }[]
+  { version: string; major: number; minor: number; patch: number; rc: number | null; publishedAt: Date }[]
 > {
   const supabase = createServiceRoleClient();
-  const { data, error } = await supabase.from('pro_releases').select('version,major,minor,patch,published_at');
+  const { data, error } = await supabase.from('pro_releases').select('version,major,minor,patch,rc,published_at');
 
   if (error) throw error;
 
@@ -200,6 +206,7 @@ export async function listReleases(): Promise<
     major: row.major,
     minor: row.minor,
     patch: row.patch,
+    rc: row.rc,
     publishedAt: new Date(row.published_at),
   }));
 }
@@ -278,7 +285,7 @@ export interface PublishedRelease {
   packages: { id: string; size: number; sha512: string }[];
 }
 
-/** Every recorded release with its packages, oldest version first. */
+/** Every recorded release with its packages, oldest version first (a release candidate before its release). */
 export async function listPublishedReleases(): Promise<PublishedRelease[]> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
@@ -286,7 +293,8 @@ export async function listPublishedReleases(): Promise<PublishedRelease[]> {
     .select('version,major,minor,patch,published_at,security,entitlement_at,pro_packages(package_id,size,sha512)')
     .order('major')
     .order('minor')
-    .order('patch');
+    .order('patch')
+    .order('rc', { nullsFirst: false });
 
   if (error) throw error;
 

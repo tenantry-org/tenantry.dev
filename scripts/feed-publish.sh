@@ -7,7 +7,8 @@
 # <site> is the deployment's origin, such as https://sandbox.tenantry.dev. The key is read from FEED_PUBLISH_KEY and
 # never put on a command line. README.md (Package feed: publishing) gives the endpoint's contract.
 #
-# push sends the packages oldest version first, so a release's X.Y.0 is recorded before its security patches. For each
+# push sends the packages oldest version first, in SemVer's order (a release candidate X.Y.Z-rc.N before X.Y.Z), so a
+# release's X.Y.0 is recorded before its security patches, and a candidate before its release. For each
 # package it prints the release date and security flag its tenantry-release.json gives, and refuses a folder where two
 # packages of one version disagree about them. Re-running it is safe: a package already published with the same content
 # is reported as such (409) and skipped. Any other refusal stops the run, naming the package and the feed's reason.
@@ -68,7 +69,8 @@ if [[ ${#packages[@]} -eq 0 ]]; then
   exit 1
 fi
 
-# One line per package: version, id, release manifest (or "none"), file. Versions are major.minor.patch.
+# One line per package, oldest version first: version, id, release manifest (or "none"), file. Versions are
+# major.minor.patch or major.minor.patch-rc.N, as the feed accepts them (src/server/feed/version.ts).
 for file in "${packages[@]}"; do
   nuspec="$(unzip -Z1 "$file" | grep -iE '^[^/]+\.nuspec$' | head -1 || true)"
   if [[ -z "$nuspec" ]]; then
@@ -78,16 +80,18 @@ for file in "${packages[@]}"; do
   xml="$(unzip -p "$file" "$nuspec")"
   id="$(sed -n 's:.*<id>\([^<]*\)</id>.*:\1:p' <<<"$xml" | head -1)"
   version="$(sed -n 's:.*<version>\([^<]*\)</version>.*:\1:p' <<<"$xml" | head -1)"
-  if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "$file: version $version is not major.minor.patch." >&2
+  if ! [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.([1-9][0-9]*))?$ ]]; then
+    echo "$file: version $version is not major.minor.patch or major.minor.patch-rc.N." >&2
     exit 1
   fi
+  # A release's candidate number sorts after any candidate's.
+  key=("${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[5]:-2147483648}")
   manifest=none
   if unzip -Z1 "$file" | grep -qx 'tenantry-release.json'; then
     manifest="$(unzip -p "$file" tenantry-release.json | jq -c '{releasedAt, security}')"
   fi
-  printf '%s\t%s\t%s\t%s\n' "$version" "$id" "$manifest" "$file"
-done | sort -t. -k1,1n -k2,2n -k3,3n >"$work/plan"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${key[@]}" "$version" "$id" "$manifest" "$file"
+done | sort -t$'\t' -k1,1n -k2,2n -k3,3n -k4,4n | cut -f5- >"$work/plan"
 
 # Every package of a version must say the same about its release.
 disagreeing="$(cut -f1,3 "$work/plan" | sort -u | cut -f1 | uniq -d)"
