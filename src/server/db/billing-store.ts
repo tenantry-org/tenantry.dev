@@ -84,7 +84,7 @@ export interface Access {
 }
 
 export type GrantKind = 'qualifying_run' | 'annual_term';
-export type GrantStatus = 'conditional' | 'confirmed' | 'withdrawn';
+export type GrantStatus = 'confirmed' | 'withdrawn';
 export type WithdrawnReason = 'refund' | 'chargeback' | 'term_not_completed';
 
 /** A row of `vested_entitlements`, keyed by kind and start. */
@@ -111,8 +111,6 @@ export interface Entitlement {
   access: Access;
   /** The current run, or null when the customer has no access or no paid period continues to now. */
   run: CurrentRun | null;
-  /** The term end of an annual grant not yet confirmed. */
-  conditionalThrough: Date | null;
   /** The latest confirmed grant's date, or null if none. */
   vestedThrough: Date | null;
   grants: Grant[];
@@ -263,9 +261,8 @@ export async function recordLicence(params: { customerId: string; jwt: string })
 
 /**
  * Everyone whose access, licence or entitlement might need correcting: entitled (by recorded access or by a
- * subscription), with a failing licence, in a current run, holding an annual grant not yet confirmed, or with a payment
- * whose billing period ends after two days ago (paid time still being served). One array, so the API's row limit cannot
- * leave anyone out.
+ * subscription), with a failing licence, in a current run, or with a payment whose billing period ends after two days
+ * ago (paid time still being served). One array, so the API's row limit cannot leave anyone out.
  */
 export async function customersToReconcile(): Promise<string[]> {
   const supabase = createServiceRoleClient();
@@ -508,7 +505,6 @@ export async function saveCustomerState(customerId: string, entitlement: Entitle
       paid_through: time(run?.paidThrough),
       months_paid: run?.monthsPaid ?? 0,
       vests_at: time(run?.vestsAt),
-      conditional_through: time(entitlement.conditionalThrough),
     },
     p_grants: entitlement.grants.map((grant) => ({
       kind: grant.kind,

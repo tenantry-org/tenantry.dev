@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Payment, PaymentAdjustment } from '@/server/db/billing-store';
 import type { FeedCustomer, FeedPackage } from '@/server/db/package-feed';
+import { computeEntitlement } from '@/server/billing/entitlement-policy';
 import type { FeedDeps, FeedStore } from './deps';
 import { hashFeedToken } from './feed-tokens';
 import { DOWNLOAD_URL_SECONDS, handleFeedRequest, serveFeed } from './nuget-feed';
@@ -222,6 +224,63 @@ describe('what each customer sees', () => {
     expect(
       search.data.map((result: { versions: { version: string }[] }) => result.versions.map((v) => v.version)),
     ).toEqual([['1.4.0', '1.4.3'], ['1.4.0']]);
+  });
+
+  it('serves an annual subscriber who cancelled a day into the term the releases of the term, until a refund or chargeback', async () => {
+    // Paid yearly on 1 January 2028 and cancelled the next day with nothing refunded; now is 1 June 2028.
+    const term: Payment = {
+      transactionId: 'txn_year',
+      subscriptionId: 'sub_year',
+      priceId: 'pri_01year',
+      billingInterval: 'year',
+      billingFrequency: 1,
+      periodStartsAt: new Date('2028-01-01T00:00:00Z'),
+      periodEndsAt: new Date('2029-01-01T00:00:00Z'),
+      charged: 39000,
+      currencyCode: 'GBP',
+    };
+    const cancelled = {
+      subscriptionId: 'sub_year',
+      productId: 'pro_01',
+      status: 'canceled',
+      graceStartedAt: null,
+      endedAt: new Date('2028-01-02T00:00:00Z'),
+    };
+    const returned = (action: string): PaymentAdjustment => ({
+      adjustmentId: `adj_${action}`,
+      transactionId: 'txn_year',
+      action,
+      type: 'full',
+      itemTypes: ['full'],
+      status: 'approved',
+      approvedAt: new Date('2028-05-30T00:00:00Z'),
+      reversedAt: null,
+      amount: 39000,
+      currencyCode: 'GBP',
+    });
+    const asStored = (adjustments: PaymentAdjustment[]): FeedCustomer => {
+      const entitlement = computeEntitlement({
+        subscriptions: [cancelled],
+        payments: [term],
+        adjustments,
+        proProductId: 'pro_01',
+        offerPriceIds: ['pri_01month', 'pri_01year'],
+        now: deps.now(),
+      });
+      return { customerId: 'ctm_annual', access: entitlement.access, vestedThrough: entitlement.vestedThrough };
+    };
+
+    CUSTOMERS.annual = asStored([]);
+    // Every release so far: those from before the term, and 1.4.1 and 1.6.0, published in it after the cancellation.
+    expect(await versions('annual')).toEqual(['1.4.0', '1.4.1', '1.4.3', '1.6.0']);
+    expect((await get('flat/tenantry.pro/1.6.0/tenantry.pro.1.6.0.nupkg', 'annual')).status).toBe(302);
+
+    for (const action of ['refund', 'chargeback']) {
+      CUSTOMERS.annual = asStored([returned(action)]);
+      expect((await get('flat/tenantry.pro/index.json', 'annual')).status).toBe(403);
+      expect((await get('flat/tenantry.pro/1.4.1/tenantry.pro.1.4.1.nupkg', 'annual')).status).toBe(403);
+    }
+    delete CUSTOMERS.annual;
   });
 
   it('answers 404 for a package with no version the customer may use, and for an unknown package', async () => {

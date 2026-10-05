@@ -398,7 +398,7 @@ describe('vesting emails', () => {
     memory.subscribe('ctm_1');
     await pay('txn_year', '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z', 'year');
     await syncCustomer('ctm_1', deps, new Date('2026-01-05T00:00:00Z'));
-    expect(memory.state.entitlementStates.get('ctm_1')?.conditionalThrough).toEqual(new Date('2027-01-01T00:00:00Z'));
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-01-01T00:00:00Z'));
     vi.clearAllMocks();
 
     await memory.store.recordPaymentAdjustment({
@@ -499,13 +499,117 @@ describe('vesting emails', () => {
     expect(message.html).not.toContain('end of each paid month');
   });
 
-  it('says nothing about an annual term until it is completed, then that it vested', async () => {
+  it('tells the customer an annual term is vested when it is paid, and not again at its end', async () => {
     memory.subscribe('ctm_1');
     await pay('txn_year', '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z', 'year');
-    await syncCustomer('ctm_1', deps, new Date('2026-06-01T00:00:00Z'));
-    expect(subjects()).not.toContain('Your Tenantry Pro releases are vested');
+    await syncCustomer('ctm_1', deps, new Date('2026-01-01T00:10:00Z'));
 
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-01-01T00:00:00Z'));
+    const vested = deps.sendEmail.mock.calls.filter(([m]) => m.subject === 'Your Tenantry Pro releases are vested');
+    expect(vested).toHaveLength(1);
+    const [[message]] = vested;
+    expect(message.html).toContain(
+      'Your annual term is paid, so every Tenantry Pro release published on or before 1 January 2027',
+    );
+    expect(message.html).toContain('including those published later in the term');
+    expect(message.html).toContain("A refund, credit or chargeback of the term's payment withdraws them");
+    expect(message.html).not.toContain('moves forward as your paid time is served');
+    vi.clearAllMocks();
+
+    // The term ends: the qualifying period of its 12 paid months vests too, through the same date.
     await syncCustomer('ctm_1', deps, new Date('2027-01-01T04:00:00Z'));
-    expect(subjects()).toContain('Your Tenantry Pro releases are vested');
+    expect(subjects()).not.toContain('Your Tenantry Pro releases are vested');
+  });
+
+  it('tells the customer when a second annual term vests the next year', async () => {
+    memory.subscribe('ctm_1');
+    await pay('txn_year_1', '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z', 'year');
+    await syncCustomer('ctm_1', deps, new Date('2026-01-01T00:10:00Z'));
+    vi.clearAllMocks();
+
+    await pay('txn_year_2', '2027-01-01T00:00:00Z', '2028-01-01T00:00:00Z', 'year');
+    await syncCustomer('ctm_1', deps, new Date('2027-01-01T00:10:00Z'));
+
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2028-01-01T00:00:00Z'));
+    expect(subjects()).toEqual(['Your Tenantry Pro releases are vested']);
+    expect(deps.sendEmail.mock.calls[0][0].html).toContain('1 January 2028, the end of the term');
+  });
+
+  it('keeps an annual term vested when the subscription is cancelled a day in, and withdraws it on a chargeback', async () => {
+    memory.subscribe('ctm_1');
+    await pay('txn_year', '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z', 'year');
+    await syncCustomer('ctm_1', deps, new Date('2026-01-01T00:10:00Z'));
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-02T00:00:00Z'));
+    memory.subscribe('ctm_1', { status: 'canceled' });
+    await syncCustomer('ctm_1', deps, new Date('2026-01-02T00:10:00Z'));
+    vi.useRealTimers();
+
+    expect(memory.state.entitlementStates.get('ctm_1')).toMatchObject({
+      access: { status: 'lapsed' },
+      vestedThrough: new Date('2027-01-01T00:00:00Z'),
+    });
+    vi.clearAllMocks();
+
+    await memory.store.recordPaymentAdjustment({
+      adjustmentId: 'adj_dispute',
+      transactionId: 'txn_year',
+      customerId: 'ctm_1',
+      subscriptionId: 'sub_1',
+      action: 'chargeback',
+      type: 'full',
+      itemTypes: ['full'],
+      status: 'approved',
+      amount: 3900,
+      currencyCode: 'GBP',
+      createdAt: '2026-02-01T00:00:00Z',
+      updatedAt: '2026-02-01T00:00:00Z',
+      occurredAt: '2026-02-01T00:00:00Z',
+    });
+    await syncCustomer('ctm_1', deps, new Date('2026-02-01T01:00:00Z'));
+
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toBeNull();
+    expect(subjects()).toEqual(['Your Tenantry Pro vested releases have changed']);
+    expect(deps.sendEmail.mock.calls[0][0].html).toContain(
+      'Your annual term no longer vests the releases published up to 1 January 2027, because a payment it relied on was charged back',
+    );
+    expect(alerts()).toEqual(['Grant withdrawn for customer ctm_1']);
+  });
+
+  it('restores an annual term, and says so, when its chargeback is reversed', async () => {
+    memory.subscribe('ctm_1');
+    await pay('txn_year', '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z', 'year');
+    const dispute = {
+      adjustmentId: 'adj_dispute',
+      transactionId: 'txn_year',
+      customerId: 'ctm_1',
+      subscriptionId: 'sub_1',
+      action: 'chargeback',
+      type: 'full',
+      itemTypes: ['full'],
+      status: 'approved',
+      amount: 3900,
+      currencyCode: 'GBP',
+      createdAt: '2026-02-01T00:00:00Z',
+      updatedAt: '2026-02-01T00:00:00Z',
+      occurredAt: '2026-02-01T00:00:00Z',
+    };
+    await memory.store.recordPaymentAdjustment(dispute);
+    await syncCustomer('ctm_1', deps, new Date('2026-02-01T01:00:00Z'));
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toBeNull();
+    vi.clearAllMocks();
+
+    // The dispute is won: Paddle marks the chargeback reversed.
+    await memory.store.recordPaymentAdjustment({
+      ...dispute,
+      status: 'reversed',
+      updatedAt: '2026-03-01T00:00:00Z',
+      occurredAt: '2026-03-01T00:00:00Z',
+    });
+    await syncCustomer('ctm_1', deps, new Date('2026-03-01T01:00:00Z'));
+
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-01-01T00:00:00Z'));
+    expect(subjects()).toEqual(['Your Tenantry Pro releases are vested']);
   });
 });

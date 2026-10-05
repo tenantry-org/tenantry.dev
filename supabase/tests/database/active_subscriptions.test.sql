@@ -8,7 +8,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(26);
+select plan(27);
 
 insert into public.customers (customer_id, email) values ('ctm_1', 'buyer@example.com');
 insert into public.payments (
@@ -22,7 +22,7 @@ insert into public.payments (
 -- The state of a customer two months into a run, with one annual term that was refunded.
 create temporary table run_state as select
   '{"access_status": "active", "run_started_at": "2027-01-01T00:00:00Z", "paid_through": "2027-03-01T00:00:00Z",
-    "months_paid": 2, "vests_at": "2028-01-01T00:00:00Z", "conditional_through": null}'::jsonb as state,
+    "months_paid": 2, "vests_at": "2028-01-01T00:00:00Z"}'::jsonb as state,
   '[{"kind": "annual_term", "started_at": "2026-01-01T00:00:00Z", "vested_through": "2027-01-01T00:00:00Z",
      "status": "withdrawn", "confirmed_at": null, "transaction_id": "txn_0", "withdrawn_reason": "refund"}]'::jsonb
     as grants;
@@ -55,17 +55,15 @@ values ('ctm_1', 'operator', '2025-01-01', '2026-06-01', 'confirmed', now(), 'Me
 select is(
   public.set_customer_entitlement('ctm_1',
     '{"access_status": "grace", "grace_ends_at": "2028-03-02T00:00:00Z", "run_started_at": "2027-01-01T00:00:00Z",
-      "paid_through": "2028-02-01T00:00:00Z", "months_paid": 13, "vests_at": "2028-01-01T00:00:00Z",
-      "conditional_through": "2029-02-01T00:00:00Z"}',
+      "paid_through": "2028-02-01T00:00:00Z", "months_paid": 13, "vests_at": "2028-01-01T00:00:00Z"}',
     '[{"kind": "qualifying_run", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
        "status": "confirmed", "confirmed_at": "2028-01-01T00:00:00Z", "transaction_id": null,
        "withdrawn_reason": null}]',
     '{}'),
   'active', 'returns the status it replaced');
 select results_eq(
-  $$select access_status, grace_ends_at, months_paid, conditional_through from public.active_subscriptions
-    where customer_id = 'ctm_1'$$,
-  $$values ('grace'::text, '2028-03-02 00:00+00'::timestamptz, 13, '2029-02-01 00:00+00'::timestamptz)$$,
+  $$select access_status, grace_ends_at, months_paid from public.active_subscriptions where customer_id = 'ctm_1'$$,
+  $$values ('grace'::text, '2028-03-02 00:00+00'::timestamptz, 13)$$,
   'records the new state, with when grace ends');
 select results_eq(
   $$select kind, status from public.vested_entitlements where customer_id = 'ctm_1' order by kind$$,
@@ -133,9 +131,13 @@ select throws_ok(
     values ('ctm_1', 'operator', '2024-01-01', '2024-06-01', 'confirmed', now())$$,
   '23514', null, 'rejects an operator grant without a note');
 select throws_ok(
-  $$insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status)
-    values ('ctm_1', 'annual_term', '2024-01-01', '2025-01-01', 'conditional')$$,
+  $$insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at)
+    values ('ctm_1', 'annual_term', '2024-01-01', '2025-01-01', 'confirmed', '2024-01-01')$$,
   '23514', null, 'rejects an annual grant without its payment');
+select throws_ok(
+  $$insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, transaction_id)
+    values ('ctm_1', 'annual_term', '2024-01-01', '2025-01-01', 'conditional', 'txn_0')$$,
+  '23514', null, 'rejects a conditional grant: an annual term is confirmed when paid, or withdrawn');
 
 select ok(
   has_function_privilege('service_role', 'public.set_customer_entitlement(text, jsonb, jsonb, jsonb)', 'execute'),

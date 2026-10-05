@@ -102,7 +102,7 @@ const nextMinor = `${major}.${minor + 1}`;
 const QUESTIONS = [
   {
     question: 'What does the subscription include?',
-    answer: `Every Tenantry Pro release while you subscribe, from the package feed (a private NuGet feed run by Tenantry), a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. After 12 months of paid time across consecutive billing periods, or an annual term whose payment you keep in full, releases become vested: they stay licensed to you after the subscription ends. One price for your whole company, billed monthly or yearly.`,
+    answer: `Every Tenantry Pro release while you subscribe, from the package feed (a private NuGet feed run by Tenantry), a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. After 12 months of paid time across consecutive billing periods, releases become vested: they stay licensed to you after the subscription ends. An annual term vests the releases published up to its end as soon as you pay for it, as long as you keep the whole payment. One price for your whole company, billed monthly or yearly.`,
   },
   {
     question: 'How does my team install it, locally and in CI?',

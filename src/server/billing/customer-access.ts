@@ -24,11 +24,10 @@ import { type BillingDeps, defaultBillingDeps, offeredPriceIds } from '@/server/
  * from Paddle. In the same way, reconcile confirms vesting as periods are served.
  *
  * The lifecycle emails follow access, and the customer is told when a grant is confirmed (releases become vested) or
- * withdrawn (a refund, a chargeback, or an annual term not completed); the operator is alerted about a withdrawal. The
- * licence does not expire (licence-issuer.ts): a
- * customer is issued one key when their access first starts and keeps it for good, through renewals, lapses and
- * returns. It does not decide which releases they may use (the feed and the EULA do), so ending access leaves it in
- * place, and the dashboard keeps showing it.
+ * withdrawn (a refund, a credit or a chargeback); the operator is alerted about a withdrawal. The licence does not
+ * expire (licence-issuer.ts): a customer is issued one key when their access first starts and keeps it for good,
+ * through renewals, lapses and returns. It does not decide which releases they may use (the feed and the EULA do), so
+ * ending access leaves it in place, and the dashboard keeps showing it.
  */
 
 export type AccessChange = 'started' | 'ended' | 'unchanged';
@@ -80,7 +79,7 @@ export async function syncCustomer(
   const entitled = isEntitled(entitlement.access.status);
 
   const wasEntitled = isEntitled(await store.saveCustomerState(customerId, entitlement));
-  await notifyGrantChanges(customerId, previousGrants, entitlement, email, deps);
+  await notifyGrantChanges(customerId, previousGrants, entitlement, email, deps, now);
 
   if (!entitled) {
     if (!wasEntitled) return { change: 'unchanged', licence: null, entitlement };
@@ -120,9 +119,10 @@ export async function syncCustomer(
  *   - an annual term's grant withdrawn (money returned from its payment);
  *   - their vested-through date moved back or gone for any other reason: money returned that a qualifying period relied
  *     on, which recomputes the qualifying period without it rather than marking it withdrawn;
- *   - a grant newly confirmed (a first vesting, a new qualifying period, an annual term completed) that vested after
- *     their previous vested-through date. A vested-through date moving forward with the time served sends nothing, nor
- *     does a qualifying period recomputed from a later start.
+ *   - a grant newly confirmed (a first vesting, a new qualifying period, an annual term paid, or a grant restored by a
+ *     reversal) that vests beyond their previous vested-through date: a qualifying period confirmed after it, or an
+ *     annual term ending after it. A vested-through date moving forward with the time served sends nothing, nor does a
+ *     qualifying period recomputed from a later start.
  * Anything taken away also alerts the operator. Never throws: a failed email is not resent.
  */
 async function notifyGrantChanges(
@@ -131,6 +131,7 @@ async function notifyGrantChanges(
   entitlement: Entitlement,
   email: string | null,
   deps: BillingDeps,
+  now: Date,
 ) {
   const before = new Map(previous.map((grant) => [grantKey(grant), grant.status]));
   const previousThrough = latestDate(previous.filter((g) => g.status === 'confirmed').map((g) => g.vestedThrough));
@@ -141,16 +142,29 @@ async function notifyGrantChanges(
   );
   const withdrawn: WithdrawnGrant[] = entitlement.grants.filter((grant) => {
     const was = before.get(grantKey(grant));
-    return grant.status === 'withdrawn' && (was === 'conditional' || was === 'confirmed');
+    return grant.status === 'withdrawn' && was === 'confirmed';
   });
   // Vesting taken away without a grant marked withdrawn: money returned that a qualifying period relied on.
   if (withdrawn.length === 0 && previousThrough && (!through || through < previousThrough)) {
     withdrawn.push({ kind: 'qualifying_run', vestedThrough: previousThrough, withdrawnReason: null });
   }
-  // A grant that vested after the previous vested-through date: not a qualifying period recomputed from a later start.
+  // A grant that vests beyond the previous vested-through date: not a qualifying period recomputed from a later start.
   const vested =
     through !== null &&
-    confirmed.some((grant) => !previousThrough || (grant.confirmedAt ?? grant.vestedThrough) > previousThrough);
+    confirmed.some(
+      (grant) =>
+        !previousThrough ||
+        (grant.kind === 'annual_term' ? grant.vestedThrough : (grant.confirmedAt ?? grant.vestedThrough)) >
+          previousThrough,
+    );
+  // Whether the vested-through date is the end of an annual term not over yet, which vests releases still to come.
+  const annualTerm = entitlement.grants.some(
+    (grant) =>
+      grant.kind === 'annual_term' &&
+      grant.status === 'confirmed' &&
+      grant.vestedThrough.getTime() === through?.getTime() &&
+      grant.vestedThrough > now,
+  );
 
   for (const grant of withdrawn) {
     const what = grant.kind === 'annual_term' ? 'annual term' : 'qualifying period';
@@ -173,7 +187,7 @@ async function notifyGrantChanges(
     await deps.sendEmail(grantWithdrawnEmail(email, grant, through, deps.config.siteUrl));
   }
   if (vested) {
-    await deps.sendEmail(vestingConfirmedEmail(email, through!, deps.config.siteUrl));
+    await deps.sendEmail(vestingConfirmedEmail(email, through!, annualTerm, deps.config.siteUrl));
   }
 }
 

@@ -87,18 +87,17 @@ function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) 
   );
 }
 
-// How far the customer is towards vesting: an annual term confirmed at its end if its payment is kept, or the paid time
-// of the current qualifying period (the time the money kept pays for).
+// How far the customer is towards vesting: an annual term vested when paid, while it lasts, or the paid time of the
+// current qualifying period (the time the money kept pays for).
 function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
-  const { conditionalThrough, qualifying } = entitlement;
+  const { annualTerm, qualifying } = entitlement;
 
-  if (conditionalThrough) {
+  if (annualTerm) {
     return (
       <p>
-        Your annual term grants the releases published up to{' '}
-        <span className={'font-medium text-foreground'}>{formatDate(conditionalThrough)}</span>. They become vested
-        releases at the end of the term, on that date, if its payment is kept in full. A refund, credit or chargeback of
-        the payment withdraws the grant, even after the term.
+        Your annual term is paid, so every release published up to the end of the term is vested, including those
+        published later in the term. A refund, credit or chargeback of the term&apos;s payment withdraws them, even
+        after the term.
       </p>
     );
   }

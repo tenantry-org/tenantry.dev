@@ -29,8 +29,11 @@ insert into public.subscriptions (subscription_id, status, customer_id) values
   ('sub_past_due', 'past_due', 'ctm_past_due'), ('sub_lapsed', 'canceled', 'ctm_lapsed'),
   ('sub_vested', 'canceled', 'ctm_vested');
 insert into public.licence_failures (customer_id, last_error) values ('ctm_failing', 'signing failed');
-insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, transaction_id) values
-  ('ctm_annual', 'annual_term', '2027-01-01', '2028-01-01', 'conditional', 'txn_annual');
+-- An annual term confirmed when paid: nothing about it changes with time, so it alone calls for no reconcile (its
+-- payment's billing period does, below).
+insert into public.vested_entitlements (
+  customer_id, kind, started_at, vested_through, status, confirmed_at, transaction_id
+) values ('ctm_annual', 'annual_term', '2027-01-01', '2028-01-01', 'confirmed', '2027-01-01', 'txn_annual');
 insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at) values
   ('ctm_vested', 'qualifying_run', '2027-01-01', '2028-01-01', 'confirmed', '2028-01-01');
 -- Every customer keeps their licence, so a licence alone does not call for a reconcile.
@@ -41,10 +44,10 @@ select is(
   1500, 'every customer with an active subscription, past the 1000 rows an API query returns');
 select ok(
   public.customers_to_reconcile()
-    @> array['ctm_access', 'ctm_past_due', 'ctm_failing', 'ctm_running', 'ctm_annual']
-    and not public.customers_to_reconcile() && array['ctm_lapsed', 'ctm_vested'],
-  'found by access, a subscription that may entitle, a failing licence, a current run or an annual '
-    || 'grant to confirm; a lapsed customer, vested or not, is not');
+    @> array['ctm_access', 'ctm_past_due', 'ctm_failing', 'ctm_running']
+    and not public.customers_to_reconcile() && array['ctm_lapsed', 'ctm_vested', 'ctm_annual'],
+  'found by access, a subscription that may entitle, a failing licence or a current run; a lapsed customer, vested '
+    || 'or not, is not');
 
 -- Paid time still being served: a payment kept in full counts for its whole period even after the subscription
 -- ended, so vesting can fall due while the customer is lapsed. Visited until two days after the period ends.

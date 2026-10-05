@@ -20,20 +20,19 @@ const { paddle } = testServerConfig();
 const BUYER = { email: 'buyer@example.com', email_confirmed_at: '2026-09-01T00:00:00Z' };
 
 /** active_subscriptions as stored: access, the grace end in grace, and the current qualifying period. */
-const stored = (
-  status: string,
-  extra: { grace_ends_at?: string; months_paid?: number; vests_at?: string; conditional_through?: string } = {},
-) => ({
+const stored = (status: string, extra: { grace_ends_at?: string; months_paid?: number; vests_at?: string } = {}) => ({
   single: {
     access_status: status,
     grace_ends_at: null,
     months_paid: 0,
     vests_at: null,
-    conditional_through: null,
     ...extra,
   },
 });
-const vested = (through: string | null) => ({ single: through ? { vested_through: through } : null });
+/** The customer's latest confirmed grant: its vested-through date, from an operator grant unless another kind is given. */
+const vested = (through: string | null, kind = 'operator') => ({
+  single: through ? { vested_through: through, kind } : null,
+});
 
 // The tables a read model read, besides the customer lookup.
 const tablesRead = () => new Set(state.calls.map(({ table }) => table).filter((table) => table !== 'customers'));
@@ -87,7 +86,7 @@ describe('readEntitlement', () => {
       canRestore: true,
       vestedThrough: null,
       qualifying: { monthsPaid: 3, vestsAt: '2027-07-01T00:00:00.000Z', reached: false },
-      conditionalThrough: null,
+      annualTerm: false,
     });
   });
 
@@ -118,8 +117,8 @@ describe('readEntitlement', () => {
   });
 
   it('gives a lapsed customer the vested-through date, any operator grant included, and no progress', async () => {
-    state.tables.active_subscriptions = stored('lapsed', { conditional_through: '2027-01-01T00:00:00Z' });
-    state.tables.vested_entitlements = vested('2027-12-31T00:00:00Z');
+    state.tables.active_subscriptions = stored('lapsed');
+    state.tables.vested_entitlements = vested('2027-12-31T00:00:00Z', 'annual_term');
 
     await expect(readEntitlement('ctm_1')).resolves.toEqual({
       access: 'lapsed',
@@ -127,7 +126,7 @@ describe('readEntitlement', () => {
       canRestore: true,
       vestedThrough: '2027-12-31T00:00:00.000Z',
       qualifying: null,
-      conditionalThrough: null,
+      annualTerm: false,
     });
     expect(state.calls).toContainEqual({ table: 'vested_entitlements', method: 'eq', args: ['status', 'confirmed'] });
     expect(state.calls).not.toContainEqual(
@@ -143,14 +142,20 @@ describe('readEntitlement', () => {
     await expect(readEntitlement('ctm_1')).resolves.toMatchObject({ access: 'lapsed', canRestore: false });
   });
 
-  it("shows an annual term's conditional grant while the customer has access", async () => {
-    state.tables.active_subscriptions = stored('active', {
-      months_paid: 0,
-      vests_at: '2027-10-01T00:00:00Z',
-      conditional_through: '2027-10-01T00:00:00Z',
+  it('says an annual term not over yet gives the vested-through date, while the customer has access', async () => {
+    state.tables.active_subscriptions = stored('active', { months_paid: 12, vests_at: '2027-10-01T00:00:00Z' });
+    state.tables.vested_entitlements = vested('2027-10-01T00:00:00Z', 'annual_term');
+    await expect(readEntitlement('ctm_1')).resolves.toMatchObject({
+      vestedThrough: '2027-10-01T00:00:00.000Z',
+      annualTerm: true,
     });
 
-    await expect(readEntitlement('ctm_1')).resolves.toMatchObject({ conditionalThrough: '2027-10-01T00:00:00.000Z' });
+    // Once the term is over, or when another grant gives the date, it is a vested-through date like any other.
+    await expect(readEntitlement('ctm_1', new Date('2027-10-01T00:00:00Z'))).resolves.toMatchObject({
+      annualTerm: false,
+    });
+    state.tables.vested_entitlements = vested('2027-10-01T00:00:00Z', 'qualifying_run');
+    await expect(readEntitlement('ctm_1')).resolves.toMatchObject({ annualTerm: false });
   });
 });
 

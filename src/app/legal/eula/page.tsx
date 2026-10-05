@@ -5,7 +5,7 @@ export const metadata = { title: 'End User Licence Agreement | Tenantry Pro' };
 
 export default function EulaPage() {
   return (
-    <LegalPage title="End User Licence Agreement (Tenantry Pro)" lastUpdated="2026-10-04">
+    <LegalPage title="End User Licence Agreement (Tenantry Pro)" lastUpdated="2026-10-05">
       <p>
         This End User Licence Agreement (&quot;EULA&quot;) is between you (or the entity you represent) and{' '}
         {LegalEntity.name}, {LegalEntity.registration}, whose registered office is at {LegalEntity.address}, the
@@ -80,8 +80,8 @@ export default function EulaPage() {
       <p>
         When you pay a yearly price this site has offered for an annual billing period (an &quot;annual term&quot;),
         Tenantry grants you at once, on condition that you keep the whole payment, that every release whose release date
-        is on or before the end of the term is vested (the &quot;term&apos;s grant&quot;). The term&apos;s grant is
-        confirmed when the term ends, and the end of the term is then a vested-through date. Any refund, credit or
+        is on or before the end of the term is vested (the &quot;term&apos;s grant&quot;). From when you pay, the end of
+        the term is a vested-through date, even if your subscription ends before the term does. Any refund, credit or
         chargeback of the payment withdraws the term&apos;s grant, at any time, including after the term has ended. The
         part of the term that the money kept pays for is still a paid period.
       </p>

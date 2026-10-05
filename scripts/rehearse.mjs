@@ -9,8 +9,9 @@
  *
  *   vested <email>                 12 paid months before the customer's first real payment, so the qualifying period
  *                                  has reached 12 months: the releases published up to that payment's start are vested
- *   annual <email>                 a completed annual term before the customer's first real payment: its grant is
- *                                  confirmed, and the same releases are vested
+ *   annual <email>                 an annual term paid for the year before the customer's first real payment: its
+ *                                  grant is confirmed, as every annual term's is when paid, and the releases published
+ *                                  up to that payment's start are vested
  *   refund <email>                 an approved full refund of the newest rehearsal payment, now: it takes away the time
  *                                  that payment paid for, and any vesting that relied on it
  *   partial <email> [percent]      an approved refund of part of the newest rehearsal payment (50% unless given): the

@@ -373,7 +373,6 @@ describe('the payment ledger', () => {
           monthsPaid: 2,
           vestsAt: new Date('2028-01-01T00:00:00Z'),
         },
-        conditionalThrough: null,
         vestedThrough: null,
         grants: [
           {
@@ -400,7 +399,6 @@ describe('the payment ledger', () => {
         paid_through: '2027-03-01T00:00:00.000Z',
         months_paid: 2,
         vests_at: '2028-01-01T00:00:00.000Z',
-        conditional_through: null,
       },
       p_grants: [
         {

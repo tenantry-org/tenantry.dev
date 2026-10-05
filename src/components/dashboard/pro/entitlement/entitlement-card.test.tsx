@@ -41,15 +41,25 @@ describe('EntitlementCard', () => {
     expect(html).toContain('12 paid months are reached on 1 January 2027');
   });
 
-  it('shows an annual subscriber the grant and the condition it is confirmed on', () => {
+  it('shows an annual subscriber that the term is vested since it was paid, and what withdraws it', () => {
     const html = render(ENTITLEMENT.annual);
 
-    expect(html).toContain('Your annual term grants the releases published up to');
-    expect(html).toContain('1 October 2027');
-    expect(html).toContain('if its payment is kept in full');
-    expect(html).toContain('A refund, credit or chargeback of the payment withdraws the grant, even after the term');
-    expect(html).not.toContain('ending the subscription');
+    expect(html).toContain('Your annual term is paid, so every release published up to the end of the term is vested');
+    expect(html).toContain('including those published later in the term');
+    expect(html).toContain('vested-through date is <span class="font-medium text-foreground">1 October 2027</span>');
+    expect(html).toContain(
+      'A refund, credit or chargeback of the term&#x27;s payment withdraws them, even after the term',
+    );
+    expect(html).not.toContain('end of the term, on that date');
     expect(html).not.toContain('paid months');
+  });
+
+  it('tells an annual subscriber who cancelled mid-term that the feed serves the releases up to the term end', () => {
+    const html = render(ENTITLEMENT.annualLapsed);
+
+    expect(html).toContain('Your subscription has ended. The package feed serves you the vested releases');
+    expect(html).toContain('1 October 2027');
+    expect(html).not.toContain('no releases are vested');
   });
 
   it('shows a customer in grace when access ends', () => {

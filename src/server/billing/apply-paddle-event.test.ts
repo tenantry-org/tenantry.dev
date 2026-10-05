@@ -690,7 +690,7 @@ describe('applyPaddleEvent', () => {
 
       expect(memory.state.payments.get('txn_special')?.priceId).toBe('pri_01special');
       expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({
-        conditionalThrough: null,
+        grants: [],
         run: null,
         vestedThrough: null,
       });
@@ -727,7 +727,7 @@ describe('applyPaddleEvent', () => {
       await expect(applyPaddleEvent(delivered(year[0]), deps)).rejects.toMatchObject({ code: '23503' });
     });
 
-    it('records an annual payment as a conditional grant to the end of its term', async () => {
+    it('records an annual payment as a grant to the end of its term, confirmed when paid', async () => {
       vi.setSystemTime(new Date('2027-03-01T00:10:00Z'));
 
       await applyPaddleEvent(
@@ -744,8 +744,15 @@ describe('applyPaddleEvent', () => {
       );
 
       expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({
-        conditionalThrough: new Date('2028-03-01T00:00:00Z'),
-        vestedThrough: null,
+        grants: [
+          expect.objectContaining({
+            kind: 'annual_term',
+            status: 'confirmed',
+            confirmedAt: new Date('2027-03-01T00:00:00Z'),
+            vestedThrough: new Date('2028-03-01T00:00:00Z'),
+          }),
+        ],
+        vestedThrough: new Date('2028-03-01T00:00:00Z'),
       });
     });
 

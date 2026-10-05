@@ -56,17 +56,29 @@ export function feedTokenCreatedEmail(
 }
 
 /**
- * Sent when a grant is confirmed: a qualifying period reaches 12 paid months, or an annual term is completed. Not sent
- * as the vested-through date moves forward month by month afterwards.
+ * Sent when a grant is confirmed: a qualifying period reaches 12 paid months, or an annual term is paid. Not sent as the
+ * vested-through date moves forward month by month afterwards. `annualTerm` says the date is the end of an annual term
+ * not over yet, whose releases are vested as they are published.
  */
-export function vestingConfirmedEmail(to: string, vestedThrough: Date, siteUrl: string): EmailMessage {
+export function vestingConfirmedEmail(
+  to: string,
+  vestedThrough: Date,
+  annualTerm: boolean,
+  siteUrl: string,
+): EmailMessage {
+  const what = annualTerm
+    ? `Your annual term is paid, so every Tenantry Pro release published on or before ${longDate(vestedThrough)}, the end of the term and your vested-through date, is vested, including those published later in the term.`
+    : `Every Tenantry Pro release published on or before ${longDate(vestedThrough)}, your vested-through date, is now vested.`;
+  const next = annualTerm
+    ? "A refund, credit or chargeback of the term's payment withdraws them, even after the term. Paying for another year vests that year's releases in the same way."
+    : 'While you stay subscribed, your vested-through date moves forward as your paid time is served. A refund, credit or chargeback takes away the time its money paid for.';
   return {
     to,
     subject: 'Your Tenantry Pro releases are vested',
     html: layout(
       `<h1 style="font-size:20px">Your releases are vested</h1>
-<p>Every Tenantry Pro release published on or before ${longDate(vestedThrough)}, your vested-through date, is now vested. Vested releases stay licensed to you after your subscription ends, and the package feed keeps serving them to you, with the security patches of their minor versions.</p>
-<p>While you stay subscribed, your vested-through date moves forward as your paid time is served. A refund, credit or chargeback takes away the time its money paid for.</p>
+<p>${what} Vested releases stay licensed to you after your subscription ends, and the package feed keeps serving them to you, with the security patches of their minor versions.</p>
+<p>${next}</p>
 <p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">See your vested releases</a></p>`,
     ),
   };

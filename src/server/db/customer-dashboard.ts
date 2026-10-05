@@ -38,8 +38,6 @@ export interface StoredState {
   access: Access;
   /** The current qualifying period, while they have access and it continues to now. */
   run: { monthsPaid: number; vestsAt: Date } | null;
-  /** The end of an annual term whose grant is not confirmed yet. */
-  conditionalThrough: Date | null;
 }
 
 /** The customer's stored state, or null if it was never recorded. */
@@ -47,7 +45,7 @@ export async function readCustomerState(customerId: string): Promise<StoredState
   const supabase = await createUserClient();
   const { data } = await supabase
     .from('active_subscriptions')
-    .select('access_status,grace_ends_at,months_paid,vests_at,conditional_through')
+    .select('access_status,grace_ends_at,months_paid,vests_at')
     .eq('customer_id', customerId)
     .maybeSingle();
 
@@ -56,27 +54,33 @@ export async function readCustomerState(customerId: string): Promise<StoredState
         // active_subscriptions' check constraint allows only these.
         access: { status: data.access_status as AccessStatus, graceEndsAt: date(data.grace_ends_at) },
         run: data.vests_at ? { monthsPaid: data.months_paid, vestsAt: new Date(data.vests_at) } : null,
-        conditionalThrough: date(data.conditional_through),
       }
     : null;
 }
 
+/** The customer's vested-through date, and the kind of grant that gives it. */
+export interface Vested {
+  through: Date;
+  /** qualifying_run, annual_term or operator (vested_entitlements.kind). */
+  kind: string;
+}
+
 /**
  * The customer's vested-through date: the latest of their confirmed grants, operator grants included, as the package
- * feed reads it (vested_through()). Null when nothing is vested.
+ * feed reads it (vested_through()), with the kind of that grant. Null when nothing is vested.
  */
-export async function readVestedThrough(customerId: string): Promise<Date | null> {
+export async function readVested(customerId: string): Promise<Vested | null> {
   const supabase = await createUserClient();
   const { data } = await supabase
     .from('vested_entitlements')
-    .select('vested_through')
+    .select('vested_through,kind')
     .eq('customer_id', customerId)
     .eq('status', 'confirmed')
     .order('vested_through', { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  return date(data?.vested_through ?? null);
+  return data ? { through: new Date(data.vested_through), kind: data.kind } : null;
 }
 
 /** One of the customer's feed tokens, as the Access page lists it: never the token, which is not stored. */

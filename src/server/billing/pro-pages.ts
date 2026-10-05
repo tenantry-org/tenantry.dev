@@ -9,7 +9,7 @@ import {
   readFeedTokens,
   readLicenceKey,
   readSubscriptions,
-  readVestedThrough,
+  readVested,
 } from '@/server/db/customer-dashboard';
 import { canRestore, currentAccess } from '@/server/billing/entitlement-policy';
 import type { AccessStatus } from '@/server/db/billing-store';
@@ -52,8 +52,11 @@ export interface EntitlementView {
    * for, served or paid ahead), when it reaches 12 months, and whether it has by now.
    */
   qualifying: { monthsPaid: number; vestsAt: string; reached: boolean } | null;
-  /** The end of an annual term whose grant is confirmed when the term is completed. */
-  conditionalThrough: string | null;
+  /**
+   * Whether, while they have access, the vested-through date is the end of an annual term not over yet: its payment
+   * vested the releases published up to then, as they are published.
+   */
+  annualTerm: boolean;
 }
 
 /** One of the customer's feed tokens, as the Access page lists it. */
@@ -108,7 +111,8 @@ export interface BillingSubscription {
  * feed token actions, take it from.
  */
 export async function readEntitlement(customerId: string, now: Date = new Date()): Promise<EntitlementView> {
-  const [state, vestedThrough] = await Promise.all([readCustomerState(customerId), readVestedThrough(customerId)]);
+  const [state, vested] = await Promise.all([readCustomerState(customerId), readVested(customerId)]);
+  const vestedThrough = vested?.through ?? null;
   const access = currentAccess(state?.access ?? null, now);
   const entitled = access.status !== 'lapsed';
 
@@ -126,7 +130,7 @@ export async function readEntitlement(customerId: string, now: Date = new Date()
             reached: state.run.vestsAt.getTime() <= now.getTime(),
           }
         : null,
-    conditionalThrough: entitled ? iso(state?.conditionalThrough ?? null) : null,
+    annualTerm: entitled && vested?.kind === 'annual_term' && vested.through.getTime() > now.getTime(),
   };
 }
 

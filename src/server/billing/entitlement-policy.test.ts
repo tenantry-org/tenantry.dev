@@ -236,17 +236,103 @@ describe('the owner’s table', () => {
   describe('annual plans', () => {
     const term = annual('2027-01-01T00:00:00Z');
 
-    it.each([
-      ['2027-06-01T00:00:00Z', 'conditional', null],
-      ['2027-12-31T23:59:59Z', 'conditional', null],
-      ['2028-01-01T00:00:00Z', 'confirmed', '2028-01-01T00:00:00.000Z'],
-      ['2029-01-01T00:00:00Z', 'confirmed', '2028-01-01T00:00:00.000Z'],
-    ])('kept to the term end: at %s the grant is %s, vested through %s', (now, status, through) => {
-      const entitlement = compute({ payments: [term], now });
+    it.each(['2027-01-01T00:00:00Z', '2027-01-02T00:00:00Z', '2027-12-31T23:59:59Z', '2029-01-01T00:00:00Z'])(
+      'kept in full: at %s the grant is confirmed from the payment, vested through the term end',
+      (now) => {
+        const entitlement = compute({ payments: [term], now });
 
-      expect(entitlement.grants.find((grant) => grant.kind === 'annual_term')).toMatchObject({ status });
-      expect(vested(entitlement)).toBe(through);
-      if (status === 'conditional') expect(iso(entitlement.conditionalThrough)).toBe('2028-01-01T00:00:00.000Z');
+        expect(entitlement.grants.find((grant) => grant.kind === 'annual_term')).toEqual({
+          kind: 'annual_term',
+          startedAt: date('2027-01-01T00:00:00Z'),
+          vestedThrough: date('2028-01-01T00:00:00Z'),
+          status: 'confirmed',
+          confirmedAt: date('2027-01-01T00:00:00Z'),
+          transactionId: term.transactionId,
+          withdrawnReason: null,
+        });
+        expect(vested(entitlement)).toBe('2028-01-01T00:00:00.000Z');
+      },
+    );
+
+    it('serves a lapsed customer, a day into the term, the releases published up to now and later in the term', () => {
+      const entitlement = compute({ payments: [term], now: '2027-01-02T00:00:00Z', endedAt: '2027-01-02T00:00:00Z' });
+      const customer = { accessStatus: entitlement.access.status, vestedThrough: entitlement.vestedThrough };
+
+      expect(customer.accessStatus).toBe('lapsed');
+      expect(mayUseRelease(customer, date('2026-06-01T00:00:00Z'))).toBe(true);
+      expect(mayUseRelease(customer, date('2027-01-01T12:00:00Z'))).toBe(true);
+      // Published later in the term: covered once it exists. After the term end: not covered.
+      expect(mayUseRelease(customer, date('2027-12-31T23:59:59Z'))).toBe(true);
+      expect(mayUseRelease(customer, date('2028-01-01T00:00:01Z'))).toBe(false);
+    });
+
+    it.each([
+      ['refund', 'refund'],
+      ['credit', 'refund'],
+      ['chargeback', 'chargeback'],
+    ])('withdraws the grant on a full %s, even a day into the term', (action, reason) => {
+      const returned = adjustment(term, action, '2027-01-02T00:00:00Z');
+      const entitlement = compute({
+        payments: [term],
+        adjustments: [returned],
+        now: '2027-01-02T01:00:00Z',
+        endedAt: '2027-01-02T00:00:00Z',
+      });
+
+      expect(entitlement.grants).toEqual([
+        expect.objectContaining({ kind: 'annual_term', status: 'withdrawn', withdrawnReason: reason }),
+      ]);
+      expect(entitlement.vestedThrough).toBeNull();
+      expect(mayUseRelease({ accessStatus: 'lapsed', vestedThrough: null }, date('2026-06-01T00:00:00Z'))).toBe(false);
+    });
+
+    it('withdraws the grant on a partial refund of one penny, and counts the time the rest pays for', () => {
+      const penny = adjustment(term, 'refund', '2027-02-01T00:00:00Z', { amount: 1 });
+      const entitlement = compute({ payments: [term], adjustments: [penny], now: '2027-02-01T01:00:00Z' });
+
+      expect(entitlement.grants).toEqual([
+        expect.objectContaining({ kind: 'annual_term', status: 'withdrawn', withdrawnReason: 'refund' }),
+      ]);
+      expect(entitlement.vestedThrough).toBeNull();
+      // 38999 of 39000 kept: paid to 13 minutes before the term end.
+      const paidThrough = date('2027-01-01T00:00:00Z').getTime() + Math.floor((38999 / 39000) * 365 * DAY);
+      expect(entitlement.run).toMatchObject({
+        startedAt: date('2027-01-01T00:00:00Z'),
+        paidThrough: new Date(paidThrough),
+      });
+    });
+
+    it('restores the grant when its chargeback is reversed (a dispute won), however the reversal is recorded', () => {
+      const chargeback = adjustment(term, 'chargeback', '2027-02-01T00:00:00Z');
+      const reverse = adjustment(term, 'chargeback_reverse', '2027-03-01T00:00:00Z');
+      const now = '2027-03-01T01:00:00Z';
+
+      expect(compute({ payments: [term], adjustments: [chargeback], now }).vestedThrough).toBeNull();
+      for (const adjustments of [
+        [chargeback, reverse],
+        [{ ...chargeback, status: 'reversed', reversedAt: date('2027-03-01T00:00:00Z') }],
+      ]) {
+        const entitlement = compute({ payments: [term], adjustments, now });
+        expect(entitlement.grants).toEqual([expect.objectContaining({ kind: 'annual_term', status: 'confirmed' })]);
+        expect(vested(entitlement)).toBe('2028-01-01T00:00:00.000Z');
+      }
+    });
+
+    it('vests the second year when its payment is made, and keeps the first if only the second is refunded', () => {
+      const second = annual('2028-01-01T00:00:00Z');
+      const now = '2028-01-02T00:00:00Z';
+
+      const both = compute({ payments: [term, second], now });
+      expect(both.grants.filter((g) => g.kind === 'annual_term' && g.status === 'confirmed')).toHaveLength(2);
+      expect(vested(both)).toBe('2029-01-01T00:00:00.000Z');
+
+      const refund = adjustment(second, 'refund', '2028-01-02T00:00:00Z');
+      const refunded = compute({ payments: [term, second], adjustments: [refund], now, endedAt: now });
+      // The first year stays vested, by its own grant and by its 12 paid months.
+      expect(vested(refunded)).toBe('2028-01-01T00:00:00.000Z');
+      expect(refunded.grants).toContainEqual(
+        expect.objectContaining({ startedAt: date('2028-01-01T00:00:00Z'), status: 'withdrawn' }),
+      );
     });
 
     it('refunded in full after the term ended: grant withdrawn, nothing counted', () => {
@@ -461,11 +547,12 @@ describe('a subscription ending with its payment kept in full', () => {
     expect(vested(entitlement)).toBe('2028-01-01T00:00:00.000Z');
   });
 
-  it('confirms an annual grant at the term end though the subscription ended mid-term, the money kept', () => {
+  it('keeps an annual grant confirmed though the subscription ended mid-term, the money kept', () => {
     const term = annual('2027-01-01T00:00:00Z');
 
     const during = compute({ payments: [term], now: '2027-09-01T00:00:00Z', endedAt: '2027-05-01T00:00:00Z' });
-    expect(during.grants).toEqual([expect.objectContaining({ kind: 'annual_term', status: 'conditional' })]);
+    expect(during.grants).toEqual([expect.objectContaining({ kind: 'annual_term', status: 'confirmed' })]);
+    expect(vested(during)).toBe('2028-01-01T00:00:00.000Z');
     expect(vested(compute({ payments: [term], now: '2028-01-01T00:00:00Z', endedAt: '2027-05-01T00:00:00Z' }))).toBe(
       '2028-01-01T00:00:00.000Z',
     );
@@ -1057,9 +1144,15 @@ describe('properties over generated histories', () => {
 
     for (const now of nows) {
       const entitlement = compute({ payments, adjustments: made, now });
-      expect(entitlement.vestedThrough?.getTime() ?? 0).toBeLessThanOrEqual(date(now).getTime());
+      // Only an annual term kept in full vests time not yet served: its whole term, from its payment.
+      for (const grant of entitlement.grants.filter((g) => g.kind === 'annual_term' && g.status === 'confirmed')) {
+        const paid = payments.find((p) => p.transactionId === grant.transactionId)!;
+        expect(made.some((a) => a.transactionId === paid.transactionId)).toBe(false);
+        expect(grant.vestedThrough).toEqual(paid.periodEndsAt);
+      }
 
       for (const grant of confirmedRuns(entitlement)) {
+        expect(grant.vestedThrough.getTime()).toBeLessThanOrEqual(date(now).getTime());
         const from = grant.startedAt.getTime();
         const served = covered(segments, from, date(now).getTime());
         // The time vested is at most the counted time served since the start, which reached 12 months (less the

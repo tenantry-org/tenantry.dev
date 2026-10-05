@@ -47,8 +47,11 @@ import {
  *   through its start plus its counted time served: never more time than was paid for and served, and never later
  *   than now. If every billing period in it so far counted in full, it may vest at the end of one up to
  *   MONTH_END_TOLERANCE_MS short of the 12 months.
- * - An annual payment grants its term at once, conditionally, and is confirmed at the term's end if nothing of it has
- *   been returned; anything returned withdraws the grant, at any time. Its kept share counts as above all the same.
+ * - An annual payment kept in full vests its term when it is paid: its grant is confirmed from the start of its billing
+ *   period, through the term's end, so the releases published up to then are vested as they are published, even if the
+ *   subscription is cancelled or paused before the term ends. Any refund, credit or chargeback of it withdraws the
+ *   grant, at any time, and a reversal that leaves nothing returned restores it. Its kept share counts as above all
+ *   the same.
  * - Everything is judged as the ledger stands now. Money returned after a vesting takes away whatever relied on it, and
  *   a reversal restores it. Cancelling or lapsing takes nothing away.
  *
@@ -181,7 +184,6 @@ export function computeEntitlement(input: EntitlementInput): Entitlement {
   return {
     access,
     run: currentRun(runs, ledger, isEntitled(access.status), input.now),
-    conditionalThrough: latest(grants.filter((g) => g.status === 'conditional').map((g) => g.vestedThrough)),
     vestedThrough: latest(grants.filter((g) => g.status === 'confirmed').map((g) => g.vestedThrough)),
     grants,
     paymentStatuses: Object.fromEntries(
@@ -366,10 +368,11 @@ class Ledger {
     return vestings.length === 0 ? null : new Date(Math.min(...vestings));
   }
 
-  /** A grant for each annual payment that charged something: conditional, confirmed at the term end, or withdrawn. */
+  /**
+   * A grant for each annual payment that charged something: confirmed when paid (from its billing period's start)
+   * through the term's end while nothing of it is returned, and withdrawn otherwise.
+   */
   annualTerms(): Grant[] {
-    const now = this.input.now;
-
     return this.input.payments
       .filter(
         (payment) =>
@@ -378,21 +381,19 @@ class Ledger {
           isAnnualTerm(payment.billingInterval, payment.billingFrequency),
       )
       .map((payment) => {
-        const termEnd = payment.periodEndsAt;
         const returned = this.returned(payment);
         const grant: Grant = {
           kind: 'annual_term',
           startedAt: payment.periodStartsAt,
-          vestedThrough: termEnd,
-          status: 'conditional',
-          confirmedAt: null,
+          vestedThrough: payment.periodEndsAt,
+          status: 'confirmed',
+          confirmedAt: payment.periodStartsAt,
           transactionId: payment.transactionId,
           withdrawnReason: null,
         };
 
         if (returned.chargeback > 0) return withdraw(grant, 'chargeback');
         if (sum(Object.values(returned)) > 0) return withdraw(grant, 'refund');
-        if (termEnd <= now) return { ...grant, status: 'confirmed', confirmedAt: termEnd };
         return grant;
       });
   }

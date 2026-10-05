@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(22);
+select plan(25);
 
 insert into public.customers (customer_id, email) values
   ('ctm_active', 'active@example.com'), ('ctm_vested', 'vested@example.com'), ('ctm_new', 'new@example.com');
@@ -107,6 +107,38 @@ select throws_ok(
 select results_eq(
   $$select public from storage.buckets where id = 'pro-packages'$$, $$values (false)$$,
   'the packages'' bucket is private');
+
+-- An annual term paid yesterday, the subscription cancelled today with nothing refunded: stored as the site computes
+-- it (entitlement-policy.ts), the term's grant is confirmed through its end, so the feed serves the releases of the
+-- term, the one published now included. Its payment refunded or charged back, the grant is withdrawn.
+insert into public.customers (customer_id, email) values ('ctm_annual', 'annual@example.com');
+insert into public.feed_tokens (customer_id, name, token_hash, prefix) values
+  ('ctm_annual', 'CI', encode(sha256('tpf_annual'), 'hex'), 'tpf_annu');
+create temporary table annual_term as select
+  date_trunc('second', now() - interval '1 day') as starts_at,
+  date_trunc('second', now() - interval '1 day' + interval '1 year') as ends_at;
+select public.set_customer_entitlement('ctm_annual', '{"access_status": "lapsed"}',
+  jsonb_build_array(jsonb_build_object('kind', 'annual_term', 'started_at', (select starts_at from annual_term),
+    'vested_through', (select ends_at from annual_term), 'status', 'confirmed',
+    'confirmed_at', (select starts_at from annual_term), 'transaction_id', 'txn_year', 'withdrawn_reason', null)),
+  '{}');
+select results_eq(
+  $$select access_status, vested_through from public.feed_customer(encode(sha256('tpf_annual'), 'hex'))$$,
+  $$select 'lapsed'::text, ends_at from annual_term$$,
+  'an annual term cancelled a day in is vested through its end');
+select ok(
+  (select entitlement_at from public.pro_releases where version = '1.4.1')
+    <= (select vested_through from public.feed_customer(encode(sha256('tpf_annual'), 'hex'))),
+  'so a release published in the term is covered');
+select public.set_customer_entitlement('ctm_annual', '{"access_status": "lapsed"}',
+  jsonb_build_array(jsonb_build_object('kind', 'annual_term', 'started_at', (select starts_at from annual_term),
+    'vested_through', (select ends_at from annual_term), 'status', 'withdrawn', 'confirmed_at', null,
+    'transaction_id', 'txn_year', 'withdrawn_reason', 'chargeback')),
+  '{}');
+select results_eq(
+  $$select access_status, vested_through from public.feed_customer(encode(sha256('tpf_annual'), 'hex'))$$,
+  $$values ('lapsed'::text, null::timestamptz)$$,
+  'a chargeback of its payment withdraws it: nothing is vested');
 
 select * from finish();
 rollback;

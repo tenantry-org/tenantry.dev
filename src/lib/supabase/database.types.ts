@@ -6,7 +6,6 @@ export type Database = {
       active_subscriptions: {
         Row: {
           access_status: string;
-          conditional_through: string | null;
           customer_id: string;
           grace_ends_at: string | null;
           months_paid: number;
@@ -17,7 +16,6 @@ export type Database = {
         };
         Insert: {
           access_status?: string;
-          conditional_through?: string | null;
           customer_id: string;
           grace_ends_at?: string | null;
           months_paid?: number;
@@ -28,7 +26,6 @@ export type Database = {
         };
         Update: {
           access_status?: string;
-          conditional_through?: string | null;
           customer_id?: string;
           grace_ends_at?: string | null;
           months_paid?: number;
