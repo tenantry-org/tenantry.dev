@@ -33,7 +33,7 @@ export function Footer() {
           <Link href={'/'} aria-label={'Tenantry home'} className={'w-fit text-foreground'}>
             <Logo className={'h-6'} />
           </Link>
-          <p className={'max-w-xs text-sm text-muted-foreground'}>Tenant isolation for ASP.NET Core and EF Core.</p>
+          <p className={'max-w-xs text-sm text-muted-foreground'}>Multi-tenancy for ASP.NET Core and EF Core.</p>
         </div>
         {COLUMNS.map((column) => (
           <div key={column.title} className={'flex flex-col gap-3 text-sm'}>
