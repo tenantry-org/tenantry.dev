@@ -126,6 +126,26 @@ const QUESTIONS = [
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
+    question: 'Can I check a release’s packages?',
+    answer:
+      'Core’s, from 0.8.0. Each Core release attaches its packages to its GitHub release as the release workflow built them, with their SHA-256 checksums and SBOMs, and the workflow signs a build provenance attestation for them, which shows a package was built by that workflow from the tagged commit. Check the copies on the GitHub release: NuGet.org adds its own signature to the packages it serves, so its copies do not match the checksums. Pro releases have no published checksums or attestation.',
+    link: {
+      label: 'Checking a release',
+      href: 'https://github.com/tenantry-org/tenantry-core/blob/master/RELEASING.md#the-release',
+    },
+  },
+  {
+    question: 'Can I try Pro before I buy it?',
+    answer:
+      'There is no free trial. You may request a full refund within 14 days of your initial purchase, as the refund policy sets out. Pro’s documentation and samples are public, so you can read how it works before you subscribe.',
+    link: { label: 'Refund policy', href: '/legal/refunds' },
+  },
+  {
+    question: 'How does a company buy it?',
+    answer:
+      'Through the checkout on this site, which Paddle runs as our merchant of record. Paddle is the only way to buy it. There are no seats: one subscription covers everyone in your company.',
+  },
+  {
     question: 'Can I ship Pro inside software my customers install?',
     answer:
       'Yes, as part of your application, including one your customers install or host themselves. They may not use Pro on its own.',
