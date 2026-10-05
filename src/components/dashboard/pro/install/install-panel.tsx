@@ -118,9 +118,9 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
           <Step title={'After the subscription ends'}>
             <p className={'text-sm text-muted-foreground'}>
               Your feed tokens keep working, and the package feed serves you only the vested releases: those published
-              on or before your vested-through date, and every patch release of their minor versions. If nothing is
-              vested, it serves you nothing. A version the feed no longer serves you is left out of its version lists,
-              so a restore of a range such as <code>0.*</code> takes the newest vested release.
+              on or before your vested-through date, and every patch release of a minor version whose x.y.0 release is
+              vested. If nothing is vested, it serves you nothing. A version the feed no longer serves you is left out
+              of its version lists, so a restore of a range such as <code>0.*</code> takes the newest vested release.
             </p>
           </Step>
         </CardContent>

@@ -74,6 +74,7 @@ describe('EntitlementCard', () => {
 
     expect(html).toContain('serves you the vested releases');
     expect(html).toContain('31 December 2027');
+    expect(html).toContain('every patch release of a minor version whose x.y.0 release is vested, whenever it');
     expect(html).not.toContain('Qualifying period:');
     expect(html).toContain('Subscribing again never takes away the vested releases');
     expect(html).toContain('more than an hour after this one ended starts a new qualifying period');

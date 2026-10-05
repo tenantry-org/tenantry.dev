@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { testServerConfig } from '@/test/server-config';
 import { alertOperator } from './alerts';
 import { resendRequest, sendEmail } from './send';
-import { accessRevokedEmail, feedTokenCreatedEmail, welcomeProEmail } from './templates';
+import { accessRevokedEmail, feedTokenCreatedEmail, vestingConfirmedEmail, welcomeProEmail } from './templates';
 
 const SITE = 'https://sandbox.example.com';
 const email = { resendApiKey: 're_test', from: 'Tenantry <noreply@tenantry.dev>', replyTo: 'support@tenantry.dev' };
@@ -72,6 +72,14 @@ describe('email templates', () => {
     expect(msg.to).toBe('cust@example.com');
     expect(msg.html).toMatch(/ended|removed/i);
     expect(msg.html).toContain(`href="${SITE}/#pricing"`);
+  });
+
+  it('says the patches served after a lapse are those of minor versions whose x.y.0 release is vested', () => {
+    const vested = vestingConfirmedEmail('cust@example.com', new Date('2027-01-01T00:00:00Z'), false, SITE);
+    for (const msg of [vested, accessRevokedEmail('cust@example.com', SITE)]) {
+      expect(msg.html).toContain('every patch release of a minor version whose x.y.0 release is vested');
+      expect(msg.html).not.toContain('patch release of their minor versions');
+    }
   });
 
   it('promises only the package feed, not repository access', () => {

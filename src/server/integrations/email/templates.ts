@@ -77,7 +77,7 @@ export function vestingConfirmedEmail(
     subject: 'Your Tenantry Pro releases are vested',
     html: layout(
       `<h1 style="font-size:20px">Your releases are vested</h1>
-<p>${what} Vested releases stay licensed to you after your subscription ends, and the package feed keeps serving them to you, with every patch release of their minor versions, whenever it is published.</p>
+<p>${what} Vested releases stay licensed to you after your subscription ends, and the package feed keeps serving them to you, with every patch release of a minor version whose x.y.0 release is vested, whenever it is published.</p>
 <p>${next}</p>
 <p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">See your vested releases</a></p>`,
     ),
@@ -137,7 +137,7 @@ export function accessRevokedEmail(to: string, siteUrl: string): EmailMessage {
     subject: 'Your Tenantry Pro subscription has ended',
     html: layout(
       `<h1 style="font-size:20px">Your Tenantry Pro access has ended</h1>
-<p>You no longer have an active Tenantry Pro subscription, so the package feed now serves you only your vested releases: those published up to your vested-through date, and every patch release of their minor versions, as the licence agreement sets out. If nothing was vested, it serves you none, and the releases you downloaded are no longer licensed to you.</p>
+<p>You no longer have an active Tenantry Pro subscription, so the package feed now serves you only your vested releases: those published up to your vested-through date, and every patch release of a minor version whose x.y.0 release is vested, as the licence agreement sets out. If nothing was vested, it serves you none, and the releases you downloaded are no longer licensed to you.</p>
 <p>Your licence key keeps working either way; it does not extend your licence. You can resubscribe any time:</p>
 <p><a href="${siteUrl}/#pricing" style="${BUTTON}">View pricing</a></p>`,
     ),
