@@ -123,11 +123,9 @@ export function Features() {
         <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>What Core includes and what Pro adds</h2>
         <p className={'mt-4 text-lg text-muted-foreground'}>
           With a shared database or a database per tenant, everything that keeps one tenant’s data from another’s is in
-          Core, which is free: access validation, the query filters and write checks, the connection checks for a
-          database per tenant, caches and options kept per tenant, and the model checks. Pro adds a schema per tenant
-          and mixed mode, with the checks those layouts need, and the operations around tenants: the tenant in Hangfire,
-          Quartz.NET, MassTransit and Rebus work, audit logging, offboarding, and creating, migrating and checking
-          tenant databases and schemas.
+          Core, which is free. Pro adds a schema per tenant and mixed mode, with the checks those layouts need, and the
+          operations around tenants: jobs and messages run as their tenant, audit logging, provisioning, migrations and
+          offboarding.
         </p>
       </div>
       <div className={'mt-10 grid gap-6 lg:grid-cols-2'}>

@@ -182,10 +182,9 @@ export default function ProPage() {
               <span className={'font-semibold'}>Do I need Pro?</span>{' '}
               <span className={'text-muted-foreground'}>
                 Core isolates tenant data, connects each tenant to a database of its own if you want one, and runs your
-                own background work as a tenant with ITenantScopeFactory. With a shared database or a database per
-                tenant, everything that keeps one tenant’s data from another’s is in Core; Pro adds a schema per tenant
-                and mixed mode, with the checks those layouts need, and the operations around tenants. If Core covers
-                your application, it is all you need.
+                own background work as a tenant with ITenantScopeFactory. Pro adds a schema per tenant, mixed mode and
+                the operations around tenants; with a shared database or a database per tenant, you do not need it to
+                keep tenants’ data apart. If Core covers your application, it is all you need.
               </span>
             </p>
           </div>
