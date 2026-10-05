@@ -138,7 +138,8 @@ const QUESTIONS = [
   {
     question: 'How does a company buy it?',
     answer:
-      'Through the checkout on this site, which Paddle runs as our merchant of record. Paddle is the only way to buy it. There are no seats: one subscription covers everyone in your company.',
+      'Through the checkout on this site, which Paddle runs as our merchant of record. Paddle is the only way to buy it. There are no seats or tiers.',
+    link: { label: 'Terms of Service', href: '/legal/terms' },
   },
   {
     question: 'Can I ship Pro inside software my customers install?',
