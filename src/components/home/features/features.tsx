@@ -120,7 +120,7 @@ export function Features() {
       </div>
 
       <div className={'mt-24 max-w-2xl'}>
-        <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>Open-source Core. Pro for running tenants.</h2>
+        <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>What Core includes and what Pro adds</h2>
         <p className={'mt-4 text-lg text-muted-foreground'}>
           With a shared database or a database per tenant, everything that keeps one tenant’s data from another’s is in
           Core, which is free: access validation, the query filters and write checks, the connection checks for a
