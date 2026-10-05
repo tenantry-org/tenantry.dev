@@ -391,6 +391,47 @@ describe('the owner’s table', () => {
       );
     });
 
+    it("the owner's example: a year paid, moved to monthly at six months, vested again six months later", () => {
+      // Paid yearly on 1 January 2027; on 1 July 2027 the customer moves to monthly, and Paddle credits the 184
+      // unserved days of the 365-day term, rounded to the penny. Monthly billing starts the same day. Each payment is
+      // recorded when its period starts.
+      const year = annual('2027-01-01T00:00:00Z');
+      const credit = adjustment(year, 'credit', '2027-07-01T00:00:00Z', {
+        amount: Math.round((39000 * 184) / 365),
+        itemTypes: ['proration'],
+      });
+      const at = (now: string, later = monthly('2027-07-01T00:00:00Z', 6)) =>
+        compute({
+          payments: [year, ...later].filter((paid) => paid.periodStartsAt <= date(now)),
+          adjustments: credit.approvedAt! <= date(now) ? [credit] : [],
+          now,
+        });
+
+      // Before the move: vested at once through the end of the term.
+      expect(vested(at('2027-06-30T00:00:00Z'))).toBe('2028-01-01T00:00:00.000Z');
+
+      // After it: the at-once grant is withdrawn, and the first six months are kept as paid time.
+      const moved = at('2027-07-01T00:00:00Z', []);
+      expect(moved.grants).toEqual([
+        expect.objectContaining({ kind: 'annual_term', status: 'withdrawn', withdrawnReason: 'refund' }),
+      ]);
+      expect(moved.vestedThrough).toBeNull();
+      expect(moved.run).toMatchObject({ startedAt: date('2027-01-01T00:00:00Z'), monthsPaid: 6 });
+      expect(Math.abs(moved.run!.paidThrough.getTime() - date('2027-07-01T00:00:00Z').getTime())).toBeLessThan(HOUR);
+
+      // Not vested for another six months: vested once the sixth monthly payment has been served.
+      expect(at('2027-12-31T23:59:59Z').vestedThrough).toBeNull();
+      expect(at('2027-12-31T23:59:59Z').run).toMatchObject({ vestsAt: date('2028-01-01T00:00:00Z') });
+      expect(vested(at('2028-01-01T00:00:00Z'))).toBe('2028-01-01T00:00:00.000Z');
+
+      // Or vested at once again by a new annual payment instead of the monthly ones.
+      const bought = at('2027-07-02T00:00:00Z', [annual('2027-07-01T00:00:00Z')]);
+      expect(vested(bought)).toBe('2028-07-01T00:00:00.000Z');
+      expect(bought.grants).toContainEqual(
+        expect.objectContaining({ kind: 'annual_term', startedAt: date('2027-07-01T00:00:00Z'), status: 'confirmed' }),
+      );
+    });
+
     it('continues the qualifying period while the billing periods follow on, counting only the time kept', () => {
       const switched = annual('2027-01-01T00:00:00Z');
       // Half credited: the kept money pays to 2 July 12:00. Monthly billing starts on 1 August, inside the annual
