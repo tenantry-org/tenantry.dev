@@ -1,6 +1,6 @@
 ---
 title: Running Hangfire jobs as the tenant that enqueued them
-description: In a shared database, a Hangfire job enqueued in a tenant's request runs with no tenant unless something carries it. What Tenantry Core does on its own, and what Tenantry Pro's Hangfire integration adds, including suspended tenants.
+description: In a shared database, a Hangfire job enqueued in a tenant's request runs with no tenant unless something carries it. What Tenantry Core does, and what Tenantry Pro adds, including suspended tenants.
 date: 2026-10-04
 author: Oliver McNally
 versions: Tenantry Core and Pro 0.7.0, Hangfire 1.8.25, .NET 10, EF Core 10.0.12 and SQLite
@@ -17,6 +17,11 @@ enqueued it, so by default it has no tenant: its queries match nothing and its s
 three ways against SQLite, with two tenants, Acme with two orders and Globex with one: with Core only, with the tenant
 passed by hand, and with Tenantry Pro's Hangfire integration. Hangfire was 1.8.25 with in-memory job storage, and
 retries were off so that each failure showed at once.
+
+The code below leaves out the model and the packages. `AppDbContext` has `Orders` and `OrderTotals`, whose entities
+implement `ITenantEntity<string>`, and is registered with `UseSqlite(...).UseTenantry()`. `AppTenant` is a tenant
+descriptor with a settable `IsActive`. The application references Tenantry.AspNetCore, Tenantry.EfCore,
+Microsoft.EntityFrameworkCore.Sqlite, Hangfire.AspNetCore and Hangfire.InMemory.
 
 The job adds up the current tenant's orders and saves the result:
 
@@ -87,7 +92,8 @@ other ways to do it.
 ## With Tenantry Pro's Hangfire integration
 
 The `Tenantry.Pro.Hangfire` package stores the current tenant with each job when it is enqueued, and makes it current
-again before Hangfire creates the job. Here is the whole registration, sign-in included:
+again before Hangfire creates the job ([Hangfire guide](/docs/pro/hangfire)). Here is the registration, sign-in
+included; the `DbContext` is registered with `UseTenantry()` as before:
 
 ```csharp
 builder.Services.AddAuthentication().AddJwtBearer(o => o.TokenValidationParameters = new()
@@ -111,14 +117,18 @@ builder.Services.AddHangfire((sp, config) => config
     .UseInMemoryStorage()
     .UseFilter(new AutomaticRetryAttribute { Attempts = 0 })   // for this run only
     .UseTenantry(sp));
-builder.Services.AddHangfireServer();
+builder.Services.AddHangfireServer(o => o.SchedulePollingInterval = TimeSpan.FromSeconds(1));   // for this run only
 ```
 
 ```csharp
 app.UseAuthentication();
-app.UseTenantry();
 app.UseAuthorization();
+app.UseTenantry();
 ```
+
+It also needs the packages Tenantry.Pro.Hangfire and Microsoft.AspNetCore.Authentication.JwtBearer, a `Jwt:Key` of at
+least 32 bytes, base64-encoded, and the Tenantry Pro licence key in `Tenantry:License`. The test tokens were made with
+`JsonWebTokenHandler.CreateToken`, signed with the same key using HMAC-SHA256.
 
 Bearer tokens signed with a key from configuration stand in for a real identity provider. A user's token has a
 `tenant` claim for each tenant they may use, and an administrator's has the role `admin`. The two validators check
@@ -174,7 +184,8 @@ Triggered once, it produced one run as Acme and one as Globex.
 ## Suspending a tenant
 
 Suspension here is the `IsActive` flag that `ValidateTenantActivity` reads. I scheduled a job in Globex's request to
-run two seconds later, then set Globex's `IsActive` to `false`. Globex's next request got `403`. When the scheduled
+run two seconds later, then set Globex's `IsActive` to `false`. Hangfire looks for due scheduled jobs every 15 seconds
+by default; this run set `SchedulePollingInterval` to one second. Globex's next request got `403`. When the scheduled
 job came due, Tenantry's job filter refused it before it ran:
 
 ```text
