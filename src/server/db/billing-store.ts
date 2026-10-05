@@ -262,9 +262,10 @@ export async function recordLicence(params: { customerId: string; jwt: string })
 }
 
 /**
- * Everyone whose access, GitHub membership, licence or entitlement might need correcting: entitled (by recorded access
- * or by a subscription), linked to GitHub, with a failing licence, in a current run, or holding an annual grant not yet
- * confirmed. One array, so the API's row limit cannot leave anyone out.
+ * Everyone whose access, licence or entitlement might need correcting: entitled (by recorded access or by a
+ * subscription), with a failing licence, in a current run, holding an annual grant not yet confirmed, or with a payment
+ * whose billing period ends after two days ago (paid time still being served). One array, so the API's row limit cannot
+ * leave anyone out.
  */
 export async function customersToReconcile(): Promise<string[]> {
   const supabase = createServiceRoleClient();
