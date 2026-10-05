@@ -69,6 +69,10 @@ public class AppDbContext : DbContext, IMultiTenantDbContext
 }
 ```
 
+`TenantMismatchMode.Throw` and `TenantNotSetMode.Throw` are Finbuckle's defaults, which its own
+`MultiTenantDbContext` base class returned too; a context that implements `IMultiTenantDbContext` itself has to
+declare both. Every Finbuckle result below is with these two modes unless it names another.
+
 The Tenantry context loses the constructor parameter, the three properties, the model configuration and both
 overrides:
 
@@ -106,15 +110,23 @@ UPDATE "Orders" SET "Reference" = @p0, "TenantId" = @p1, "Total" = @p2 WHERE "Id
 ```
 
 `SaveChangesAsync` returned 1. Acme's order now had a total of 0 and a `TenantId` of `globex`, so it had moved to
-Globex. Without `EnforceMultiTenantOnTracking`, the instance has no tenant id and the save is refused, as the
-[`TenantNotSetMode`](https://www.finbuckle.com/MultiTenant/Docs/v10.1.4/EFCore#tenant-not-set-mode) default says:
+Globex. This happened under each of the three `TenantMismatchMode` values and both `TenantNotSetMode` values. Without
+`EnforceMultiTenantOnTracking`, the instance has no tenant id and the save is refused, as the
+[`TenantNotSetMode`](https://www.finbuckle.com/MultiTenant/Docs/v10.1.4/EFCore#tenant-not-set-mode) default, `Throw`,
+says:
 
 ```text
 Finbuckle.MultiTenant.Abstractions.MultiTenantException: 1 modified entities with Tenant Id not set.
 ```
 
+With `TenantNotSetMode.Overwrite`, the same save went through and moved the row.
+
 An instance that already carries `TenantId = "globex"`, because the request body or the calling code set it, passed
-with or without `EnforceMultiTenantOnTracking` and moved the row in the same way.
+with or without `EnforceMultiTenantOnTracking` and moved the row in the same way, under every combination of the two
+modes. One that carries another tenant's id, `TenantId = "acme"` in Globex's context, was refused under
+`TenantMismatchMode.Throw` (`MultiTenantException: 1 modified entities with Tenant Id mismatch.`), as was a loaded
+order whose `TenantId` was changed. Under `Ignore` the instance was saved as it was, changing Acme's order from
+Globex's context, and under `Overwrite` it was saved with Globex's id, moving the order.
 
 Under Tenantry, the instance without a tenant id was refused before anything was written:
 
@@ -150,7 +162,8 @@ page does not mention this case. Tenantry returned an empty list. Code or tests 
 exception to find a missing tenant get no rows after the move, and no error.
 
 Inserting with no tenant fails in both. Finbuckle threw `MultiTenantException: MultiTenant Entity cannot be attached
-if TenantInfo is null.` and Tenantry threw `TenantNotResolvedException`.
+if TenantInfo is null.` (without `EnforceMultiTenantOnTracking`, "cannot be changed" in place of "cannot be attached"),
+under every combination of the two modes, and Tenantry threw `TenantNotResolvedException`.
 
 ## A bulk update that sets TenantId
 
@@ -165,8 +178,8 @@ Finbuckle's query filter limited the statement to Acme's rows, and the statement
 UPDATE "Orders" AS "o" SET "TenantId" = @p WHERE "o"."TenantId" = @ef_filter__Id
 ```
 
-It returned 1, and Acme's order belonged to Globex. Tenantry checks the setters when EF Core compiles the query, and
-threw before any SQL was sent:
+It returned 1 under every combination of the two modes, and Acme's order belonged to Globex. Tenantry checks the
+setters when EF Core compiles the query, and threw before any SQL was sent:
 
 ```text
 Tenantry.EfCore.TenantIsolationViolationException: ExecuteUpdate cannot set TenantId on tenant-owned entity 'Order':
