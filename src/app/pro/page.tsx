@@ -38,7 +38,7 @@ return 0;`,
   },
   {
     title: 'Onboard and offboard tenants',
-    text: 'One call creates a tenant’s database or schema, migrates it and runs your own steps, such as seeding its data. Offboarding refuses a tenant that is still active, runs your export steps, then drops the database or schema, or deletes the tenant’s rows from a shared database’s tenant-owned tables in one transaction per context. A failed run is retried by running it again, so your steps must be safe to repeat.',
+    text: 'One call creates a tenant’s database or schema, migrates it and runs your own steps, such as seeding its data. Offboarding refuses a tenant that is still active and runs your export steps first. It then drops the tenant’s database or schema or, in a shared database, deletes its rows from the tenant-owned tables in one transaction per context. A failed run is retried by running it again, so your steps must be safe to repeat.',
     caption: 'TenantOnboarding.cs',
     code: `tenant.UsePro(pro => pro
     .AddProvisioningStep<SeedInitialData>()       // your step, last
@@ -159,7 +159,7 @@ export default function ProPage() {
           <div className={'mx-auto max-w-6xl px-4 pb-16 pt-16 md:px-8 md:pt-24'}>
             <p className={'text-sm font-medium text-link'}>Tenantry Pro</p>
             <h1 className={'mt-3 max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl'}>
-              Provision, migrate and remove tenants, run jobs as their tenant, and audit their changes
+              Provision and offboard tenants, migrate their databases, run their jobs and audit their changes
             </h1>
             <p className={'mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground'}>
               Pro builds on the free, open-source Tenantry Core. With a database or schema per tenant, it creates them,
