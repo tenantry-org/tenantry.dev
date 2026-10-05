@@ -34,7 +34,7 @@ async function Checkout({ params }: Props) {
   if (!isOfferPrice(priceId)) notFound();
 
   // Buyers sign in first, so the subscription is theirs from the start: the checkout uses their account's email,
-  // which is what purchases are matched by, and the success page can send them straight to connect GitHub.
+  // which is what purchases are matched by, and the success page can send them straight to create a feed token.
   const user = await getCurrentUser();
   if (!user?.email) redirect(`/signup?next=${encodeURIComponent(`/checkout/${priceId}`)}`);
 

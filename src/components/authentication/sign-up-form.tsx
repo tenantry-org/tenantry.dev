@@ -44,7 +44,7 @@ export function SignupForm({ next }: Props) {
     <form onSubmit={handleSignup} className={'flex flex-col gap-5'}>
       <h1 className={'text-2xl font-semibold tracking-tight'}>Create an account</h1>
       <p className={'text-sm text-muted-foreground'}>
-        You need an account to buy Tenantry Pro. Your subscription, licence key and GitHub access are managed from it.
+        You need an account to buy Tenantry Pro. Your subscription, licence key and feed tokens are managed from it.
       </p>
       <AuthenticationForm
         email={email}
