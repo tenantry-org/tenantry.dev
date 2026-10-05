@@ -205,4 +205,4 @@ Neither library isolates SQL that does not start from a `DbSet`. In Acme's conte
 composes query filters onto it. Tenantry's analyzer marks the `SqlQuery` call as TNY1003, at info level, which an IDE
 shows on the call; `dotnet build` prints it only when `.editorconfig` raises it to a warning.
 
-The guide below covers the rest of the move: tenant types and stores, resolvers, per-tenant options and a checklist.
+The guide below covers the rest of the move: tenant types and stores, resolvers and per-tenant options.
