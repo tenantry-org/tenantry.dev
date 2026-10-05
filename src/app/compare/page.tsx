@@ -7,7 +7,7 @@ import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 import { latestDocsVersion } from '@/lib/docs-versions';
 
 export const metadata: Metadata = {
-  title: 'Tenantry compared with Finbuckle.MultiTenant, ABP and your own query filters',
+  title: 'Tenantry compared with Finbuckle.MultiTenant and ABP',
   description:
     'Tenantry as an alternative to Finbuckle.MultiTenant, ABP and hand-written EF Core query filters: how they differ, and what Tenantry does not do.',
   alternates: { canonical: '/compare' },
