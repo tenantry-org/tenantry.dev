@@ -114,10 +114,11 @@ other refusal is 400, never 409, so that `--skip-duplicate` cannot hide it: an i
 release candidate `major.minor.patch-rc.N` (N from 1, no leading zeros, lower case, no build metadata), as Pro's
 release process tags them; different bytes under a version already published (a published version never changes:
 publish a new one); a `tenantry-release.json` date outside the rules below, or a security flag that disagrees with its
-release or is set on a release candidate; a security patch whose `X.Y.0` release is not published; a package that cannot
+release or is set on a release candidate; a patch release whose `X.Y.0` release is not published; a package that cannot
 be read.
 
-A release candidate is published and served like any release, and dated the same way. The feed lists versions in
+A release candidate is published and served like any release, and dated when it is published; it never takes its
+minor's date. The feed lists versions in
 SemVer's order, each candidate before its release, so NuGet restores a candidate only when the version or range asked
 for allows prereleases (`0.8.0-rc.1`, `0.8.0-*`), never for a range such as `0.*`. Search leaves candidates out unless
 asked for `prerelease=true` and `semVerLevel=2.0.0`.
@@ -125,10 +126,10 @@ asked for `prerelease=true` and `semVerLevel=2.0.0`.
 A package may carry `tenantry-release.json` at its root: `{ "releasedAt": "<ISO 8601>", "security": <bool> }`, which
 Pro's release workflow writes from the signed tag (its date, and `Security:` in its message). `releasedAt` may be at most
 3 days before the push and 5 minutes after it, and not before an earlier version's date (a candidate is earlier than its
-release); without it the release is dated
-when its first package is published. A security patch is dated as its `X.Y.0` for vesting, so customers whose vested
-releases include `X.Y.0` can restore the fix. The first package of a release fixes its date and flag; later packages of
-the same release are checked only for the flag.
+release); without it the release is dated when its first package is published. Every patch release, a security fix or
+not, is dated as its `X.Y.0` release for vesting, so customers whose vested releases include `X.Y.0` can restore all of
+its patches; the security flag is recorded and listed, and changes no date. The first package of a release fixes its
+date and flag; later packages of the same release are checked only for the flag.
 
 `GET /feed/v3/package` with the same header lists what the feed holds: each release's version, dates and security flag,
 with its packages' ids, sizes and SHA-512s. Feed tokens cannot read it.

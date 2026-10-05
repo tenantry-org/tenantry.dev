@@ -8,7 +8,7 @@
 # never put on a command line. README.md (Package feed: publishing) gives the endpoint's contract.
 #
 # push sends the packages oldest version first, in SemVer's order (a release candidate X.Y.Z-rc.N before X.Y.Z), so a
-# release's X.Y.0 is recorded before its security patches, and a candidate before its release. For each
+# release's X.Y.0 is recorded before its patches, and a candidate before its release. For each
 # package it prints the release date and security flag its tenantry-release.json gives, and refuses a folder where two
 # packages of one version disagree about them. Re-running it is safe: a package already published with the same content
 # is reported as such (409) and skipped. Any other refusal stops the run, naming the package and the feed's reason.

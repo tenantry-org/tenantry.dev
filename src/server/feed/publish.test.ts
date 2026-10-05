@@ -23,10 +23,18 @@ beforeEach(() => {
     revokeFeedTokenRecord: vi.fn(),
     recordedPackageHash: vi.fn(async () => null),
     listPublishedReleases: vi.fn(async () => []),
-    // As pro_releases does: the first package records the release; a security patch needs its X.Y.0 release.
+    // As pro_releases does: the first package records the release; a patch release needs its X.Y.0 release.
     ensureRelease: vi.fn(
-      async (release: { version: string; minor: number; major: number; security: boolean; publishedAt: string }) => {
-        if (release.security && !releases.has(`${release.major}.${release.minor}.0`)) {
+      async (release: {
+        version: string;
+        major: number;
+        minor: number;
+        patch: number;
+        rc: number | null;
+        security: boolean;
+        publishedAt: string;
+      }) => {
+        if (release.patch > 0 && release.rc === null && !releases.has(`${release.major}.${release.minor}.0`)) {
           throw Object.assign(new Error('no X.Y.0'), { code: '23503' });
         }
         if (!releases.has(release.version)) releases.set(release.version, release);
@@ -358,6 +366,15 @@ describe('release dates', () => {
     expect((await dated('9.9.0', '2028-05-31T13:00:00Z')).status).toBe(201);
   });
 
+  it('refuses a patch release, a security fix or not, until its X.Y.0 release is published; a candidate needs none', async () => {
+    for (const security of [false, true]) {
+      const response = await dated('9.9.1', '2028-05-31T00:00:00Z', security);
+      expect(response.status).toBe(400);
+      expect(await response.text()).toBe('Patch release 9.9.1 needs its 9.9.0 published first.');
+    }
+    expect((await dated('9.9.1-rc.1', '2028-05-31T00:00:00Z')).status).toBe(201);
+  });
+
   it('dates a security patch as its minor by the release record, whatever its own date', async () => {
     releases.set('9.9.0', { security: false, publishedAt: '2028-05-30T00:00:00Z' });
 
@@ -379,7 +396,7 @@ describe('package id casing', () => {
     expect(response.status).toBe(400);
     expect(await response.text()).toContain('Tenantry.Pro.Attack');
     expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
-    expect((await push({ 'Tenantry.Pro.Attack.nuspec': nuspec('Tenantry.Pro.Attack', '1.4.1') })).status).toBe(201);
+    expect((await push({ 'Tenantry.Pro.Attack.nuspec': nuspec('Tenantry.Pro.Attack', '1.5.0') })).status).toBe(201);
   });
 });
 

@@ -13,7 +13,10 @@ import { parseVersion } from './version';
 
 const BASE = 'https://sandbox.example.com/feed/v3';
 
-/** Tenantry.Pro 1.4.0, 1.4.1, a security patch 1.4.3 (dated as 1.4.0) and 1.6.0; Tenantry.Pro.EfCore 1.4.0. */
+/**
+ * Tenantry.Pro 1.4.0, its patches 1.4.1 and 1.4.3 (a security fix), both dated as 1.4.0 as pro_releases dates them,
+ * and 1.6.0; Tenantry.Pro.EfCore 1.4.0.
+ */
 function release(
   id: string,
   version: string,
@@ -40,7 +43,7 @@ const PACKAGES: FeedPackage[] = [
   release('Tenantry.Pro', '1.6.0', '2028-05-20T12:00:00Z'),
   release('Tenantry.Pro', '1.4.0', '2027-11-20T12:00:00Z'),
   release('Tenantry.Pro', '1.4.3', '2028-03-15T12:00:00Z', '2027-11-20T12:00:00Z'),
-  release('Tenantry.Pro', '1.4.1', '2028-01-10T12:00:00Z'),
+  release('Tenantry.Pro', '1.4.1', '2028-01-10T12:00:00Z', '2027-11-20T12:00:00Z'),
   release('Tenantry.Pro.EfCore', '1.4.0', '2027-11-20T12:00:00Z', undefined, {
     dependencyGroups: [
       {
@@ -62,7 +65,7 @@ const CUSTOMERS: Record<string, FeedCustomer> = {
     access: { status: 'grace', graceEndsAt: new Date('2028-06-10T00:00:00Z') },
     vestedThrough: null,
   },
-  // Vested through the end of 2027: 1.4.0 and its security patch 1.4.3, not 1.4.1 (January 2028) or 1.6.0.
+  // Vested through the end of 2027: 1.4.0 and its patches, though both were published in 2028, not 1.6.0.
   vested: { customerId: 'ctm_vested', access: lapsed, vestedThrough: new Date('2028-01-01T00:00:00Z') },
   unvested: { customerId: 'ctm_unvested', access: lapsed, vestedThrough: null },
   // Recorded in grace, but its grace ended before now and reconcile has not run since: lapsed, so vested only.
@@ -194,13 +197,13 @@ describe('what each customer sees', () => {
     expect(await versions('grace')).toEqual(['1.4.0', '1.4.1', '1.4.3', '1.6.0']);
   });
 
-  it('shows a lapsed vested customer the versions their date covers, with security patches to them', async () => {
-    expect(await versions('vested')).toEqual(['1.4.0', '1.4.3']);
+  it('shows a lapsed vested customer the versions their date covers, with every patch of them', async () => {
+    expect(await versions('vested')).toEqual(['1.4.0', '1.4.1', '1.4.3']);
     expect(await versions('vested', 'tenantry.pro.efcore')).toEqual(['1.4.0']);
   });
 
   it('treats a grace period that has ended as lapsed, before reconcile records it', async () => {
-    expect(await versions('graceOver')).toEqual(['1.4.0', '1.4.3']);
+    expect(await versions('graceOver')).toEqual(['1.4.0', '1.4.1', '1.4.3']);
     expect((await get('flat/tenantry.pro/index.json', 'graceOverUnvested')).status).toBe(403);
   });
 
@@ -216,12 +219,12 @@ describe('what each customer sees', () => {
     const registration = await (await get('registration/tenantry.pro/index.json', 'vested')).json();
     expect(
       registration.items[0].items.map((leaf: { catalogEntry: { version: string } }) => leaf.catalogEntry.version),
-    ).toEqual(['1.4.0', '1.4.3']);
+    ).toEqual(['1.4.0', '1.4.1', '1.4.3']);
 
     const search = await (await get('query?q=tenantry.pro', 'vested')).json();
     expect(
       search.data.map((result: { versions: { version: string }[] }) => result.versions.map((v) => v.version)),
-    ).toEqual([['1.4.0', '1.4.3'], ['1.4.0']]);
+    ).toEqual([['1.4.0', '1.4.1', '1.4.3'], ['1.4.0']]);
   });
 
   it('serves an annual subscriber who cancelled a day into the term the releases of the term, until a refund or chargeback', async () => {
@@ -407,6 +410,36 @@ describe('search', () => {
     expect((await (await get('query?skip=1&take=1', 'active')).json()).data.map((r: { id: string }) => r.id)).toEqual([
       'Tenantry.Pro.EfCore',
     ]);
+  });
+});
+
+describe('patch releases', () => {
+  // 0.8.0 published in January, 0.9.0 in March and 0.8.3 in June, dated as 0.8.0 (pro_releases' entitlement date).
+  const RELEASES: FeedPackage[] = [
+    release('Tenantry.Pro', '0.8.0', '2027-01-10T12:00:00Z'),
+    release('Tenantry.Pro', '0.9.0', '2027-03-10T12:00:00Z'),
+    release('Tenantry.Pro', '0.8.3', '2027-06-10T12:00:00Z', '2027-01-10T12:00:00Z'),
+  ];
+
+  beforeEach(() => {
+    store.listFeedPackages.mockImplementation(async (lowerId?: string) =>
+      RELEASES.filter((pkg) => lowerId === undefined || pkg.lowerId === lowerId),
+    );
+  });
+
+  it('serves every patch of a vested minor, published after the vested-through date or not, and nothing newer', async () => {
+    // Vested through February: 0.8.0 is vested, 0.9.0 is not, and 0.8.3 is published after that date.
+    CUSTOMERS.february = { customerId: 'ctm_feb', access: lapsed, vestedThrough: new Date('2027-02-01T00:00:00Z') };
+    expect(await versions('february')).toEqual(['0.8.0', '0.8.3']);
+    expect((await get('flat/tenantry.pro/0.8.3/tenantry.pro.0.8.3.nupkg', 'february')).status).toBe(302);
+    expect((await get('flat/tenantry.pro/0.9.0/tenantry.pro.0.9.0.nupkg', 'february')).status).toBe(404);
+
+    // Vested through December 2026: 0.8.0 is not vested, so neither is its patch.
+    CUSTOMERS.december = { customerId: 'ctm_dec', access: lapsed, vestedThrough: new Date('2026-12-01T00:00:00Z') };
+    expect(await versions('december')).toBe(404);
+    expect((await get('flat/tenantry.pro/0.8.3/tenantry.pro.0.8.3.nupkg', 'december')).status).toBe(404);
+    delete CUSTOMERS.february;
+    delete CUSTOMERS.december;
   });
 });
 

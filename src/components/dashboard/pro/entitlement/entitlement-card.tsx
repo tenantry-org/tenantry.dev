@@ -25,7 +25,7 @@ export function EntitlementCard({ entitlement }: Readonly<{ entitlement: Entitle
             Your vested-through date is{' '}
             <span className={'font-medium text-foreground'}>{formatDate(entitlement.vestedThrough)}</span>. The releases
             published on or before it are vested: they stay licensed to you after the subscription ends, and the package
-            feed keeps serving them to you, with the security patches of their minor versions.
+            feed keeps serving them to you, with every patch release of their minor versions, whenever it is published.
           </p>
         )}
       </CardContent>
@@ -60,8 +60,9 @@ function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) 
         <p>
           Your subscription has ended. The package feed serves you the vested releases: every release published on or
           before your vested-through date,{' '}
-          <span className={'font-medium text-foreground'}>{formatDate(vestedThrough)}</span>, and the security patches
-          of their minor versions. They stay licensed to you. Your feed tokens restore them as before.
+          <span className={'font-medium text-foreground'}>{formatDate(vestedThrough)}</span>, and every patch release of
+          their minor versions, whenever it is published. They stay licensed to you. Your feed tokens restore them as
+          before.
         </p>
         <p>
           Subscribing again never takes away the vested releases. A subscription that starts more than an hour after

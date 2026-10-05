@@ -10,11 +10,11 @@ import { FEED_PATH } from '@/lib/install-snippets';
  * Tenantry Pro's NuGet v3 feed (https://learn.microsoft.com/en-us/nuget/api/overview), served under /feed/v3/ by the
  * route in src/app/feed/v3. It answers the read resources NuGet clients use, for each customer showing only the
  * releases they may use (entitlement-policy.ts: mayUseRelease): every release while they have access; after a lapse,
- * those their vested-through date covers (a security patch dated as its minor's X.Y.0); nothing for a lapsed customer
- * who never vested. Hidden versions are absent from the version lists, registrations and search, not only refused on
- * download, so a restore never resolves a version it cannot download. A release candidate (version.ts) is served as
- * any release published when it was; versions are listed in SemVer's order, a candidate before its release, and NuGet
- * restores a candidate only when the version or range asked for allows prereleases.
+ * those their vested-through date covers (every patch release dated as its minor's X.Y.0); nothing for a lapsed
+ * customer who never vested. Hidden versions are absent from the version lists, registrations and search, not only
+ * refused on download, so a restore never resolves a version it cannot download. A release candidate (version.ts) is
+ * served as any release published when it was; versions are listed in SemVer's order, a candidate before its release,
+ * and NuGet restores a candidate only when the version or range asked for allows prereleases.
  *
  *   index.json                                   service index (no credentials needed)
  *   flat/{id}/index.json                         PackageBaseAddress/3.0.0: the versions

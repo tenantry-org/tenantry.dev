@@ -5,7 +5,8 @@
 # restores as each of them and checks what NuGet resolves, downloads and refuses.
 #
 #   Tenantry.Pro.FeedProbe<run> 1.<n>.0      released 20 seconds before the run started
-#   Tenantry.Pro.FeedProbe<run> 1.<n>.1      a security patch, released 10 seconds before, dated as 1.<n>.0
+#   Tenantry.Pro.FeedProbe<run> 1.<n>.1      a patch release (not a security fix), released 5 seconds before, after the
+#                                            vested customer's date, and dated as 1.<n>.0
 #   Tenantry.Pro.FeedProbe<run> 1.<n+1>.0    released when the run started
 #   Tenantry.Pro.FeedProbe<run> 1.<n+2>.0-rc.1  a release candidate, released when the run started
 #
@@ -199,7 +200,7 @@ pack() {
   fi
 }
 pack "$v_first" "$(iso_before 20)" false
-pack "$v_patch" "$(iso_before 10)" true
+pack "$v_patch" "$(iso_before 5)" false
 pack "$v_next" "$(iso_before 0)" false
 pack "$v_rc" "$(iso_before 0)" false
 
@@ -245,8 +246,10 @@ else
   fail 'scripts/feed-publish.sh pushes a published release again as unchanged' "$output"
 fi
 output="$(FEED_PUBLISH_KEY="$publish_key" bash "$repo/scripts/feed-publish.sh" list "$site" 2>&1 || true)"
-check 'scripts/feed-publish.sh lists the releases, with the security patch dated as its minor' \
-  '[[ "$output" == *"$v_patch  published"*"security patch"* && "$output" == *"$probe_id"* ]]' "$output"
+first_published="$(awk -v v="$v_first" '$1 == v { print $3 }' <<<"$output")"
+patch_dated="$(awk -v v="$v_patch" '$1 == v { print $6 }' <<<"$output")"
+check 'scripts/feed-publish.sh lists the releases, with the patch release dated as its minor' \
+  '[[ -n "$first_published" && "$patch_dated" == "$first_published" && "$output" == *"$probe_id"* ]]' "$output"
 output="$(FEED_PUBLISH_KEY=wrong bash "$repo/scripts/feed-publish.sh" list "$site" 2>&1 || true)"
 check 'and refuses a wrong publish key' '[[ "$output" == *403* ]]' "$output"
 
@@ -416,13 +419,14 @@ check 'the signed URL serves the published bytes' \
 status="$(curl -s -o /dev/null -w '%{http_code}' -H "$auth" "$site/feed/v3/flat/tenantry.pro.missing/index.json")"
 check 'an unknown package answers 404' '[[ "$status" == 404 ]]' "$status"
 
-# Vested: the security patch of the vested minor, and nothing newer.
+# Vested: the patch release of the vested minor, though it was published after the vested-through date, and nothing
+# newer.
 dir="$(consumer vested '1.*')"
+name="a vested customer restores 1.* as the patch release $v_patch, published after its date"
 if output="$(restore "$dir")"; then
-  check "a vested customer restores 1.* as the security patch $v_patch" '[[ "$(probe "$dir" resolved)" == $v_patch ]]' \
-    "$output"
+  check "$name" '[[ "$(probe "$dir" resolved)" == $v_patch ]]' "$output"
 else
-  fail "a vested customer restores 1.* as the security patch $v_patch" "$output"
+  fail "$name" "$output"
 fi
 dir="$(consumer vested "[$v_next]")"
 if output="$(restore "$dir")"; then

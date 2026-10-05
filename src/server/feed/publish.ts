@@ -23,8 +23,9 @@ import { compareVersions, parseVersion } from '@/server/feed/version';
  *               under customers' vested dates and be served to them. It is ignored, and not checked, when the release
  *               is recorded already by another of its packages. Without it, a release is dated now, or as the newest
  *               earlier release if that is later.
- *   security    true for a security patch, which the feed dates as its minor's X.Y.0 release (recorded first) by the
- *               release record's own rule, whatever releasedAt says. A release candidate is never one.
+ *   security    true for a security patch, recorded and listed to the operator. It changes no date: every patch
+ *               release, a security fix or not, is dated for vesting as its minor's X.Y.0 release, which must be
+ *               recorded first, by the release record's own rule. A release candidate is never a security patch.
  *
  * Packages are limited to 4 MB: a Vercel function takes a request body of at most 4.5 MB. Pro's packages are well
  * under 1 MB.
@@ -135,11 +136,11 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
       );
     }
   } catch (error) {
-    // The release's trigger refuses a security patch whose X.Y.0 is not recorded.
+    // The release's trigger refuses a patch release whose X.Y.0 release is not recorded.
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23503') {
       return reply(
         400,
-        `Security patch ${nuspec.version} needs its ${version.major}.${version.minor}.0 published first.`,
+        `Patch release ${nuspec.version} needs its ${version.major}.${version.minor}.0 published first.`,
       );
     }
     throw error;
