@@ -3,7 +3,7 @@ title: Running Hangfire jobs as the tenant that enqueued them, in a shared datab
 description: A Hangfire job enqueued in a tenant's request runs with no tenant unless something carries it. What Tenantry Core does on its own, and what Tenantry Pro's Hangfire integration adds, including suspended tenants.
 date: 2026-10-04
 author: Oliver McNally
-versions: Tenantry Core and Pro 0.6.0, Hangfire 1.8.25, .NET 10, EF Core 10.0.12 and SQLite
+versions: Tenantry Core and Pro 0.7.0, Hangfire 1.8.25, .NET 10, EF Core 10.0.12 and SQLite
 tags: [dotnet, hangfire, efcore, multitenancy]
 next:
   label: Read the Hangfire guide
@@ -46,9 +46,10 @@ Enqueued in Acme's request, the job ran with no tenant, read no orders and faile
 ```text
     OrderTotalsJob as (no tenant): 0 orders, 0
 fail: Hangfire.AutomaticRetryAttribute[0] Failed to process the job '1': an exception occurred.
-Tenantry.TenantNotResolvedException: SaveChanges is writing tenant-scoped entities (OrderTotal) without a resolved
+Tenantry.TenantNotResolvedException: SaveChanges is writing tenant-owned entities (OrderTotal) without a resolved
 tenant. Run the write while a tenant is current (app.UseTenantry() for requests, ITenantScopeFactory.RunInScopeAsync
-or CreateScope elsewhere). [...]
+or CreateScope elsewhere). Maintenance code that deliberately writes across tenants can use a context of its own,
+registered with UseTenantry(o => o.OnMissingTenant = MissingTenantBehavior.Allow).
 ```
 
 Core can run the job as its tenant if the job is given the tenant's id and opens the tenant's scope itself:
@@ -84,14 +85,24 @@ that leaves either out runs as no tenant.
 ## With Tenantry Pro's Hangfire integration
 
 The `Tenantry.Pro.Hangfire` package stores the current tenant with each job when it is enqueued, and makes it current
-again before Hangfire creates the job:
+again before Hangfire creates the job. Here is the whole registration, sign-in included:
 
 ```csharp
+builder.Services.AddAuthentication().AddJwtBearer(o => o.TokenValidationParameters = new()
+{
+    ValidateIssuer = false,
+    ValidateAudience = false,
+    IssuerSigningKey = new SymmetricSecurityKey(Convert.FromBase64String(builder.Configuration["Jwt:Key"]!)),
+});
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("Admin", policy => policy.RequireRole("admin"));
+
 builder.Services.AddTenantry<string>(tenant => tenant
     .ResolveFromHeader("X-Tenant")
     .UseInMemoryStore([acme, globex])
     .RequireTenantByDefault()
-    .ValidateTenantActivity(t => t.As<AppTenant>().IsActive)
+    .ValidateTenantAccessByClaim("tenant")                     // the caller may use the tenant
+    .ValidateTenantActivity(t => t.As<AppTenant>().IsActive)   // the tenant is active
     .UsePro(pro => pro.AddHangfirePropagation()));
 
 builder.Services.AddHangfire((sp, config) => config
@@ -100,6 +111,18 @@ builder.Services.AddHangfire((sp, config) => config
     .UseTenantry(sp));
 builder.Services.AddHangfireServer();
 ```
+
+```csharp
+app.UseAuthentication();
+app.UseTenantry();
+app.UseAuthorization();
+```
+
+Bearer tokens signed with a key from configuration stand in for a real identity provider. A user's token has a
+`tenant` claim for each tenant they may use, and an administrator's has the role `admin`. The two validators check
+different things. `ValidateTenantAccessByClaim` checks the caller: Acme's user naming Globex in the header got `403`.
+`ValidateTenantActivity` checks the tenant: a suspended one is refused whoever asks. The Core-only run above had the
+same sign-in and validators.
 
 `OrderTotalsJob` and the `/totals` endpoint are unchanged. Enqueued in each tenant's request, the job ran as that
 tenant, with its `DbContext` and `ITenantContext<string>` resolved in the tenant's scope:
@@ -128,10 +151,14 @@ Administrator code that runs without a tenant names one with `WithTenant`:
 ```csharp
 app.MapPost("/admin/totals/{tenantId}", (string tenantId, IBackgroundJobClient jobs) =>
     jobs.WithTenant(tenantId).Enqueue<OrderTotalsJob>(job => job.RunAsync()))
-    .AllowMissingTenant();
+    .AllowMissingTenant()
+    .RequireAuthorization("Admin");
 ```
 
-A request to `/admin/totals/globex` with no tenant header enqueued a job that ran as Globex and saw its one order.
+This endpoint takes the tenant from its route, which Tenantry's access validation never sees, so without
+`RequireAuthorization` any caller could enqueue a job as any tenant. With it, an administrator's request to
+`/admin/totals/globex`, with no tenant header, got `200` and enqueued a job that ran as Globex and saw its one order.
+The same request with no token got `401`, and with Acme's user's token `403`, and neither enqueued a job.
 
 A nightly job for every tenant is added with `AddOrUpdateForEachTenant`. Each time it is due it enqueues the job once
 per tenant in the store, and each of those runs as its tenant:
@@ -149,8 +176,8 @@ run two seconds later, then set Globex's `IsActive` to `false`. Globex's next re
 job came due, Tenantry's job filter refused it before it ran:
 
 ```text
-fail: Hangfire.AutomaticRetryAttribute[0] Failed to process the job '9': an exception occurred.
-Tenantry.TenantInactiveException: Tenantry.Pro: Hangfire job 9 carries the tenant 'globex', which is not active
+fail: Hangfire.AutomaticRetryAttribute[0] Failed to process the job '8': an exception occurred.
+Tenantry.TenantInactiveException: Tenantry.Pro: Hangfire job 8 carries the tenant 'globex', which is not active
 (ValidateTenantActivity), and TenantPropagationOptions.OnUnresolvedTenant is Reject.
 ```
 
@@ -172,7 +199,7 @@ request, and carries no tenant. Triggered, it logged a warning, ran with no tena
 Core-only run:
 
 ```text
-warn: Tenantry.Pro.Internal.TenantPropagator[3401] Tenantry.Pro: Hangfire job 8 carries no tenant, so it runs without
+warn: Tenantry.Pro.Internal.TenantPropagator[3401] Tenantry.Pro: Hangfire job 7 carries no tenant, so it runs without
 one (TenantPropagationOptions.OnMissingTenant is Warn)
     OrderTotalsJob as (no tenant): 0 orders, 0
 ```
