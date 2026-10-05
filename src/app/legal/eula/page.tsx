@@ -92,10 +92,10 @@ export default function EulaPage() {
       </p>
       <p>
         Each release of the Software has a release date: the date Tenantry records for it when it is published on the
-        package feed. A patch release takes the release date of the release that started the minor version it patches
-        (for example, 1.4.3 takes the date of 1.4.0), whenever it is published and whether or not it is a security fix.
-        A release candidate (for example, 1.4.0-rc.1 or 1.4.3-rc.1) keeps its own release date. A release is vested if
-        its release date is on or before your vested-through date.
+        package feed. A patch release takes the release date of the x.y.0 release of the minor version it patches (for
+        example, 1.4.3 takes the date of 1.4.0), whenever it is published and whether or not it is a security fix. A
+        release candidate (for example, 1.4.0-rc.1 or 1.4.3-rc.1) keeps its own release date. A release is vested if its
+        release date is on or before your vested-through date.
       </p>
 
       <h2>3. The package feed and feed tokens</h2>
