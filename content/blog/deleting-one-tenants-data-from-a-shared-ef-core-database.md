@@ -20,6 +20,11 @@ The database is SQLite, with two tenants, Acme and Globex. Each has one customer
 `Order` references `Customer`, and `OrderLine` references `Order`, both with `DeleteBehavior.Restrict`, so the database
 refuses to delete a row that another still references. All three implement `ITenantEntity<string>`.
 
+The code below leaves that model out: `Order` has a `CustomerId` and `Lines`, `OrderLine` an `OrderId`, and
+`OnModelCreating` sets both foreign keys with `OnDelete(DeleteBehavior.Restrict)`. `AppTenant` is a tenant descriptor
+with a settable `IsActive`, and `acme` and `globex` are its two instances. `scopes` is an `ITenantScopeFactory<string>`,
+`deprovisioner` an `ITenantDeprovisioner<string>`, `ct` a `CancellationToken` and `connectionString` the SQLite file's.
+
 ## By hand
 
 Tenantry Core does not delete a tenant's rows, but in the tenant's scope each `ExecuteDelete` is filtered to that
@@ -45,8 +50,8 @@ DELETE FROM "Customers" AS "c" WHERE @ef_filter__p2 AND "c"."TenantId" = @ef_fil
 
 It deleted Globex's rows and left Acme's. Globex was already suspended, so the code uses `CreateScope`, which checks
 nothing; `RunInScopeAsync` refuses a suspended tenant. The tables and their order are written out by hand, so a
-tenant-owned table added later is left behind until someone adds it here, and an export before the deletion, or
-clearing what the application caches for the tenant after it, is more code of your own.
+tenant-owned table added later is left behind until someone adds it here. An export before the deletion, and clearing
+the tenant's caches after it, are more code of your own.
 
 ## With Tenantry Pro
 
@@ -63,7 +68,8 @@ services.AddTenantry<string>(tenant => tenant
 
 `AddDeprovisioningStep` adds a step of your own, here an export. `AddSharedDataDeletion` adds the step that deletes
 the tenant's rows from every tenant-owned table of `AppDbContext`. Offboarding invalidates the tenant, runs your steps,
-then the deletion, then invalidates the tenant again.
+then the deletion, then invalidates the tenant again
+([Offboarding a tenant](/docs/pro/tenant-lifecycle#offboarding-a-tenant) has the details).
 
 The export step is resolved in the tenant's scope, so its context reads that tenant's rows only:
 
@@ -170,8 +176,9 @@ deprovisioning step of your own.
 Other rows in tables without a `TenantId` stay, and so does anything outside the database, such as uploaded files or a
 search index. Each needs a deprovisioning step of your own, added before the deletion.
 
-Offboarding invalidates the tenant through `ITenantInvalidator<TKey>` before its first step, before it even checks
-that the tenant is suspended, and the last step, `ClearCaches`, invalidates it again. Invalidating clears the caches
-of the instance that runs it. With Tenantry Core's `BroadcastInvalidations`, it is also published to the application's
-other instances; without it, they keep their cached copies until those expire. In these runs, a broadcast handler
-saw Globex invalidated once in each refused or failed offboarding, and twice in each that succeeded.
+Offboarding invalidates the tenant through `ITenantInvalidator<TKey>` before its first step, before it checks that the
+tenant is suspended, and the last step, `ClearCaches`, invalidates it again. Invalidating clears the caches of the
+instance that runs it. With Tenantry Core's `BroadcastInvalidations`, it is also published to the application's other
+instances; without it, they keep their cached copies until those expire. I added a handler with
+`BroadcastInvalidations` that printed each invalidation, which the registration above leaves out: Globex was
+invalidated once in each refused or failed offboarding, and twice in each that succeeded.
