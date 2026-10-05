@@ -19,7 +19,7 @@ const { paddle } = testServerConfig();
 
 const BUYER = { email: 'buyer@example.com', email_confirmed_at: '2026-09-01T00:00:00Z' };
 
-/** active_subscriptions as stored: access, the grace end in grace, and the current qualifying period. */
+/** active_subscriptions as stored: access, the grace end in grace, and the paid time. */
 const stored = (status: string, extra: { grace_ends_at?: string; months_paid?: number; vests_at?: string } = {}) => ({
   single: {
     access_status: status,
@@ -79,25 +79,25 @@ describe.each([
 });
 
 describe('readEntitlement', () => {
-  it('gives an active customer every release, with the progress of their qualifying period', async () => {
+  it('gives an active customer every release, with the progress of their paid time', async () => {
     await expect(readEntitlement('ctm_1')).resolves.toEqual({
       access: 'active',
       graceEndsAt: null,
       canRestore: true,
       vestedThrough: null,
-      qualifying: { monthsPaid: 3, vestsAt: '2027-07-01T00:00:00.000Z', reached: false },
+      paidTime: { monthsPaid: 3, vestsAt: '2027-07-01T00:00:00.000Z', reached: false },
       annualTerm: false,
     });
   });
 
-  it('says whether the qualifying period has reached 12 months by now, not only whether 12 months are paid', async () => {
+  it('says whether the paid time has reached 12 months by now, not only whether 12 months are paid', async () => {
     state.tables.active_subscriptions = stored('active', { months_paid: 12, vests_at: '2027-07-01T00:00:00Z' });
 
     await expect(readEntitlement('ctm_1', new Date('2027-06-15T00:00:00Z'))).resolves.toMatchObject({
-      qualifying: { monthsPaid: 12, reached: false },
+      paidTime: { monthsPaid: 12, reached: false },
     });
     await expect(readEntitlement('ctm_1', new Date('2027-07-01T00:00:00Z'))).resolves.toMatchObject({
-      qualifying: { reached: true },
+      paidTime: { reached: true },
     });
   });
 
@@ -125,7 +125,7 @@ describe('readEntitlement', () => {
       graceEndsAt: null,
       canRestore: true,
       vestedThrough: '2027-12-31T00:00:00.000Z',
-      qualifying: null,
+      paidTime: null,
       annualTerm: false,
     });
     expect(state.calls).toContainEqual({ table: 'vested_entitlements', method: 'eq', args: ['status', 'confirmed'] });
@@ -154,7 +154,7 @@ describe('readEntitlement', () => {
     await expect(readEntitlement('ctm_1', new Date('2027-10-01T00:00:00Z'))).resolves.toMatchObject({
       annualTerm: false,
     });
-    state.tables.vested_entitlements = vested('2027-10-01T00:00:00Z', 'qualifying_run');
+    state.tables.vested_entitlements = vested('2027-10-01T00:00:00Z', 'paid_time');
     await expect(readEntitlement('ctm_1')).resolves.toMatchObject({ annualTerm: false });
   });
 });

@@ -337,7 +337,7 @@ describe('the payment ledger', () => {
       vested_entitlements: {
         list: [
           {
-            kind: 'qualifying_run',
+            kind: 'paid_time',
             started_at: '2026-01-01T00:00:00Z',
             vested_through: '2027-02-01T00:00:00Z',
             status: 'confirmed',
@@ -351,7 +351,7 @@ describe('the payment ledger', () => {
 
     await expect(listGrants('ctm_1')).resolves.toEqual([
       {
-        kind: 'qualifying_run',
+        kind: 'paid_time',
         startedAt: new Date('2026-01-01T00:00:00Z'),
         vestedThrough: new Date('2027-02-01T00:00:00Z'),
         status: 'confirmed',

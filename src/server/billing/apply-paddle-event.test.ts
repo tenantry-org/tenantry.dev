@@ -643,7 +643,7 @@ describe('applyPaddleEvent', () => {
       expect(memory.state.entitlementStates.size).toBe(0);
     });
 
-    it('keeps the qualifying period through a goodwill refund of an earlier month: 12 months kept vest', async () => {
+    it('keeps the paid time through a goodwill refund of an earlier month: 12 months kept vest', async () => {
       vi.setSystemTime(new Date('2027-01-01T00:10:00Z'));
       await applyPaddleEvent(delivered(created), deps);
       for (let month = 0; month < 10; month++) await applyPaddleEvent(delivered(renewal(month)), deps);
@@ -667,8 +667,8 @@ describe('applyPaddleEvent', () => {
       vi.setSystemTime(new Date('2028-02-01T04:00:00Z'));
       await syncCustomer('ctm_01', deps);
 
-      // 13 months paid, March refunded: 12 months kept, from 1 January 2027 to 1 January 2028.
-      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toEqual(new Date('2028-01-01T00:00:00Z'));
+      // 13 months paid, March refunded: 12 months kept, served on 1 February 2028, which it is vested through.
+      expect(memory.state.entitlementStates.get('ctm_01')?.vestedThrough).toEqual(new Date('2028-02-01T00:00:00Z'));
     });
 
     it('records a Pro payment at a price that is not offered as not counting, and alerts the operator', async () => {

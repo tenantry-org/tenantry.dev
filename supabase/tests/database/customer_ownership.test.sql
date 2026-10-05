@@ -26,7 +26,7 @@ insert into public.subscriptions (subscription_id, status, customer_id) values
 insert into public.active_subscriptions (customer_id, access_status) values
   ('ctm_buyer', 'active');
 insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at) values
-  ('ctm_buyer', 'qualifying_run', '2027-01-01', '2028-01-01', 'confirmed', now());
+  ('ctm_buyer', 'paid_time', '2027-01-01', '2028-01-01', 'confirmed', now());
 insert into public.licences (customer_id, jwt) values
   ('ctm_buyer', 'buyer-licence'),
   ('ctm_mixed', 'mixed-licence');

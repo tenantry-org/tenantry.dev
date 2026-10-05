@@ -13,21 +13,10 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
 /**
- * Assumption 1: a renewal that fails and is recovered during Paddle's payment recovery is billed for the period that
- * started on the renewal date, not one that starts when the payment finally succeeds. So a recovered renewal's
- * `billing_period.starts_at` is the previous period's `ends_at`, and the series of consecutive billing periods is
- * unbroken.
- *
- * A billing period continues a qualifying period if it starts no later than this long after the billing periods so
- * far end: room for timestamp jitter between Paddle's period boundaries, and no more. A gap of a day breaks it. If the sandbox shows
- * that a recovered renewal's period starts at the recovery instead, this is where to allow the retry window for a
- * renewal of the same subscription.
+ * Assumption 1 (no longer relied on): a renewal recovered during Paddle's payment recovery is billed for the period that
+ * started on the renewal date. Paid time adds up across gaps (entitlement-policy.ts), so where a recovered period
+ * starts changes nothing but which days it counts for.
  */
-export const RUN_CONTINUITY_TOLERANCE_MS = HOUR_MS;
-
-export function continuesRun(billedThrough: Date, periodStartsAt: Date): boolean {
-  return periodStartsAt.getTime() <= billedThrough.getTime() + RUN_CONTINUITY_TOLERANCE_MS;
-}
 
 /**
  * Assumption 2: the transaction Paddle creates when a subscription changes from monthly to annual with
@@ -86,9 +75,8 @@ export const PAYMENT_RECOVERY_DAYS = 90;
  * the transaction's currency (Paddle sets an adjustment's currency to its transaction's) and its lowest unit (stated for
  * transactions; assumed for adjustments, whose reference does not say). The entitlement rules compare the two, so a
  * tax-only correction returns nothing. Not confirmed: that the subtotal of a chargeback_reverse or credit_reverse is the
- * amount it restores, and that a proration credit is in proportion to the time left in the term to within the
- * continuity allowance above (a credit computed by whole days could break a qualifying period at an annual-to-monthly
- * change).
+ * amount it restores, and that a proration credit is in proportion to the time left in the term (a credit computed by
+ * whole days leaves a few hours of the term counted or uncounted at an annual-to-monthly change).
  */
 export function adjustmentAmount(totals: { subtotal: string } | null | undefined): number | null {
   if (!totals) return null;

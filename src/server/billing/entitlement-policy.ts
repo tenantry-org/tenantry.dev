@@ -10,12 +10,7 @@ import type {
   PaymentStatus,
   SubscriptionState,
 } from '@/server/db/billing-store';
-import {
-  continuesRun,
-  isAnnualTerm,
-  MONTH_END_TOLERANCE_MS,
-  REVERSAL_RECORD_WINDOW_MS,
-} from '@/server/billing/paddle-assumptions';
+import { isAnnualTerm, MONTH_END_TOLERANCE_MS, REVERSAL_RECORD_WINDOW_MS } from '@/server/billing/paddle-assumptions';
 
 /**
  * What a customer may access, as pure functions: the one place that answers it, for the webhook and reconcile path
@@ -28,7 +23,7 @@ import {
  * - What they own for good, and how far they are towards owning more (`computeEntitlement`). After a lapse they may use
  *   the releases their vested-through date covers (`mayUseRelease`).
  *
- * Vesting follows the money kept, and paid time adds up (the owner's decisions of 4 October 2026,
+ * Vesting follows the money kept, and paid time adds up (the owner's decisions of 4 and 5 October 2026,
  * plans-and-investigations/Tenantry-Licensing-And-Feed-Plan.md section 2):
  *
  * - A payment at one of the offer prices counts for the part of its billing period that the money still kept from it
@@ -37,23 +32,21 @@ import {
  *   R reaches C, or if nothing was charged (a trial, a period discounted in full). A discount is not money returned:
  *   the share is of what was charged. A payment kept in full counts for its whole period, even if its subscription was
  *   cancelled or paused before the period ended: that time was paid for.
- * - A qualifying period is a series of billing periods at the offer prices, each starting no later than the continuity
- *   allowance after the billing periods so far end (paddle-assumptions.ts). Whatever was returned, a billing period
- *   continues the series; one that counts for nothing adds no time. A billing period whose subscription ended before
- *   the period did carries the series only to that end (its counted time still counts in full). It starts at the
- *   start of its first billing period that charged something. Neither depends on money returned.
- * - Its counted time served is how much of its counted parts lies between its start and now, overlapping parts once.
- *   It vests when that reaches 12 months (the length of the 12 calendar months from its start), and is then vested
- *   through its start plus its counted time served: never more time than was paid for and served, and never later
- *   than now. If every billing period in it so far counted in full, it may vest at the end of one up to
- *   MONTH_END_TOLERANCE_MS short of the 12 months.
+ * - The customer's paid time is the counted parts of all their payments, merged where they meet or overlap, so no
+ *   stretch of time counts twice. It adds up across gaps: separate subscriptions, with or without time between them,
+ *   all count. It starts at the start of its first counted part.
+ * - It vests when the paid time served (the paid time before now) reaches 12 months: the length of the 12 calendar
+ *   months from its start. If every billing period so far counted in full, it may vest at the end of one up to
+ *   MONTH_END_TOLERANCE_MS short of that. From then on it is vested through the end of the paid time served: the
+ *   latest moment before now that paid time covers. In a gap that stays where the last paid period ended; a later paid
+ *   period moves it on as it is served. It is never later than now.
  * - An annual payment kept in full vests its term when it is paid: its grant is confirmed from the start of its billing
  *   period, through the term's end, so the releases published up to then are vested as they are published, even if the
  *   subscription is cancelled or paused before the term ends. Any refund, credit or chargeback of it withdraws the
- *   grant, at any time, and a reversal that leaves nothing returned restores it. Its kept share counts as above all
+ *   grant, at any time, and a reversal that leaves nothing returned restores it. Its kept share counts as paid time all
  *   the same.
- * - Everything is judged as the ledger stands now. Money returned after a vesting takes away whatever relied on it, and
- *   a reversal restores it. Cancelling or lapsing takes nothing away.
+ * - Everything is judged as the ledger stands now. Money returned after a vesting takes away whatever relied on it,
+ *   and a reversal restores it. Cancelling or lapsing takes nothing away.
  *
  * Everything is computed from the ledger each time (customer-access.ts: syncCustomer stores the result), so replaying
  * or reordering Paddle's events cannot change the outcome, and the outcome changes with time alone only as counted time
@@ -162,28 +155,28 @@ export function computeEntitlement(input: EntitlementInput): Entitlement {
   const access = accessFor(input.subscriptions, input.proProductId, input.now);
   const ledger = new Ledger(input);
   const now = input.now.getTime();
-  const runs = ledger.runs();
+  const paid = ledger.paidTime();
+  const vestsAt = paid && ledger.vestsAt(paid);
 
-  const runGrants = runs.flatMap((run): Grant[] => {
-    const vestsAt = ledger.vestsAt(run);
-    if (!vestsAt || vestsAt.getTime() > now) return [];
-    return [
-      {
-        kind: 'qualifying_run',
-        startedAt: run.startedAt,
-        vestedThrough: new Date(run.startedAt.getTime() + countedTime(run, now)),
-        status: 'confirmed',
-        confirmedAt: vestsAt,
-        transactionId: null,
-        withdrawnReason: null,
-      },
-    ];
-  });
-  const grants = [...runGrants, ...ledger.annualTerms()].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+  const paidGrants: Grant[] =
+    paid && vestsAt && vestsAt.getTime() <= now
+      ? [
+          {
+            kind: 'paid_time',
+            startedAt: paid.startedAt,
+            vestedThrough: new Date(servedThrough(paid, now)),
+            status: 'confirmed',
+            confirmedAt: vestsAt,
+            transactionId: null,
+            withdrawnReason: null,
+          },
+        ]
+      : [];
+  const grants = [...paidGrants, ...ledger.annualTerms()].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
   return {
     access,
-    run: currentRun(runs, ledger, isEntitled(access.status), input.now),
+    run: isEntitled(access.status) && paid ? progress(paid, vestsAt) : null,
     vestedThrough: latest(grants.filter((g) => g.status === 'confirmed').map((g) => g.vestedThrough)),
     grants,
     paymentStatuses: Object.fromEntries(
@@ -235,14 +228,15 @@ interface Period {
   full: boolean;
 }
 
-interface Run {
-  /** The start of its first billing period that charged something. */
+/** The customer's paid time. */
+interface PaidTime {
+  /** The start of its first counted part. */
   startedAt: Date;
-  /** The end of its billing periods. */
+  /** The end of the latest billing period at an offer price. */
   billedThrough: Date;
-  /** Its billing periods. */
+  /** The payments at the offer prices. */
   payments: Payment[];
-  /** Its counted time: the counted parts of its billing periods, merged where they meet or overlap, in order. */
+  /** The counted parts of their periods, merged where they meet or overlap, in order. */
   counted: [number, number][];
 }
 
@@ -307,60 +301,45 @@ class Ledger {
     return total >= payment.charged ? 'refunded' : 'partially_refunded';
   }
 
-  /**
-   * The qualifying periods, in order: the billing periods at the offer prices, joined while each follows on from the
-   * ones before, with the counted parts of their payments. A series in which nothing was charged is none.
-   */
-  runs(): Run[] {
-    const billed = this.input.payments
-      .filter((payment) => this.isOffered(payment) && payment.periodEndsAt > payment.periodStartsAt)
-      .sort(
-        (a, b) =>
-          a.periodStartsAt.getTime() - b.periodStartsAt.getTime() ||
-          a.periodEndsAt.getTime() - b.periodEndsAt.getTime(),
-      );
-
-    const series: { billedThrough: Date; payments: Payment[] }[] = [];
-    for (const payment of billed) {
-      const last = series.at(-1);
-      const through = this.billedThrough(payment);
-      if (last && continuesRun(last.billedThrough, payment.periodStartsAt)) {
-        last.payments.push(payment);
-        if (through > last.billedThrough) last.billedThrough = through;
-      } else {
-        series.push({ billedThrough: through, payments: [payment] });
-      }
-    }
-
-    return series.flatMap(({ billedThrough, payments }): Run[] => {
-      const charged = payments.find((payment) => payment.charged > 0);
-      if (!charged) return [];
-      const parts = payments.flatMap((payment) => {
+  /** The customer's paid time, or null if no payment counts for any time. */
+  paidTime(): PaidTime | null {
+    const payments = this.input.payments.filter(
+      (payment) => this.isOffered(payment) && payment.periodEndsAt > payment.periodStartsAt,
+    );
+    const counted = merge(
+      payments.flatMap((payment) => {
         const period = this.countedPeriod(payment);
         return period ? [[period.startsAt.getTime(), period.endsAt.getTime()] as [number, number]] : [];
-      });
-      return [{ startedAt: charged.periodStartsAt, billedThrough, payments, counted: merge(parts) }];
-    });
+      }),
+    );
+    if (counted.length === 0) return null;
+
+    return {
+      startedAt: new Date(counted[0][0]),
+      billedThrough: new Date(Math.max(...payments.map((payment) => payment.periodEndsAt.getTime()))),
+      payments,
+      counted,
+    };
   }
 
   /**
-   * When the qualifying period vests, or null if its counted time does not reach 12 months: when its counted time
-   * served reaches the length of the 12 calendar months from its start, or the end of a counted part within the
-   * month-end tolerance of that, if every billing period in it to there counted in full and so is sooner.
+   * When the paid time vests, or null if it does not reach 12 months: when the paid time served reaches the length of
+   * the 12 calendar months from its start, or the end of a counted part within the month-end tolerance of that, if
+   * every billing period to there counted in full and so is sooner.
    */
-  vestsAt(run: Run): Date | null {
-    const start = run.startedAt.getTime();
-    const required = addMonths(run.startedAt, 12).getTime() - start;
+  vestsAt(paid: PaidTime): Date | null {
+    const start = paid.startedAt.getTime();
+    const required = addMonths(paid.startedAt, 12).getTime() - start;
     const vestings: number[] = [];
 
     let served = 0;
-    for (const [from, to] of run.counted) {
+    for (const [from, to] of paid.counted) {
       if (served + (to - from) >= required) {
         vestings.push(from + (required - served));
         break;
       }
       served += to - from;
-      const allFull = run.payments
+      const allFull = paid.payments
         .filter((payment) => payment.periodStartsAt.getTime() >= start && payment.periodStartsAt.getTime() < to)
         .every((payment) => this.keptShare(payment) >= 1);
       if (served >= required - MONTH_END_TOLERANCE_MS && allFull) vestings.push(to);
@@ -408,18 +387,6 @@ class Ledger {
       });
   }
 
-  /**
-   * How far a billing period carries a qualifying period: to its end, or to when its subscription ended, if sooner. A
-   * period refunded in full (which cancels its subscription at once, apply-paddle-event.ts) therefore cannot keep a
-   * qualifying period going after it. It never depends on money returned, so returning money can never split a
-   * qualifying period and start a later one afresh.
-   */
-  private billedThrough(payment: Payment): Date {
-    const endedAt = this.input.subscriptions.find((sub) => sub.subscriptionId === payment.subscriptionId)?.endedAt;
-    if (!endedAt || endedAt >= payment.periodEndsAt) return payment.periodEndsAt;
-    return new Date(Math.max(endedAt.getTime(), payment.periodStartsAt.getTime()));
-  }
-
   private isAnnualTerm(payment: Payment): boolean {
     return (
       this.isOffered(payment) &&
@@ -461,33 +428,26 @@ class Ledger {
 }
 
 /**
- * The qualifying period that continues to now, if the customer has access and it has counted time: its progress
- * towards 12 months. It is paid
- * through its start plus all its counted time, and vests when its counted time reaches 12 months, or, if it has not
- * been paid that far, as it would if every billing period from the end of its billing so far counted in full.
+ * How far the customer is towards vesting, while they have access: their paid time (served or paid ahead) in whole
+ * months, and when it reaches 12 months; or, if it has not been paid that far, when it would if every billing period
+ * from the end of the latest one so far counted in full.
  */
-function currentRun(runs: Run[], ledger: Ledger, hasAccess: boolean, now: Date): CurrentRun | null {
-  if (!hasAccess) return null;
-
-  const run = runs.at(-1);
-  // A series whose billing ended more than a grace period ago is not continued by anything the customer has now.
-  if (!run || run.billedThrough.getTime() + GRACE_PERIOD_DAYS * DAY_MS < now.getTime()) return null;
-
-  const counted = countedTime(run, Number.POSITIVE_INFINITY);
-  if (counted <= 0) return null;
-  const paidThrough = new Date(run.startedAt.getTime() + counted);
-  const required = addMonths(run.startedAt, 12).getTime() - run.startedAt.getTime();
+function progress(paid: PaidTime, vestsAt: Date | null): CurrentRun {
+  const counted = sum(paid.counted.map(([from, to]) => to - from));
+  const required = addMonths(paid.startedAt, 12).getTime() - paid.startedAt.getTime();
   return {
-    startedAt: run.startedAt,
-    paidThrough,
-    monthsPaid: wholeMonths(run.startedAt, paidThrough),
-    vestsAt: ledger.vestsAt(run) ?? new Date(run.billedThrough.getTime() + Math.max(0, required - counted)),
+    startedAt: paid.startedAt,
+    paidThrough: new Date(paid.counted.at(-1)![1]),
+    monthsPaid: wholeMonths(paid.startedAt, new Date(paid.startedAt.getTime() + counted)),
+    vestsAt: vestsAt ?? new Date(paid.billedThrough.getTime() + Math.max(0, required - counted)),
   };
 }
 
-// The qualifying period's counted time served by `until`: how much of its counted parts lies before it.
-function countedTime(run: Run, until: number): number {
-  return sum(run.counted.map(([from, to]) => Math.max(0, Math.min(to, until) - from)));
+// The end of the paid time served by `now`: the latest moment before it that a counted part covers. A part starting at
+// `now` has served nothing yet.
+function servedThrough(paid: PaidTime, now: number): number {
+  const last = paid.counted.filter(([from]) => from < now).at(-1)!;
+  return Math.min(last[1], now);
 }
 
 // The intervals merged where they meet or overlap, in order.

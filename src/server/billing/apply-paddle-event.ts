@@ -188,12 +188,11 @@ function amount(value: string): number {
 
 /**
  * Refunds, credits and chargebacks (Paddle adjustments). Each is recorded in the payment ledger, and the customer
- * brought in line (syncCustomer): what an adjustment does to a payment, and so to the qualifying run and any annual grant, is
+ * brought in line (syncCustomer): what an adjustment does to a payment, and so to the paid time and any annual grant, is
  * decided there (entitlement-policy.ts). Paddle does not cancel a subscription whose payment is refunded, so an
  * approved chargeback of any payment, or an approved full refund of the subscription's latest paid billing period,
  * cancels it at once: the subscription.canceled event that follows ends access as any cancellation does. A full refund
- * of an earlier paid billing period (a goodwill refund) cancels nothing (the qualifying period continues, the period
- * counting only for the money kept) and tells the operator. Every chargeback cancels, so charging back each month
+ * of an earlier paid billing period (a goodwill refund) cancels nothing (the period counts only for the money kept) and tells the operator. Every chargeback cancels, so charging back each month
  * once the next has renewed cannot keep access going. A partial refund, and a chargeback warning (which can still be
  * reversed), change no access but tell the operator. Credits and reversals change no access. Throwing (Paddle
  * unavailable) makes the worker retry; recording the adjustment again changes nothing.
@@ -244,7 +243,7 @@ async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, d
       `Paddle ${data.action} of an earlier paid billing period for customer ${data.customerId}`,
       `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId}, which is not the ` +
         `latest paid billing period recorded for subscription ${data.subscriptionId}, so the subscription was not ` +
-        'cancelled: its qualifying period continues, and the period counts only for the money kept. Cancel the ' +
+        'cancelled: the period counts only for the money kept. Cancel the ' +
         'subscription in Paddle if it should end.',
     );
     return;

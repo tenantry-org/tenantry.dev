@@ -19,7 +19,7 @@ insert into public.active_subscriptions (customer_id, access_status, grace_ends_
 insert into public.feed_tokens (customer_id, name, token_hash, prefix) values
   ('ctm_grace', 'CI', encode(sha256('tpf_grace'), 'hex'), 'tpf_grac');
 insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at) values
-  ('ctm_vested', 'qualifying_run', '2027-01-01', '2028-01-01', 'confirmed', '2028-01-01');
+  ('ctm_vested', 'paid_time', '2027-01-01', '2028-01-01', 'confirmed', '2028-01-01');
 
 -- Hashes of made-up tokens.
 create temporary table hashes as select

@@ -48,10 +48,10 @@ export interface EntitlementView {
   /** The vested-through date: every release published on or before it is vested. Null when nothing is vested. */
   vestedThrough: string | null;
   /**
-   * The current qualifying period, while they have access: its whole months of paid time (the time the money kept pays
-   * for, served or paid ahead), when it reaches 12 months, and whether it has by now.
+   * Their paid time, while they have access: its whole months (the time the money kept pays for, across every
+   * subscription, served or paid ahead), when it reaches 12 months, and whether it has by now.
    */
-  qualifying: { monthsPaid: number; vestsAt: string; reached: boolean } | null;
+  paidTime: { monthsPaid: number; vestsAt: string; reached: boolean } | null;
   /**
    * Whether, while they have access, the vested-through date is the end of an annual term not over yet: its payment
    * vested the releases published up to then, as they are published.
@@ -122,7 +122,7 @@ export async function readEntitlement(customerId: string, now: Date = new Date()
     canRestore: canRestore({ accessStatus: access.status, vestedThrough }),
     vestedThrough: iso(vestedThrough),
     // Progress counts only while the customer has access; a lapse resets it.
-    qualifying:
+    paidTime:
       entitled && state?.run
         ? {
             monthsPaid: state.run.monthsPaid,

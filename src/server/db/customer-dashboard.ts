@@ -33,10 +33,10 @@ export async function isTestCustomer(customerId: string): Promise<boolean> {
   return data?.is_test ?? false;
 }
 
-/** The customer's access and the progress of their current qualifying period, as last stored (active_subscriptions). */
+/** The customer's access and the progress of their paid time, as last stored (active_subscriptions). */
 export interface StoredState {
   access: Access;
-  /** The current qualifying period, while they have access and it continues to now. */
+  /** Their paid time, while they have access. */
   run: { monthsPaid: number; vestsAt: Date } | null;
 }
 
@@ -61,7 +61,7 @@ export async function readCustomerState(customerId: string): Promise<StoredState
 /** The customer's vested-through date, and the kind of grant that gives it. */
 export interface Vested {
   through: Date;
-  /** qualifying_run, annual_term or operator (vested_entitlements.kind). */
+  /** paid_time, annual_term or operator (vested_entitlements.kind). */
   kind: string;
 }
 

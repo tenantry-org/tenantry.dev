@@ -35,7 +35,7 @@ insert into public.vested_entitlements (
   customer_id, kind, started_at, vested_through, status, confirmed_at, transaction_id
 ) values ('ctm_annual', 'annual_term', '2027-01-01', '2028-01-01', 'confirmed', '2027-01-01', 'txn_annual');
 insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at) values
-  ('ctm_vested', 'qualifying_run', '2027-01-01', '2028-01-01', 'confirmed', '2028-01-01');
+  ('ctm_vested', 'paid_time', '2027-01-01', '2028-01-01', 'confirmed', '2028-01-01');
 -- Every customer keeps their licence, so a licence alone does not call for a reconcile.
 insert into public.licences (customer_id, jwt) values ('ctm_lapsed', 'jwt'), ('ctm_vested', 'jwt');
 

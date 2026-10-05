@@ -33,16 +33,17 @@ export default function EulaPage() {
         or when those 30 days pass without the payment being collected. All dates and times in this section are in UTC.
       </p>
       <p>
-        Vesting follows the money you keep: paid time adds up across consecutive billing periods and vests at 12 months,
-        and money returned to you takes away the time it paid for. Each payment for a billing period of any of your
-        Tenantry Pro subscriptions, at a monthly or yearly price this site has offered, gives a paid period: the part of
-        that billing period that the money kept from the payment pays for, counted from the start of the billing period.
-        A payment kept in full gives the whole billing period, even if the subscription was cancelled or paused before
-        the period ended. If part of a payment has been returned to you, the paid period is the same share of the
-        billing period as the share of the payment you kept: if half of a month&apos;s payment is refunded, the paid
-        period is the first half of that month. A payment of which everything has been returned, or for which nothing
-        was charged (a trial, or a period discounted to zero), gives no paid period. Amounts are compared before tax. A
-        discount does not count as money returned, so a discounted payment that you keep gives the whole billing period.
+        Vesting follows the money you keep: paid time adds up across all your billing periods, with or without gaps
+        between them, and vests at 12 months, and money returned to you takes away the time it paid for. Each payment
+        for a billing period of any of your Tenantry Pro subscriptions, at a monthly or yearly price this site has
+        offered, gives a paid period: the part of that billing period that the money kept from the payment pays for,
+        counted from the start of the billing period. A payment kept in full gives the whole billing period, even if the
+        subscription was cancelled or paused before the period ended. If part of a payment has been returned to you, the
+        paid period is the same share of the billing period as the share of the payment you kept: if half of a
+        month&apos;s payment is refunded, the paid period is the first half of that month. A payment of which everything
+        has been returned, or for which nothing was charged (a trial, or a period discounted to zero), gives no paid
+        period. Amounts are compared before tax. A discount does not count as money returned, so a discounted payment
+        that you keep gives the whole billing period.
       </p>
       <p>
         Money is returned to you by a refund, a credit or a chargeback once it has been approved. A correction of tax
@@ -52,30 +53,24 @@ export default function EulaPage() {
         time, and a reversal restores it.
       </p>
       <p>
-        A qualifying period is a series of billing periods, at a monthly or yearly price this site has offered, in which
-        each billing period starts no more than one hour after the end of the billing periods before it. A billing
-        period whose subscription ended before the period did reaches only to when the subscription ended, though its
-        paid period still counts in full. A gap of more than one hour breaks a qualifying period, for example when your
-        subscription ends and no billing period follows within the hour, or a renewal is not paid; the next billing
-        period then starts a new qualifying period from zero. Money returned does not by itself break a qualifying
-        period: a billing period of which part or all of the payment was returned, or for which nothing was charged,
-        continues it, and adds only its paid period, if any. But a full refund of your subscription&apos;s latest paid
-        billing period, or a chargeback of any of its payments, cancels the subscription at once (refund policy, section
-        4); that is the subscription ending, so a new subscription more than one hour later starts a new qualifying
-        period. If a chargeback is reversed, the subscription stays cancelled. A qualifying period starts at the start
-        of its first billing period for which something was charged.
+        Your paid time is the total length of your paid periods, from all of your Tenantry Pro subscriptions, whether or
+        not there are gaps between them, counting any time in which paid periods overlap, as when you change plan or
+        hold two subscriptions, once. It starts at the start of your first paid period. It vests when the paid time
+        served, up to the present time, adds up to the length of the 12 calendar months from its start (&quot;12 paid
+        months&quot;). If every billing period from its start so far was kept in full, it vests at the end of one of
+        them that falls no more than three days short of that, which allows for billing dates at the end of shorter
+        months. Once it has vested, its vested-through date is the end of the paid time you have served: the latest
+        time, up to the present, that one of your paid periods covers. The date moves on as further paid time is served,
+        in the same subscription or a later one; between subscriptions it stays at the end of your last paid period; and
+        it is never later than the present time. For example, if you pay for six months, have no subscription for two
+        years and then pay for six more months, your paid time vests when the twelfth paid month has been served, and
+        your vested-through date is then that day, so the releases published during the two years are vested too. If
+        half of the sixth month&apos;s payment had been refunded, it would vest half a month later, if you kept paying.
       </p>
       <p>
-        The paid time of a qualifying period is the total length of its paid periods, counting any time in which they
-        overlap, as when you change plan, once. It vests when the paid time served, from its start to the present time,
-        adds up to the length of the 12 calendar months from its start (&quot;12 paid months&quot;). If every billing
-        period in it so far was kept in full, it vests at the end of one of them that falls no more than three days
-        short of that, which allows for billing dates at the end of shorter months. Once it has vested, its
-        vested-through date is its start plus the paid time served in it so far: the date moves on as more paid time is
-        served, and is never later than the present time. For example, if half of the sixth month&apos;s payment is
-        refunded and you pay for 13 months, the qualifying period has 12 and a half months of paid time: it vests half a
-        month into the thirteenth month, and its vested-through date reaches 12 and a half months after its start at the
-        end of the thirteenth month.
+        A full refund of your subscription&apos;s latest paid billing period, or a chargeback of any of its payments,
+        cancels the subscription at once (refund policy, section 4). If a chargeback is reversed, the subscription stays
+        cancelled. The paid time you have kept still counts if you subscribe again.
       </p>
       <p>
         When you pay a yearly price this site has offered for an annual billing period (an &quot;annual term&quot;),
@@ -86,9 +81,9 @@ export default function EulaPage() {
         part of the term that the money kept pays for is still a paid period.
       </p>
       <p>
-        Your vested-through date is the latest vested-through date of any of your qualifying periods or annual terms.
-        Your subscription ending, or a new qualifying period starting, does not reduce it; only money returned to you
-        can, as set out above.
+        Your vested-through date is the later of your paid time&apos;s vested-through date and the end of any annual
+        term whose grant you hold. Your subscription ending, or a gap between subscriptions, does not reduce it; only
+        money returned to you can, as set out above.
       </p>
       <p>
         Each release of the Software has a release date: the date Tenantry records for it when it is published on the

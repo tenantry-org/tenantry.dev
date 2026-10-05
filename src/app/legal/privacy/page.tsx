@@ -5,7 +5,7 @@ export const metadata = { title: 'Privacy Policy | Tenantry' };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" lastUpdated="2026-10-04">
+    <LegalPage title="Privacy Policy" lastUpdated="2026-10-05">
       <p>
         This Privacy Policy explains how {LegalEntity.name} (&quot;Tenantry&quot;, &quot;we&quot;) collects, uses, and
         protects personal data when you use our website and Services.
@@ -27,7 +27,7 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Entitlement records:</strong> subscription status, the licence keys issued to your account, and the
-          vesting worked out from your payments (each qualifying period and annual term, and the date it vests through).
+          vesting worked out from your payments (your paid time and each annual term, and the date each vests through).
           For each feed token: the name you give it, its first few characters, when it was created and revoked, and when
           it was last used, recorded at most once an hour. We store a hash of each feed token, not the token itself.
         </li>

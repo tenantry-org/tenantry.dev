@@ -56,7 +56,7 @@ export function feedTokenCreatedEmail(
 }
 
 /**
- * Sent when a grant is confirmed: a qualifying period reaches 12 paid months, or an annual term is paid. Not sent as the
+ * Sent when a grant is confirmed: paid time reaches 12 months in total, or an annual term is paid. Not sent as the
  * vested-through date moves forward month by month afterwards. `annualTerm` says the date is the end of an annual term
  * not over yet, whose releases are vested as they are published.
  */
@@ -68,10 +68,10 @@ export function vestingConfirmedEmail(
 ): EmailMessage {
   const what = annualTerm
     ? `Your annual term is paid, so every Tenantry Pro release published on or before ${longDate(vestedThrough)}, the end of the term and your vested-through date, is vested, including those published later in the term.`
-    : `Every Tenantry Pro release published on or before ${longDate(vestedThrough)}, your vested-through date, is now vested.`;
+    : `Your paid time has reached 12 months, so every Tenantry Pro release published on or before ${longDate(vestedThrough)}, your vested-through date, is now vested.`;
   const next = annualTerm
     ? "A refund, credit or chargeback of the term's payment withdraws them, even after the term. Paying for another year vests that year's releases in the same way."
-    : 'While you stay subscribed, your vested-through date moves forward as your paid time is served. A refund, credit or chargeback takes away the time its money paid for.';
+    : 'Your vested-through date moves forward as further paid time is served, now or in a later subscription; between subscriptions it stays where your last paid period ended. A refund, credit or chargeback takes away the time its money paid for.';
   return {
     to,
     subject: 'Your Tenantry Pro releases are vested',
@@ -85,11 +85,11 @@ export function vestingConfirmedEmail(
 }
 
 /**
- * A grant withdrawn, as vested_entitlements records it (billing-store.ts: Grant), or a qualifying period's vesting taken
- * away (no reason recorded: money it relied on was returned).
+ * A grant withdrawn, as vested_entitlements records it (billing-store.ts: Grant), or the paid time's vesting taken away
+ * (no reason recorded: money it relied on was returned).
  */
 export interface WithdrawnGrant {
-  kind: 'qualifying_run' | 'annual_term';
+  kind: 'paid_time' | 'annual_term';
   vestedThrough: Date;
   withdrawnReason: 'refund' | 'chargeback' | null;
 }
@@ -99,14 +99,14 @@ const WITHDRAWN_BECAUSE: Record<NonNullable<WithdrawnGrant['withdrawnReason']>, 
   chargeback: 'a payment it relied on was charged back',
 };
 
-/** Sent when vested releases are taken away: money returned from an annual term, or that a qualifying period relied on. */
+/** Sent when vested releases are taken away: money returned from an annual term, or that the paid time relied on. */
 export function grantWithdrawnEmail(
   to: string,
   grant: WithdrawnGrant,
   vestedThrough: Date | null,
   siteUrl: string,
 ): EmailMessage {
-  const what = grant.kind === 'annual_term' ? 'Your annual term' : 'Your qualifying period';
+  const what = grant.kind === 'annual_term' ? 'Your annual term' : 'Your paid time';
   const because = `, because ${
     grant.withdrawnReason
       ? WITHDRAWN_BECAUSE[grant.withdrawnReason]
@@ -136,7 +136,7 @@ export function accessRevokedEmail(to: string, siteUrl: string): EmailMessage {
     html: layout(
       `<h1 style="font-size:20px">Your Tenantry Pro access has ended</h1>
 <p>You no longer have an active Tenantry Pro subscription, so the package feed now serves you only your vested releases: those published up to your vested-through date, and every patch release of a minor version whose x.y.0 release is vested, as the licence agreement sets out. If nothing was vested, it serves you none, and the releases you downloaded are no longer licensed to you.</p>
-<p>Your licence key keeps working either way; it does not extend your licence. You can resubscribe any time:</p>
+<p>Your licence key keeps working either way; it does not extend your licence. You can resubscribe any time, and the paid time you have kept still counts towards 12 months:</p>
 <p><a href="${siteUrl}/#pricing" style="${BUTTON}">View pricing</a></p>`,
     ),
   };

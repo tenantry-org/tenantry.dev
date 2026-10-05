@@ -66,8 +66,8 @@ function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) 
           tokens restore them as before.
         </p>
         <p>
-          Subscribing again never takes away the vested releases. A subscription that starts more than an hour after
-          this one ended starts a new qualifying period.{' '}
+          Subscribing again never takes away the vested releases, and the paid time you have kept still counts: your
+          vested-through date moves on again as further paid time is served.{' '}
           <Link className={link} href={'/#pricing'}>
             Subscribe again
           </Link>{' '}
@@ -80,7 +80,8 @@ function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) 
   return (
     <p className={'rounded-md bg-warning-surface px-3 py-2 text-warning'}>
       Your subscription has ended and no releases are vested, so the package feed serves you nothing and your feed
-      tokens restore nothing. The releases you downloaded are no longer licensed to you.{' '}
+      tokens restore nothing. The releases you downloaded are no longer licensed to you. The paid time you have kept
+      still counts towards 12 months if you subscribe again.{' '}
       <Link className={link} href={'/#pricing'}>
         Subscribe again
       </Link>{' '}
@@ -89,10 +90,10 @@ function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) 
   );
 }
 
-// How far the customer is towards vesting: an annual term vested when paid, while it lasts, or the paid time of the
-// current qualifying period (the time the money kept pays for).
+// How far the customer is towards vesting: an annual term vested when paid, while it lasts, or their paid time (the
+// time the money kept pays for), which adds up across subscriptions.
 function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
-  const { annualTerm, qualifying } = entitlement;
+  const { annualTerm, paidTime } = entitlement;
 
   if (annualTerm) {
     return (
@@ -104,28 +105,27 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
     );
   }
 
-  if (!qualifying) {
-    return <p>No paid period is recorded yet. Your qualifying period starts with your first payment.</p>;
+  if (!paidTime) {
+    return <p>No paid period is recorded yet. Your paid time starts with your first payment.</p>;
   }
 
-  if (qualifying.reached) {
+  if (paidTime.reached) {
     return (
       <p>
-        Your qualifying period reached 12 paid months on {formatDate(qualifying.vestsAt)}. While you stay subscribed,
-        your vested-through date moves forward as your paid time is served.
+        Your paid time reached 12 months on {formatDate(paidTime.vestsAt)}. Your vested-through date moves forward as
+        further paid time is served.
       </p>
     );
   }
 
   return (
     <p>
-      Qualifying period: <span className={'font-medium text-foreground'}>{qualifying.monthsPaid} of 12</span> paid
-      months. If your subscription continues, 12 paid months are reached on {formatDate(qualifying.vestsAt)}, and your
-      releases then start to vest: those published up to your vested-through date, which is the start of your qualifying
-      period plus the paid time served. If your subscription ends before then and no new one starts within an hour, the
-      qualifying period starts again from zero. A refund, credit or chargeback of a payment takes away the time that
-      money paid for, so 12 paid months are reached later; a full refund of your latest paid billing period, or a
-      chargeback of any payment, also cancels your subscription.
+      Paid time: <span className={'font-medium text-foreground'}>{paidTime.monthsPaid} of 12</span> months. If your
+      subscription continues, 12 paid months are reached on {formatDate(paidTime.vestsAt)}, and your releases then start
+      to vest: those published up to your vested-through date, the end of the paid time you have served. Paid time adds
+      up across subscriptions, with or without a gap between them. A refund, credit or chargeback of a payment takes
+      away the time that money paid for, so 12 paid months are reached later; a full refund of your latest paid billing
+      period, or a chargeback of any payment, also cancels your subscription.
     </p>
   );
 }

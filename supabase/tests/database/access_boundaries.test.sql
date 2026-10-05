@@ -58,8 +58,8 @@ insert into public.payment_adjustments (adjustment_id, transaction_id, customer_
 values ('adj_alice', 'txn_alice', 'ctm_alice', 'refund', 'partial', 'approved', now());
 insert into public.offered_prices (price_id) values ('pri_1');
 insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at) values
-  ('ctm_alice', 'qualifying_run', '2026-01-01', '2027-01-01', 'confirmed', now()),
-  ('ctm_bob', 'qualifying_run', '2026-01-01', '2027-01-01', 'confirmed', now());
+  ('ctm_alice', 'paid_time', '2026-01-01', '2027-01-01', 'confirmed', now()),
+  ('ctm_bob', 'paid_time', '2026-01-01', '2027-01-01', 'confirmed', now());
 insert into public.pro_releases (version, major, minor, patch, published_at) values ('1.0.0', 1, 0, 0, now());
 insert into public.pro_packages (lower_id, version, package_id, storage_path, size, sha512, nuspec)
 values ('tenantry.pro', '1.0.0', 'Tenantry.Pro', 'tenantry.pro/1.0.0/tenantry.pro.1.0.0.nupkg', 1, 'x', '<package/>');

@@ -117,12 +117,12 @@ export async function syncCustomer(
  * Tells the customer when their vested releases change, comparing the grants stored before this sync with those stored
  * by it:
  *   - an annual term's grant withdrawn (money returned from its payment);
- *   - their vested-through date moved back or gone for any other reason: money returned that a qualifying period relied
- *     on, which recomputes the qualifying period without it rather than marking it withdrawn;
- *   - a grant newly confirmed (a first vesting, a new qualifying period, an annual term paid, or a grant restored by a
- *     reversal) that vests beyond their previous vested-through date: a qualifying period confirmed after it, or an
- *     annual term ending after it. A vested-through date moving forward with the time served sends nothing, nor does a
- *     qualifying period recomputed from a later start.
+ *   - their vested-through date moved back or gone for any other reason: money returned that their paid time relied
+ *     on, which recomputes the paid time without it rather than marking it withdrawn;
+ *   - a grant newly confirmed (paid time reaching 12 months, an annual term paid, or a grant restored by a reversal)
+ *     that vests beyond their previous vested-through date: paid time confirmed after it, or an annual term ending
+ *     after it. A vested-through date moving forward with the time served sends nothing, nor does paid time
+ *     recomputed from a later start (money returned from its first payment).
  * Anything taken away also alerts the operator. Never throws: a failed email is not resent.
  */
 async function notifyGrantChanges(
@@ -144,11 +144,11 @@ async function notifyGrantChanges(
     const was = before.get(grantKey(grant));
     return grant.status === 'withdrawn' && was === 'confirmed';
   });
-  // Vesting taken away without a grant marked withdrawn: money returned that a qualifying period relied on.
+  // Vesting taken away without a grant marked withdrawn: money returned that the paid time relied on.
   if (withdrawn.length === 0 && previousThrough && (!through || through < previousThrough)) {
-    withdrawn.push({ kind: 'qualifying_run', vestedThrough: previousThrough, withdrawnReason: null });
+    withdrawn.push({ kind: 'paid_time', vestedThrough: previousThrough, withdrawnReason: null });
   }
-  // A grant that vests beyond the previous vested-through date: not a qualifying period recomputed from a later start.
+  // A grant that vests beyond the previous vested-through date: not paid time recomputed from a later start.
   const vested =
     through !== null &&
     confirmed.some(
@@ -167,7 +167,7 @@ async function notifyGrantChanges(
   );
 
   for (const grant of withdrawn) {
-    const what = grant.kind === 'annual_term' ? 'annual term' : 'qualifying period';
+    const what = grant.kind === 'annual_term' ? 'annual term' : 'paid time';
     await deps.alertOperator(
       grant.withdrawnReason
         ? `Grant withdrawn for customer ${customerId}`

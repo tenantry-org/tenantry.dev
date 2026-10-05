@@ -83,7 +83,7 @@ export interface Access {
   graceEndsAt: Date | null;
 }
 
-export type GrantKind = 'qualifying_run' | 'annual_term';
+export type GrantKind = 'paid_time' | 'annual_term';
 export type GrantStatus = 'confirmed' | 'withdrawn';
 export type WithdrawnReason = 'refund' | 'chargeback';
 
@@ -99,7 +99,10 @@ export interface Grant {
   withdrawnReason: WithdrawnReason | null;
 }
 
-/** The current run: its start, how far it is paid, and when it reaches (or reached) 12 months. */
+/**
+ * The customer's paid time (entitlement-policy.ts), across all their payments: when it started, the end of the latest
+ * paid period, its whole months, and when it reaches (or reached) 12 months.
+ */
 export interface CurrentRun {
   startedAt: Date;
   paidThrough: Date;
@@ -109,7 +112,7 @@ export interface CurrentRun {
 
 export interface Entitlement {
   access: Access;
-  /** The current run, or null when the customer has no access or no paid period continues to now. */
+  /** Their paid time, or null when the customer has no access or no payment counts for any time. */
   run: CurrentRun | null;
   /** The latest confirmed grant's date, or null if none. */
   vestedThrough: Date | null;
@@ -261,7 +264,7 @@ export async function recordLicence(params: { customerId: string; jwt: string })
 
 /**
  * Everyone whose access, licence or entitlement might need correcting: entitled (by recorded access or by a
- * subscription), with a failing licence, in a current run, or with a payment whose billing period ends after two days
+ * subscription), with a failing licence, with paid time stored, or with a payment whose billing period ends after two days
  * ago (paid time still being served). One array, so the API's row limit cannot leave anyone out.
  */
 export async function customersToReconcile(): Promise<string[]> {
@@ -487,7 +490,7 @@ export async function listGrants(customerId: string): Promise<Grant[]> {
 }
 
 /**
- * Stores the customer's derived state in one transaction (`set_customer_entitlement`): their access and current run
+ * Stores the customer's derived state in one transaction (`set_customer_entitlement`): their access and paid time
  * (active_subscriptions), their computed grants (vested_entitlements) and each payment's status. Returns the access
  * status it replaced, 'lapsed' for a customer seen for the first time.
  */

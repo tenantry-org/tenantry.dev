@@ -4,7 +4,7 @@ export const metadata = { title: 'Refund Policy | Tenantry' };
 
 export default function RefundsPage() {
   return (
-    <LegalPage title="Refund Policy" lastUpdated="2026-10-04">
+    <LegalPage title="Refund Policy" lastUpdated="2026-10-05">
       <p>
         Tenantry Pro is sold through our merchant of record, Paddle.com. Refunds are handled in accordance with this
         policy and Paddle&apos;s buyer terms.
@@ -31,21 +31,20 @@ export default function RefundsPage() {
 
       <h2>4. Effect on access and vesting</h2>
       <p>
-        The terms used here (subscription, paid period, qualifying period, 12 paid months, annual term, the term&apos;s
-        grant, vested releases, vested-through date) are defined in the <a href="/legal/eula">EULA</a>, section 2.
-        Vesting follows the money you keep: a refund, a credit or a chargeback of a payment takes away the time that
-        money paid for, and any vesting that relied on it, whenever it is approved, as that section sets out. For
-        example, a refund of half a month&apos;s payment leaves the first half of that month as a paid period: the
-        qualifying period continues, and reaches 12 paid months half a month later than it would have. Any refund of an
-        annual term withdraws the term&apos;s grant.
+        The terms used here (subscription, paid period, paid time, 12 paid months, annual term, the term&apos;s grant,
+        vested releases, vested-through date) are defined in the <a href="/legal/eula">EULA</a>, section 2. Vesting
+        follows the money you keep: a refund, a credit or a chargeback of a payment takes away the time that money paid
+        for, and any vesting that relied on it, whenever it is approved, as that section sets out. For example, a refund
+        of half a month&apos;s payment leaves the first half of that month as a paid period: your paid time reaches 12
+        paid months half a month later than it would have. Any refund of an annual term withdraws the term&apos;s grant.
       </p>
       <p>
         When a full refund of your subscription&apos;s latest paid billing period is approved, or any of its payments is
-        charged back, your subscription is cancelled immediately, and it ends as the EULA, section 8, sets out; if you
-        subscribe again more than one hour later, a new qualifying period starts. A full refund of an earlier paid
-        billing period, a partial refund, or a credit does not cancel your subscription or change your access while it
-        continues, and your qualifying period continues, counting only the money you keep. If a chargeback is later
-        reversed, the money counts as kept again, but your subscription stays cancelled.
+        charged back, your subscription is cancelled immediately, and it ends as the EULA, section 8, sets out; the paid
+        time you have kept still counts if you subscribe again. A full refund of an earlier paid billing period, a
+        partial refund, or a credit does not cancel your subscription or change your access while it continues, and your
+        paid time counts only the money you keep. If a chargeback is later reversed, the money counts as kept again, but
+        your subscription stays cancelled.
       </p>
       <p>
         If the purchase you are refunded in full within the 14-day window was an annual term, its grant is withdrawn and

@@ -284,6 +284,46 @@ describe('what each customer sees', () => {
     delete CUSTOMERS.annual;
   });
 
+  it('serves a customer whose paid time added up across a gap the releases published in the gap', async () => {
+    // Six months in 2027 (1.4.0 came out in November), nothing in the first months of 2028, then six months from April
+    // 2028: 12 months served on 1 October 2028, after which the customer lapses. 1.4.1 and 1.6.0 came out in the gap.
+    const month = (start: string, subscriptionId: string, n: number): Payment => ({
+      transactionId: `txn_${subscriptionId}_${n}`,
+      subscriptionId,
+      priceId: 'pri_01month',
+      billingInterval: 'month',
+      billingFrequency: 1,
+      periodStartsAt: new Date(Date.UTC(Number(start.slice(0, 4)), Number(start.slice(5, 7)) - 1 + n, 1)),
+      periodEndsAt: new Date(Date.UTC(Number(start.slice(0, 4)), Number(start.slice(5, 7)) + n, 1)),
+      charged: 3900,
+      currencyCode: 'GBP',
+    });
+    const payments = [
+      ...Array.from({ length: 6 }, (_, n) => month('2027-07', 'sub_a', n)),
+      ...Array.from({ length: 6 }, (_, n) => month('2028-04', 'sub_b', n)),
+    ];
+    const ended = (subscriptionId: string, at: string) => ({
+      subscriptionId,
+      productId: 'pro_01',
+      status: 'canceled',
+      graceStartedAt: null,
+      endedAt: new Date(at),
+    });
+    const entitlement = computeEntitlement({
+      subscriptions: [ended('sub_a', '2028-01-01T00:00:00Z'), ended('sub_b', '2028-10-01T00:00:00Z')],
+      payments,
+      adjustments: [],
+      proProductId: 'pro_01',
+      offerPriceIds: ['pri_01month', 'pri_01year'],
+      now: new Date('2028-11-01T00:00:00Z'),
+    });
+    CUSTOMERS.gap = { customerId: 'ctm_gap', access: entitlement.access, vestedThrough: entitlement.vestedThrough };
+
+    expect(entitlement.vestedThrough).toEqual(new Date('2028-10-01T00:00:00Z'));
+    expect(await versions('gap')).toEqual(['1.4.0', '1.4.1', '1.4.3', '1.6.0']);
+    delete CUSTOMERS.gap;
+  });
+
   it('answers 404 for a package with no version the customer may use, and for an unknown package', async () => {
     expect(await versions('vested', 'tenantry.pro.hangfire')).toBe(404);
     expect((await get('registration/tenantry.pro.hangfire/index.json', 'active')).status).toBe(404);

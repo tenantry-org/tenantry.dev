@@ -56,7 +56,7 @@ select is(
   public.set_customer_entitlement('ctm_1',
     '{"access_status": "grace", "grace_ends_at": "2028-03-02T00:00:00Z", "run_started_at": "2027-01-01T00:00:00Z",
       "paid_through": "2028-02-01T00:00:00Z", "months_paid": 13, "vests_at": "2028-01-01T00:00:00Z"}',
-    '[{"kind": "qualifying_run", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
+    '[{"kind": "paid_time", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
        "status": "confirmed", "confirmed_at": "2028-01-01T00:00:00Z", "transaction_id": null,
        "withdrawn_reason": null}]',
     '{}'),
@@ -67,14 +67,14 @@ select results_eq(
   'records the new state, with when grace ends');
 select results_eq(
   $$select kind, status from public.vested_entitlements where customer_id = 'ctm_1' order by kind$$,
-  $$values ('operator'::text, 'confirmed'::text), ('qualifying_run'::text, 'confirmed'::text)$$,
+  $$values ('operator'::text, 'confirmed'::text), ('paid_time'::text, 'confirmed'::text)$$,
   'grants no longer computed are removed; the operator grant is kept');
 select is(public.vested_through('ctm_1'), '2028-02-01 00:00+00'::timestamptz, 'vests through the latest confirmed grant');
 
 -- An operator grant can only be added by hand: one in the computed grants is not stored.
 select public.set_customer_entitlement('ctm_1',
   '{"access_status": "grace", "grace_ends_at": "2028-03-02T00:00:00Z"}',
-  '[{"kind": "qualifying_run", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
+  '[{"kind": "paid_time", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
      "status": "confirmed", "confirmed_at": "2028-01-01T00:00:00Z", "transaction_id": null, "withdrawn_reason": null},
     {"kind": "operator", "started_at": "2027-06-01T00:00:00Z", "vested_through": "2100-01-01T00:00:00Z",
      "status": "confirmed", "confirmed_at": "2027-06-01T00:00:00Z", "transaction_id": null, "withdrawn_reason": null}]',
@@ -82,14 +82,14 @@ select public.set_customer_entitlement('ctm_1',
 select results_eq(
   $$select kind, vested_through from public.vested_entitlements where customer_id = 'ctm_1' order by kind$$,
   $$values ('operator'::text, '2026-06-01 00:00+00'::timestamptz),
-    ('qualifying_run'::text, '2028-02-01 00:00+00'::timestamptz)$$,
+    ('paid_time'::text, '2028-02-01 00:00+00'::timestamptz)$$,
   'stores no operator grant from the computed grants, and keeps the one added by hand');
 
 -- The run is confirmed again later, unchanged.
 select is(
   public.set_customer_entitlement('ctm_1',
     '{"access_status": "lapsed"}',
-    '[{"kind": "qualifying_run", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
+    '[{"kind": "paid_time", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-02-01T00:00:00Z",
        "status": "confirmed", "confirmed_at": "2028-01-01T00:00:00Z", "transaction_id": null,
        "withdrawn_reason": null}]',
     '{}'),
@@ -123,7 +123,7 @@ select throws_ok(
   '23514', null, 'rejects a run without how far it is paid');
 select throws_ok(
   $$select public.set_customer_entitlement('ctm_1', '{"access_status": "active"}',
-    '[{"kind": "qualifying_run", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-01-01T00:00:00Z",
+    '[{"kind": "paid_time", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-01-01T00:00:00Z",
        "status": "withdrawn", "confirmed_at": null, "transaction_id": null, "withdrawn_reason": null}]', null)$$,
   '23514', null, 'rejects a withdrawn grant without its reason');
 select throws_ok(

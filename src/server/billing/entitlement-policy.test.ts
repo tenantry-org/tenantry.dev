@@ -114,7 +114,7 @@ function compute(input: Omit<Partial<EntitlementInput>, 'now'> & { now: string; 
 
 const vested = (entitlement: Entitlement) => iso(entitlement.vestedThrough);
 const confirmedRuns = (entitlement: Entitlement) =>
-  entitlement.grants.filter((grant) => grant.kind === 'qualifying_run' && grant.status === 'confirmed');
+  entitlement.grants.filter((grant) => grant.kind === 'paid_time' && grant.status === 'confirmed');
 
 describe('the owner’s table', () => {
   describe('12 monthly payments kept', () => {
@@ -149,7 +149,7 @@ describe('the owner’s table', () => {
     const payments = monthly('2027-01-01T00:00:00Z', 18);
     const half = adjustment(payments[5], 'refund', '2027-06-10T00:00:00Z', { amount: 1950 });
 
-    it('counts half of month 6, and the qualifying period continues: it vests 15 days later, in month 13', () => {
+    it('counts half of month 6, and paid time adds up past it: it vests 15 days later, in month 13', () => {
       // June has 30 days: the first 15 are counted. 12 months of counted time (365 days from 1 January 2027) are
       // served 15 days after 1 January 2028.
       const at = compute({ payments, adjustments: [half], now: '2028-01-15T00:00:00Z' });
@@ -162,11 +162,11 @@ describe('the owner’s table', () => {
     it.each([
       ['2027-06-20T00:00:00Z', null],
       ['2028-01-15T23:59:59Z', null],
-      // Vested through the start plus the counted time served: 12 months at first, 15 days behind the calendar.
-      ['2028-01-16T00:00:00Z', '2028-01-01T00:00:00.000Z'],
-      ['2028-03-01T00:00:00Z', '2028-02-15T00:00:00.000Z'],
-      // All 18 months served: 18 months less 15 days.
-      ['2028-09-01T00:00:00Z', '2028-06-16T00:00:00.000Z'],
+      // Vested through the end of the paid time served: the moment 12 months of it are served, then on with it.
+      ['2028-01-16T00:00:00Z', '2028-01-16T00:00:00.000Z'],
+      ['2028-03-01T00:00:00Z', '2028-03-01T00:00:00.000Z'],
+      // All 18 months served: the end of the last paid month.
+      ['2028-09-01T00:00:00Z', '2028-07-01T00:00:00.000Z'],
     ])('at %s, vested through %s', (now, through) => {
       expect(vested(compute({ payments, adjustments: [half], now }))).toBe(through);
     });
@@ -191,7 +191,7 @@ describe('the owner’s table', () => {
 
     expect(entitlement.run?.paidThrough).toEqual(date('2027-06-01T00:00:00Z'));
     expect(entitlement.paymentStatuses[payments[5].transactionId]).toBe('refunded');
-    // June adds no time but continues the qualifying period: 12 months are counted 30 days after 1 January 2028.
+    // June adds no time: 12 months are counted 30 days after 1 January 2028.
     expect(compute({ payments, adjustments: refunds, now: '2028-01-15T00:00:00Z' }).run).toMatchObject({
       startedAt: date('2027-01-01T00:00:00Z'),
       vestsAt: date('2028-01-31T00:00:00Z'),
@@ -227,8 +227,9 @@ describe('the owner’s table', () => {
         startedAt: date('2027-01-01T00:00:00Z'),
         vestsAt: date('2028-02-01T00:00:00Z'),
       });
+      // Then vested through the end of the paid time served.
       expect(vested(compute({ payments: longer, adjustments: [refund], now: '2028-03-15T00:00:00Z' }))).toBe(
-        '2028-02-13T00:00:00.000Z',
+        '2028-03-15T00:00:00.000Z',
       );
     });
   });
@@ -449,9 +450,9 @@ describe('the owner’s table', () => {
         now: '2028-03-15T00:00:00Z',
       });
 
-      // Vested through the counted time served: short of now by the minutes the penny rounding of the credit took.
-      const kept = Math.floor(((39000 - credit.amount!) / 39000) * 366 * DAY);
-      expect(entitlement.vestedThrough).toEqual(new Date(date('2028-03-15T00:00:00Z').getTime() - (92 * DAY - kept)));
+      // 6 months, 3 of the term kept (less the minutes the penny rounding of the credit took) and 5 and a half monthly
+      // ones served: vested, through the end of the paid time served.
+      expect(vested(entitlement)).toBe('2028-03-15T00:00:00.000Z');
       expect(entitlement.run).toMatchObject({ startedAt: date('2027-01-01T00:00:00Z') });
       expect(entitlement.grants).toContainEqual(
         expect.objectContaining({ kind: 'annual_term', status: 'withdrawn', withdrawnReason: 'refund' }),
@@ -499,10 +500,9 @@ describe('the owner’s table', () => {
       );
     });
 
-    it('continues the qualifying period while the billing periods follow on, counting only the time kept', () => {
+    it('adds up the paid time across the month the credit took back, counting only the time kept', () => {
       const switched = annual('2027-01-01T00:00:00Z');
-      // Half credited: the kept money pays to 2 July 12:00. Monthly billing starts on 1 August, inside the annual
-      // billing period, so the qualifying period continues; July is not counted.
+      // Half credited: the kept money pays to 2 July 12:00. Monthly billing starts on 1 August; July is not counted.
       const credit = adjustment(switched, 'credit', '2027-04-01T00:00:00Z', { amount: 19500 });
       const later = monthly('2027-08-01T00:00:00Z', 6);
 
@@ -533,11 +533,8 @@ describe('the owner’s table', () => {
       ]);
       const vestedAt = new Date(date('2028-01-01T00:00:00Z').getTime() + short);
       expect(confirmedRuns(at('2028-01-01T00:14:00Z'))).toEqual([
-        // Vested through the start plus the counted time served: 12 months, and the 31 seconds served since.
-        expect.objectContaining({
-          confirmedAt: vestedAt,
-          vestedThrough: new Date(date('2028-01-01T00:14:00Z').getTime() - short),
-        }),
+        // Vested through the end of the paid time served: now, in the month being served.
+        expect.objectContaining({ confirmedAt: vestedAt, vestedThrough: date('2028-01-01T00:14:00Z') }),
       ]);
     });
   });
@@ -552,8 +549,9 @@ describe('the owner’s table', () => {
 
       expect(before.vestedThrough).toBeNull();
       expect(after.paymentStatuses[payments[3].transactionId]).toBe('charged_back');
-      // 396 days elapsed, 366 counted.
-      expect(vested(after)).toBe('2028-01-02T00:00:00.000Z');
+      // 396 days elapsed, 366 counted: vested since 31 January, through the end of the paid time served.
+      expect(after.grants).toEqual([expect.objectContaining({ confirmedAt: date('2028-01-31T00:00:00Z') })]);
+      expect(vested(after)).toBe('2028-02-01T00:00:00.000Z');
     });
 
     it.each([
@@ -598,6 +596,77 @@ describe('the owner’s table', () => {
   });
 });
 
+describe('paid time adds up across gaps', () => {
+  // Releases published during the gaps below.
+  const inGap = date('2028-06-01T00:00:00Z');
+
+  it('vests six months, a two-year gap and six more months once the twelfth month is served', () => {
+    const payments = [
+      ...monthly('2027-01-01T00:00:00Z', 6, { subscriptionId: 'sub_1' }),
+      ...monthly('2029-07-01T00:00:00Z', 6, { subscriptionId: 'sub_2' }),
+    ];
+    const subscriptions = [ended('sub_1', '2027-07-01T00:00:00Z'), running('sub_2')];
+    const at = (now: string) => compute({ payments, subscriptions, now });
+
+    // 181 days, then 184 from 1 July 2029: 365 days on 1 January 2030.
+    expect(at('2029-12-31T23:59:59Z').vestedThrough).toBeNull();
+    expect(at('2029-12-31T23:59:59Z').run).toMatchObject({ monthsPaid: 12, vestsAt: date('2030-01-01T00:00:00Z') });
+    const vestedNow = at('2030-01-01T00:00:00Z');
+    expect(vested(vestedNow)).toBe('2030-01-01T00:00:00.000Z');
+    // No lower bound: a release published in the gap is vested too.
+    expect(coversRelease(vestedNow.vestedThrough, inGap)).toBe(true);
+  });
+
+  it('vests eleven months, a gap and one month at the end of that month', () => {
+    const payments = [
+      ...monthly('2027-01-01T00:00:00Z', 11, { subscriptionId: 'sub_1' }),
+      ...monthly('2028-09-01T00:00:00Z', 1, { subscriptionId: 'sub_2' }),
+    ];
+    const subscriptions = [ended('sub_1', '2027-12-01T00:00:00Z'), ended('sub_2', '2028-10-01T00:00:00Z')];
+    const at = (now: string) => compute({ payments, subscriptions, now });
+
+    // 334 days, then September's 30: one day short of 365, within the month-end allowance, every month kept in full.
+    expect(at('2028-09-30T23:59:59Z').vestedThrough).toBeNull();
+    expect(vested(at('2028-10-01T00:00:00Z'))).toBe('2028-10-01T00:00:00.000Z');
+    expect(vested(at('2029-03-01T00:00:00Z'))).toBe('2028-10-01T00:00:00.000Z');
+  });
+
+  it('keeps the date at the end of the last paid month through a gap, and moves it on only while paid time is served', () => {
+    const payments = [
+      ...monthly('2027-01-01T00:00:00Z', 12, { subscriptionId: 'sub_1' }),
+      ...monthly('2029-01-01T00:00:00Z', 3, { subscriptionId: 'sub_2' }),
+    ];
+    const at = (now: string) =>
+      vested(compute({ payments, subscriptions: [ended('sub_1', '2028-01-01T00:00:00Z'), running('sub_2')], now }));
+
+    expect(at('2028-01-01T00:00:00Z')).toBe('2028-01-01T00:00:00.000Z');
+    expect(at('2028-11-01T00:00:00Z')).toBe('2028-01-01T00:00:00.000Z');
+    expect(at('2029-02-10T00:00:00Z')).toBe('2029-02-10T00:00:00.000Z');
+    expect(at('2029-12-01T00:00:00Z')).toBe('2029-04-01T00:00:00.000Z');
+  });
+
+  it('takes vesting away when a refund of an early month leaves less than 12 months, and keeps a reversed chargeback', () => {
+    const payments = [
+      ...monthly('2027-01-01T00:00:00Z', 6, { subscriptionId: 'sub_1' }),
+      ...monthly('2028-01-01T00:00:00Z', 6, { subscriptionId: 'sub_2' }),
+    ];
+    const subscriptions = [ended('sub_1', '2027-07-01T00:00:00Z'), ended('sub_2', '2028-07-01T00:00:00Z')];
+    const now = '2028-08-01T00:00:00Z';
+    const at = (adjustments: PaymentAdjustment[]) => compute({ payments, adjustments, subscriptions, now });
+
+    // 181 + 182 days: two short of 365, so the allowance vests it at the end of June 2028.
+    expect(vested(at([]))).toBe('2028-07-01T00:00:00.000Z');
+    const refund = adjustment(payments[1], 'refund', '2028-07-20T00:00:00Z');
+    expect(at([refund]).vestedThrough).toBeNull();
+    expect(at([refund]).grants).toEqual([]);
+
+    const chargeback = adjustment(payments[1], 'chargeback', '2028-07-20T00:00:00Z');
+    expect(at([chargeback]).vestedThrough).toBeNull();
+    const reversed = { ...chargeback, status: 'reversed', reversedAt: date('2028-07-25T00:00:00Z') };
+    expect(vested(at([reversed]))).toBe('2028-07-01T00:00:00.000Z');
+  });
+});
+
 describe('the owner’s example', () => {
   // Monthly through 2027, cancelled at the end of December. v1.4 came out in 2027, v1.5 during the gap in 2028, v1.6
   // just before the customer came back in June 2028.
@@ -616,21 +685,24 @@ describe('the owner’s example', () => {
     expect(coversRelease(entitlement.vestedThrough, v14)).toBe(true);
   });
 
-  it('starts a new qualifying period on return, and keeps no right to v1.6 after cancelling again', () => {
+  it('adds the paid time on return to the time before the gap, and moves the date on as it is served', () => {
     const back = compute({
       payments: [...firstRun, ...comeback(1)],
       subscriptions: [firstEnd, running('sub_2')],
       now: '2028-06-10T00:00:00Z',
     });
-    expect(back.run).toMatchObject({ startedAt: date('2028-06-01T00:00:00Z'), monthsPaid: 1 });
+    expect(back.run).toMatchObject({ startedAt: date('2027-01-01T00:00:00Z'), monthsPaid: 13 });
+    expect(vested(back)).toBe('2028-06-10T00:00:00.000Z');
 
+    // Cancelled again after two months: vested through the end of July 2028, so v1.5 and v1.6 from the gap too.
     const gone = compute({
       payments: [...firstRun, ...comeback(2)],
       subscriptions: [firstEnd, ended('sub_2', '2028-08-01T00:00:00Z')],
       now: '2028-09-01T00:00:00Z',
     });
-    expect(vested(gone)).toBe('2028-01-01T00:00:00.000Z');
-    expect(coversRelease(gone.vestedThrough, v16)).toBe(false);
+    expect(vested(gone)).toBe('2028-08-01T00:00:00.000Z');
+    expect(coversRelease(gone.vestedThrough, v15)).toBe(true);
+    expect(coversRelease(gone.vestedThrough, v16)).toBe(true);
   });
 
   it('vests through May 2029, including v1.5 from the gap, if they stay to the end of May 2029', () => {
@@ -666,7 +738,7 @@ describe('a subscription ending with its payment kept in full', () => {
     );
   });
 
-  it('counts a period paused part-way in full, but a pause of more than an hour starts a new qualifying period', () => {
+  it('counts a period paused part-way in full, and the time after the resumption adds to it, overlap counted once', () => {
     const before = monthly('2027-01-01T00:00:00Z', 6, { subscriptionId: 'sub_1' });
     // Paused on 15 June with June kept; resumed on 20 June, when Paddle bills a new period from the resumption.
     const after = monthly('2027-06-20T00:00:00Z', 13, { subscriptionId: 'sub_2' });
@@ -677,10 +749,13 @@ describe('a subscription ending with its payment kept in full', () => {
         now,
       });
 
-    // The first six months, June in full, are a qualifying period of their own; it does not reach 12 months.
-    expect(at('2028-01-05T00:00:00Z').vestedThrough).toBeNull();
-    expect(at('2028-01-05T00:00:00Z').run).toMatchObject({ startedAt: date('2027-06-20T00:00:00Z') });
-    expect(vested(at('2028-06-20T00:00:00Z'))).toBe('2028-06-20T00:00:00.000Z');
+    // June in full and the periods from 20 June overlap, and count once: 12 months on 1 January 2028.
+    expect(at('2027-12-31T00:00:00Z').vestedThrough).toBeNull();
+    expect(at('2028-01-05T00:00:00Z').run).toMatchObject({
+      startedAt: date('2027-01-01T00:00:00Z'),
+      vestsAt: date('2028-01-01T00:00:00Z'),
+    });
+    expect(vested(at('2028-01-05T00:00:00Z'))).toBe('2028-01-05T00:00:00.000Z');
   });
 });
 
@@ -757,14 +832,21 @@ describe('what counts as money returned', () => {
       now: '2028-01-10T00:00:00Z',
     });
 
-    // The refunded subscription's billing periods start the qualifying period and add no time; a refund never moves
-    // its start later.
+    // The refunded subscription's billing periods add no time: the paid time is the second's, from 10 January.
     expect(confirmedRuns(entitlement)).toEqual([
       expect.objectContaining({
-        startedAt: date('2027-01-01T00:00:00Z'),
-        vestedThrough: date('2028-01-01T00:00:00Z'),
+        startedAt: date('2027-01-10T00:00:00Z'),
+        confirmedAt: date('2028-01-10T00:00:00Z'),
+        vestedThrough: date('2028-01-10T00:00:00Z'),
       }),
     ]);
+
+    // Both kept: the overlapping days count once, so 12 months are served on 1 January 2028, not earlier.
+    const both = (now: string) =>
+      compute({ payments: [...first, ...second], subscriptions: [running('sub_1'), running('sub_2')], now });
+    expect(both('2027-12-31T23:59:59Z').vestedThrough).toBeNull();
+    expect(both('2027-12-31T23:59:59Z').run).toMatchObject({ monthsPaid: 12, vestsAt: date('2028-01-01T00:00:00Z') });
+    expect(vested(both('2028-01-01T00:00:00Z'))).toBe('2028-01-01T00:00:00.000Z');
   });
 });
 
@@ -906,32 +988,35 @@ describe('attempts to vest more than the money kept pays for', () => {
   it('holds at most 90% of the time for a customer refunded 10% of every payment', () => {
     const two = monthly('2027-01-01T00:00:00Z', 24);
     const tenth = two.map((paid) => adjustment(paid, 'refund', '2027-01-02T00:00:00Z', { amount: 390 }));
-    const entitlement = compute({ payments: two, adjustments: tenth, now: '2030-01-01T00:00:00Z' });
-    const paidFor = date('2029-01-01T00:00:00Z').getTime() - date('2027-01-01T00:00:00Z').getTime();
+    const [paidTime] = confirmedRuns(compute({ payments: two, adjustments: tenth, now: '2030-01-01T00:00:00Z' }));
 
-    const [run] = confirmedRuns(entitlement);
-    expect(run.vestedThrough.getTime() - run.startedAt.getTime()).toBeLessThanOrEqual(0.9 * paidFor);
-    expect(run.vestedThrough.getTime() - run.startedAt.getTime()).toBeGreaterThan(0.9 * paidFor - DAY);
+    // 12 months of the first 90% of each month are served 13 and a third months in, in the first days of February
+    // 2028; in the end, vested through the end of the last month's kept 90%.
+    expect(paidTime.confirmedAt!.getTime()).toBeGreaterThan(date('2028-02-05T00:00:00Z').getTime());
+    expect(paidTime.confirmedAt!.getTime()).toBeLessThan(date('2028-02-15T00:00:00Z').getTime());
+    expect(paidTime.vestedThrough).toEqual(
+      new Date(date('2028-12-01T00:00:00Z').getTime() + Math.floor(0.9 * 31 * DAY)),
+    );
   });
 
-  it('never moves the vested-through date later by refunding the first payment, however much of it', () => {
+  it('never moves the vested-through date later by refunding the first payment, however much of it, and vests later', () => {
     const fourteen = monthly('2027-01-01T00:00:00Z', 14);
     const now = '2028-03-01T00:00:00Z';
     const half = adjustment(fourteen[0], 'refund', '2027-01-05T00:00:00Z', { amount: 1950 });
     const rest = adjustment(fourteen[0], 'refund', '2027-01-06T00:00:00Z', { amount: 1950 });
+    const grant = (adjustments: PaymentAdjustment[]) =>
+      confirmedRuns(compute({ payments: fourteen, adjustments, now }))[0];
 
-    const kept = compute({ payments: fourteen, now }).vestedThrough!;
-    const halfReturned = compute({ payments: fourteen, adjustments: [half], now }).vestedThrough!;
-    const allReturned = compute({ payments: fourteen, adjustments: [half, rest], now }).vestedThrough!;
-
-    expect(halfReturned.getTime()).toBeLessThan(kept.getTime());
-    expect(allReturned.getTime()).toBeLessThan(halfReturned.getTime());
-    expect(confirmedRuns(compute({ payments: fourteen, adjustments: [half, rest], now }))[0].startedAt).toEqual(
-      date('2027-01-01T00:00:00Z'),
-    );
+    const [kept, halfReturned, allReturned] = [grant([]), grant([half]), grant([half, rest])];
+    expect(halfReturned.vestedThrough.getTime()).toBeLessThanOrEqual(kept.vestedThrough.getTime());
+    expect(allReturned.vestedThrough.getTime()).toBeLessThanOrEqual(halfReturned.vestedThrough.getTime());
+    expect(halfReturned.confirmedAt!.getTime()).toBeGreaterThan(kept.confirmedAt!.getTime());
+    expect(allReturned.confirmedAt!.getTime()).toBeGreaterThan(halfReturned.confirmedAt!.getTime());
+    // With January refunded in full the paid time starts in February.
+    expect(allReturned.startedAt).toEqual(date('2027-02-01T00:00:00Z'));
   });
 
-  it('gives no time for billing periods that kept a qualifying period going but were refunded', () => {
+  it('gives no time for billing periods that were refunded', () => {
     // Every other month refunded in full: of 24 months billed, January, March, May, July, September and November are
     // counted, 184 days a year, so 365 days are counted 27 days into November 2028.
     const two = monthly('2027-01-01T00:00:00Z', 24);
@@ -941,14 +1026,14 @@ describe('attempts to vest more than the money kept pays for', () => {
     const at = (now: string) => vested(compute({ payments: two, adjustments: everyOther, now }));
 
     expect(at('2028-11-27T23:59:59Z')).toBeNull();
-    // Vested through the start plus the time counted: 12 months at first, 368 days in the end.
-    expect(at('2028-11-28T00:00:00Z')).toBe('2028-01-01T00:00:00.000Z');
-    expect(at('2029-06-01T00:00:00Z')).toBe('2028-01-04T00:00:00.000Z');
+    // Vested through the end of the paid time served: then, and in the end the end of November 2028.
+    expect(at('2028-11-28T00:00:00Z')).toBe('2028-11-28T00:00:00.000Z');
+    expect(at('2029-06-01T00:00:00Z')).toBe('2028-12-01T00:00:00.000Z');
   });
 
-  it('does not bridge a lapse with a period bought and refunded in full, which ends its subscription at once', () => {
+  it('adds six months before a lapse to the months after it; a term refunded in full in between adds nothing', () => {
     // Six months, then an annual term refunded in full four days in (Paddle's full refund cancels the subscription),
-    // then nothing until monthly payments from December. The refunded term does not keep the first six months going.
+    // then nothing until monthly payments from December.
     const first = monthly('2027-01-01T00:00:00Z', 6, { subscriptionId: 'sub_1' });
     const term = annual('2027-07-01T00:00:00Z', { subscriptionId: 'sub_2' });
     const refund = adjustment(term, 'refund', '2027-07-05T00:00:00Z');
@@ -961,15 +1046,18 @@ describe('attempts to vest more than the money kept pays for', () => {
     const at = (now: string) =>
       compute({ payments: [...first, term, ...later], adjustments: [refund], subscriptions, now });
 
-    expect(at('2028-06-15T00:00:00Z').vestedThrough).toBeNull();
-    expect(at('2028-06-15T00:00:00Z').run).toMatchObject({ startedAt: date('2027-12-01T00:00:00Z') });
-    expect(vested(at('2028-12-01T00:00:00Z'))).toBe('2028-12-01T00:00:00.000Z');
+    // 181 days to 1 July 2027, and 184 more from 1 December: 365 days on 2 June 2028.
+    expect(at('2028-06-01T00:00:00Z').vestedThrough).toBeNull();
+    expect(at('2028-06-01T00:00:00Z').run).toMatchObject({
+      startedAt: date('2027-01-01T00:00:00Z'),
+      vestsAt: date('2028-06-02T00:00:00Z'),
+    });
+    expect(vested(at('2028-06-15T00:00:00Z'))).toBe('2028-06-15T00:00:00.000Z');
   });
 
   it('never moves the vested-through date later by a refund that ends a subscription early', () => {
     // March refunded; the first subscription cancelled at once on 10 December with December kept, and a second from
-    // 20 December. A refund of December must not split the qualifying period so that the second starts afresh,
-    // clear of March's missing month.
+    // 20 December. A refund of December takes away December's time and nothing more.
     const first = monthly('2027-01-01T00:00:00Z', 12, { subscriptionId: 'sub_1' });
     const second = monthly('2027-12-20T00:00:00Z', 24, { subscriptionId: 'sub_2' });
     const march = adjustment(first[2], 'refund', '2027-03-05T00:00:00Z');
@@ -1024,14 +1112,22 @@ describe('attempts to take vested time from a customer whose money was kept', ()
 });
 
 describe('timing', () => {
-  it('allows timestamp jitter between periods, but a gap of one day breaks the qualifying period', () => {
-    const jitter = monthly('2027-01-01T00:00:00Z', 6).concat(monthly('2027-07-01T00:30:00Z', 6));
-    expect(compute({ payments: jitter, now: '2028-01-02T00:00:00Z' }).vestedThrough).not.toBeNull();
+  it.each([
+    ['none', 0],
+    ['30 minutes', 30 * 60 * 1000],
+    ['2 hours', 2 * HOUR],
+    ['a day', DAY],
+  ])('treats a gap of %s between subscriptions the same: the paid time adds up, the gap is not counted', (_, gap) => {
+    const second = new Date(date('2027-07-01T00:00:00Z').getTime() + gap).toISOString();
+    const payments = monthly('2027-01-01T00:00:00Z', 6).concat(monthly(second, 6));
+    const vestsAt = new Date(date('2028-01-01T00:00:00Z').getTime() + gap);
 
-    const gap = monthly('2027-01-01T00:00:00Z', 6).concat(monthly('2027-07-02T00:00:00Z', 6));
-    const entitlement = compute({ payments: gap, now: '2028-01-03T00:00:00Z' });
-    expect(entitlement.vestedThrough).toBeNull();
-    expect(entitlement.run).toMatchObject({ startedAt: date('2027-07-02T00:00:00Z'), monthsPaid: 6 });
+    expect(compute({ payments, now: '2027-12-31T23:00:00Z' }).run).toMatchObject({
+      startedAt: date('2027-01-01T00:00:00Z'),
+      monthsPaid: 12,
+    });
+    expect(compute({ payments, now: new Date(vestsAt.getTime() - 1).toISOString() }).vestedThrough).toBeNull();
+    expect(compute({ payments, now: vestsAt.toISOString() }).vestedThrough).toEqual(vestsAt);
   });
 
   it('vests a period started on the 31st whose month-end periods fall a few days short of 12 months', () => {
@@ -1063,8 +1159,10 @@ describe('timing', () => {
     },
   );
 
-  it('shows no current qualifying period for a customer whose last counted time ended more than a grace period ago', () => {
-    expect(compute({ payments: monthly('2027-01-01T00:00:00Z', 3), now: '2027-05-15T00:00:00Z' }).run).toBeNull();
+  it('shows a returning customer the paid time from before their gap, and a lapsed one none', () => {
+    const payments = monthly('2027-01-01T00:00:00Z', 3);
+    expect(compute({ payments, now: '2029-05-15T00:00:00Z' }).run).toMatchObject({ monthsPaid: 3 });
+    expect(compute({ payments, now: '2029-05-15T00:00:00Z', endedAt: '2027-04-01T00:00:00Z' }).run).toBeNull();
   });
 });
 
@@ -1228,10 +1326,6 @@ describe('properties over generated histories', () => {
     return total;
   }
 
-  // The time vested: each confirmed qualifying period from its start to its vested-through date.
-  const vestedTime = (entitlement: Entitlement) =>
-    confirmedRuns(entitlement).reduce((sum, g) => sum + (g.vestedThrough.getTime() - g.startedAt.getTime()), 0);
-
   const seeds = Array.from({ length: 40 }, (_, i) => i + 1);
   const nows = ['2027-09-01T00:00:00Z', '2028-06-01T00:00:00Z', '2030-01-01T00:00:00Z'];
 
@@ -1246,27 +1340,36 @@ describe('properties over generated histories', () => {
     }
   });
 
-  it.each(seeds)('never vests more time than the kept money pays for and has been served (seed %i)', (seed) => {
+  it.each(seeds)('vests paid time if and only if 12 months of kept paid time have been served (seed %i)', (seed) => {
     const { payments, adjustments: made } = history(seed, { reversals: false });
     const segments = keptSegments(payments, made);
+    const twelveMonths = { least: 365 * DAY, most: 366 * DAY };
 
     for (const now of nows) {
+      const at = date(now).getTime();
       const entitlement = compute({ payments, adjustments: made, now });
-      // Only an annual term kept in full vests time not yet served: its whole term, from its payment.
-      for (const grant of entitlement.grants.filter((g) => g.kind === 'annual_term' && g.status === 'confirmed')) {
-        const paid = payments.find((p) => p.transactionId === grant.transactionId)!;
-        expect(made.some((a) => a.transactionId === paid.transactionId)).toBe(false);
-        expect(grant.vestedThrough).toEqual(paid.periodEndsAt);
-      }
+      const served = covered(segments, Number.NEGATIVE_INFINITY, at);
+      const [paidTime] = confirmedRuns(entitlement);
 
-      for (const grant of confirmedRuns(entitlement)) {
-        expect(grant.vestedThrough.getTime()).toBeLessThanOrEqual(date(now).getTime());
-        const from = grant.startedAt.getTime();
-        const served = covered(segments, from, date(now).getTime());
-        // The time vested is at most the counted time served since the start, which reached 12 months (less the
-        // month-end allowance) when it vested.
-        expect(grant.vestedThrough.getTime() - from).toBeLessThanOrEqual(served);
-        expect(covered(segments, from, grant.confirmedAt!.getTime())).toBeGreaterThanOrEqual(365 * DAY - 3 * DAY);
+      // Vested once 12 months are served (more than any 12 calendar months), and never before 12 months less the
+      // month-end allowance.
+      if (served >= twelveMonths.most) expect(paidTime).toBeDefined();
+      if (served < twelveMonths.least - 3 * DAY) expect(paidTime).toBeUndefined();
+      if (!paidTime) continue;
+
+      expect(covered(segments, Number.NEGATIVE_INFINITY, paidTime.confirmedAt!.getTime())).toBeGreaterThanOrEqual(
+        twelveMonths.least - 3 * DAY,
+      );
+      // Through the end of the paid time served: none of it later, and never later than now.
+      const through = paidTime.vestedThrough.getTime();
+      expect(through).toBeLessThanOrEqual(at);
+      // (The module rounds each kept share down to the millisecond; this test does not.)
+      expect(covered(segments, through, at)).toBeLessThan(1);
+      expect(covered(segments, through - HOUR, through)).toBeGreaterThan(0);
+
+      // An annual term is vested at once only while nothing of its payment is returned.
+      for (const grant of entitlement.grants.filter((g) => g.kind === 'annual_term' && g.status === 'confirmed')) {
+        expect(made.some((a) => a.transactionId === grant.transactionId)).toBe(false);
       }
     }
   });
@@ -1292,7 +1395,10 @@ describe('properties over generated histories', () => {
         const after = compute({ payments, adjustments: [...made, extra], subscriptions, now });
 
         expect(after.vestedThrough?.getTime() ?? 0).toBeLessThanOrEqual(before.vestedThrough?.getTime() ?? 0);
-        expect(vestedTime(after)).toBeLessThanOrEqual(vestedTime(before));
+        const [vestedAfter] = confirmedRuns(after);
+        const [vestedBefore] = confirmedRuns(before);
+        if (vestedAfter)
+          expect(vestedAfter.confirmedAt!.getTime()).toBeGreaterThanOrEqual(vestedBefore.confirmedAt!.getTime());
       }
     }
   });
@@ -1306,23 +1412,6 @@ describe('properties over generated histories', () => {
       expect(entitlement.vestedThrough).toBeNull();
       expect(entitlement.grants.filter((grant) => grant.status !== 'withdrawn')).toEqual([]);
     }
-  });
-
-  it.each(seeds)('never vests more than the share of the paid time the kept money pays for (seed %i)', (seed) => {
-    // Monthly payments only, at one price, so money and time are in proportion.
-    const { payments, adjustments: made } = history(seed, { reversals: false });
-    const months = payments.filter((paid) => paid.billingInterval === 'month' && paid.charged > 0);
-    const kept = made.filter((a) => months.some((paid) => paid.transactionId === a.transactionId));
-    const paidFor = months.reduce(
-      (sum, paid) => sum + (paid.periodEndsAt.getTime() - paid.periodStartsAt.getTime()),
-      0,
-    );
-    const keptFor = keptSegments(months, kept).reduce((sum, [a, b]) => sum + (b - a), 0);
-
-    const entitlement = compute({ payments: months, adjustments: kept, now: '2030-01-01T00:00:00Z' });
-
-    expect(vestedTime(entitlement)).toBeLessThanOrEqual(keptFor + months.length * HOUR);
-    expect(keptFor).toBeLessThanOrEqual(paidFor);
   });
 });
 

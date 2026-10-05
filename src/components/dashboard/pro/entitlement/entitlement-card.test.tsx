@@ -7,17 +7,17 @@ const render = (entitlement: (typeof ENTITLEMENT)[keyof typeof ENTITLEMENT]) =>
   renderToStaticMarkup(<EntitlementCard entitlement={entitlement} />);
 
 describe('EntitlementCard', () => {
-  it('shows a monthly subscriber the paid months of the qualifying period, and when it vests', () => {
+  it('shows a monthly subscriber their paid months, and when they vest', () => {
     const html = render(ENTITLEMENT.active);
 
-    expect(html).toContain('4 of 12</span> paid months');
+    expect(html).toContain('4 of 12</span> months');
     expect(html).toContain('If your subscription continues, 12 paid months are reached on 1 January 2027');
-    expect(html).toContain('the start of your qualifying period plus the paid time served');
+    expect(html).toContain('your vested-through date, the end of the paid time you have served');
+    expect(html).toContain('Paid time adds up across subscriptions, with or without a gap between them.');
+    expect(html).not.toMatch(/qualifying|within an hour|from zero/);
     expect(html).toContain(
       'A refund, credit or chargeback of a payment takes away the time that money paid for, so 12 paid months are reached later;',
     );
-    expect(html).not.toContain('starts again after it');
-    expect(html).toContain('and no new one starts within an hour, the qualifying period starts again from zero');
     expect(html).toContain(
       'a full refund of your latest paid billing period, or a chargeback of any payment, also cancels your subscription',
     );
@@ -27,8 +27,8 @@ describe('EntitlementCard', () => {
   it('shows a vested subscriber their vested-through date, and that it moves forward', () => {
     const html = render(ENTITLEMENT.vestedActive);
 
-    expect(html).toContain('reached 12 paid months on 1 January 2027');
-    expect(html).toContain('moves forward as your paid time is served');
+    expect(html).toContain('Your paid time reached 12 months on 1 January 2027');
+    expect(html).toContain('moves forward as further paid time is served');
     expect(html).not.toContain('end of each paid month');
     expect(html).toContain('vested-through date is <span class="font-medium text-foreground">1 March 2027</span>');
   });
@@ -36,8 +36,8 @@ describe('EntitlementCard', () => {
   it('does not say 12 months were reached until the twelfth is served', () => {
     const html = render(ENTITLEMENT.twelvePaid);
 
-    expect(html).not.toContain('reached 12 paid months');
-    expect(html).toContain('12 of 12</span> paid months');
+    expect(html).not.toContain('reached 12 months');
+    expect(html).toContain('12 of 12</span> months');
     expect(html).toContain('12 paid months are reached on 1 January 2027');
   });
 
@@ -75,10 +75,9 @@ describe('EntitlementCard', () => {
     expect(html).toContain('serves you the vested releases');
     expect(html).toContain('31 December 2027');
     expect(html).toContain('every patch release of a minor version whose x.y.0 release is vested, whenever it');
-    expect(html).not.toContain('Qualifying period:');
-    expect(html).toContain('Subscribing again never takes away the vested releases');
-    expect(html).toContain('more than an hour after this one ended starts a new qualifying period');
-    expect(html).not.toContain('A new subscription starts a new qualifying period');
+    expect(html).not.toContain('Paid time:');
+    expect(html).toContain('Subscribing again never takes away the vested releases, and the paid time you have kept');
+    expect(html).not.toMatch(/qualifying|an hour/);
   });
 
   it('tells a lapsed customer with nothing vested that the feed serves them nothing', () => {

@@ -482,10 +482,10 @@ if output="$(restore "$dir")"; then pass "the subscriber's other token keeps wor
 fi
 
 # Vesting computed from the ledger: scripts/rehearse.mjs backdates 12 paid months, /api/reconcile vests them, a refund
-# of half the newest one or a chargeback of it takes the vesting away (the money kept no longer pays for 12 continuous
-# months), and undo removes what the script wrote. The customer has no subscription, so reconcile asks Paddle nothing.
-# Their real payment is kept, so the qualifying period runs through it and the vested-through date is the reconcile's
-# time, on or after that payment's start.
+# of half the newest one or a chargeback of it takes the vesting away (the money kept no longer pays for 12 months
+# served), and undo removes what the script wrote. The customer has no subscription, so reconcile asks Paddle nothing.
+# Their real payment is kept, so the paid time runs through it and the vested-through date is the reconcile's time, on
+# or after that payment's start.
 signup computed lapsed
 anchor="$(iso_before 86400)"
 rest payments "{\"transaction_id\":\"txn_e2e_$run_id\",\"customer_id\":\"$(customer_of computed)\",
@@ -499,7 +499,7 @@ rehearse() {
     node scripts/rehearse.mjs "$1" "$(email_of computed)" 2>&1)
 }
 vested_of() {
-  rest_get vested_entitlements "customer_id=eq.$(customer_of computed)&kind=eq.qualifying_run&select=status,vested_through" |
+  rest_get vested_entitlements "customer_id=eq.$(customer_of computed)&kind=eq.paid_time&select=status,vested_through" |
     jq -r '.[0] | if . == null then "none" else .status + " " + (.vested_through | sub("\\+00:00$"; "Z") | sub("\\.[0-9]+Z$"; "Z")) end'
 }
 vested_on_or_after_anchor() {
