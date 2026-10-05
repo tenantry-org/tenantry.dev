@@ -7,12 +7,12 @@ import { publishedSince } from '@/lib/docs-versions';
 import { cn } from '@/lib/utils';
 
 // What is specific to Tenantry, from Tenantry Core's docs for the release the site shows: efcore-integration.md (write
-// isolation, database per tenant, TenantModel), efcore-advanced.md (models that cannot be isolated), analyzers.md (from
+// isolation, database per tenant), efcore-advanced.md (models that cannot be isolated), analyzers.md (from
 // Core 0.7.0), tenant-resolution.md and access-control.md.
 const PRINCIPLES = [
   {
     icon: ShieldCheck,
-    title: 'Writes are checked, not only reads',
+    title: 'Writes are checked too',
     text: 'SaveChanges refuses another tenant’s entity before anything is written. TenantId is a concurrency token, so an update or delete of another tenant’s row by its id matches no row and the save fails. ExecuteUpdate cannot set TenantId.',
   },
   {
@@ -22,14 +22,14 @@ const PRINCIPLES = [
   },
   {
     icon: ListChecks,
-    // Core 0.7.0 adds the analyzers.
+    // Core 0.7.0 adds the analyzers. Kept behind the gate: a withdrawn release leaves the site (README, Docs pipeline).
     title: publishedSince('core', 'v0.7.0') ? 'Model checks and build warnings' : 'Model checks',
-    text: `UseTenantry() refuses a model it cannot isolate, such as a tenant-owned entity whose base type is not tenant-owned. TenantModel.FindUnisolatedEntityTypes lists the entity types still to mark tenant-owned or shared, for a test that fails when one is added.${publishedSince('core', 'v0.7.0') ? ' The build warns about an entity with a TenantId that is not tenant-owned (TNY1001), IgnoreQueryFilters() on a tenant-owned entity (TNY1002), and a tenant read from the request with no access validator (TNY2001).' : ''}`,
+    text: `Building a model Tenantry cannot isolate throws, such as a tenant-owned entity whose base type is not tenant-owned.${publishedSince('core', 'v0.7.0') ? ' The build warns about an entity with a TenantId that is not tenant-owned (TNY1001), IgnoreQueryFilters() on a tenant-owned entity (TNY1002), and a tenant read from the request with no access validator (TNY2001).' : ''}`,
   },
   {
     icon: SlidersHorizontal,
-    title: 'Your keys, your registry',
-    text: 'A Guid, int, string or any parsable tenant key, resolved from a header, subdomain, host name, route value, claim or a resolver of your own, and found in your own store by id, slug or custom domain. Access validation refuses a request for a tenant the caller does not belong to.',
+    title: 'Tenant keys, resolvers and stores',
+    text: 'A Guid, int, string or any parsable tenant key, resolved from a header, subdomain, host name, route value, claim or a resolver of your own, and found in your own store by id, slug or custom domain. With an access validator (ValidateTenantAccessByClaim or ValidateTenantAccess), a caller cannot use a tenant it does not belong to.',
   },
 ];
 
