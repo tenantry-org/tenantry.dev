@@ -10,11 +10,10 @@ import 'server-only';
  */
 
 const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
 
 /**
- * Assumption 1 (no longer relied on): a renewal recovered during Paddle's payment recovery is billed for the period that
- * started on the renewal date. Paid time adds up across gaps (entitlement-policy.ts), so where a recovered period
+ * Assumption 1 (no longer relied on): a renewal recovered during Paddle's payment recovery is billed for the period
+ * that started on the renewal date. Paid time adds up across gaps (entitlement-policy.ts), so where a recovered period
  * starts changes nothing but which days it counts for.
  */
 
@@ -53,11 +52,10 @@ export function subscriptionEndedAt(subscription: {
 }
 
 /**
- * Assumption 4: for a subscription started on the 29th to the 31st, Paddle's monthly periods may end on a shorter
- * month's last day and stay on that day, so 12 monthly periods can end up to three days before the calendar date 12
- * months after the start. A run that is that close to 12 months counts as 12 months once its last period is served.
+ * Assumption 4 (no longer relied on): for a subscription started on the 29th to the 31st, Paddle's monthly periods may
+ * end on a shorter month's last day and stay on that day. Each monthly billing period counts as one paid month whatever
+ * its length (entitlement-policy.ts: monthsOf), so that drift changes nothing.
  */
-export const MONTH_END_TOLERANCE_MS = 3 * DAY_MS;
 
 /**
  * Assumption 5: a completed transaction listed through Paddle's API (transactions.list, status completed) is the

@@ -7,9 +7,9 @@
  *
  *   node --env-file=<sandbox env file> scripts/rehearse.mjs <command> <customer email> [arguments]
  *
- *   vested <email>                 12 paid months before the customer's first real payment, so their paid time has
- *                                  reached 12 months: the releases published up to the end of the paid time served
- *                                  are vested
+ *   vested <email>                 12 monthly billing periods before the customer's first real payment, so their paid
+ *                                  time has reached 12 paid months: the releases published up to the end of the paid
+ *                                  time served are vested
  *   annual <email>                 an annual term paid for the year before the customer's first real payment: its
  *                                  grant is confirmed, as every annual term's is when paid, and the releases published
  *                                  up to that payment's start are vested
@@ -17,7 +17,7 @@
  *                                  that payment paid for, and any vesting that relied on it
  *   partial <email> [percent]      an approved refund of part of the newest rehearsal payment (50% unless given): the
  *                                  payment then counts for the share of its period the money kept pays for, and the
- *                                  paid time reaches 12 months that much later
+ *                                  paid time reaches 12 paid months that much later
  *   chargeback <email>             an approved chargeback of the newest rehearsal payment, now: like a full refund
  *   grant <email> <date> <note>    an operator grant vesting the releases published up to <date> (ISO 8601)
  *   undo <email>                   deletes every row this script wrote for the customer

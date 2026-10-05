@@ -10,10 +10,11 @@ describe('EntitlementCard', () => {
   it('shows a monthly subscriber their paid months, and when they vest', () => {
     const html = render(ENTITLEMENT.active);
 
-    expect(html).toContain('4 of 12</span> months');
+    expect(html).toContain('4 of 12</span> paid months');
     expect(html).toContain('If your subscription continues, 12 paid months are reached on 1 January 2027');
     expect(html).toContain('your vested-through date, the end of the paid time you have served');
-    expect(html).toContain('Paid time adds up across subscriptions, with or without a gap between them.');
+    expect(html).toContain('Paid months add up across subscriptions, with or without a gap between them.');
+    expect(html).toContain('Each monthly billing period you keep is a paid month, and an annual one twelve.');
     expect(html).not.toMatch(/qualifying|within an hour|from zero/);
     expect(html).toContain(
       'A refund, credit or chargeback of a payment takes away the time that money paid for, so 12 paid months are reached later;',
@@ -27,7 +28,7 @@ describe('EntitlementCard', () => {
   it('shows a vested subscriber their vested-through date, and that it moves forward', () => {
     const html = render(ENTITLEMENT.vestedActive);
 
-    expect(html).toContain('Your paid time reached 12 months on 1 January 2027');
+    expect(html).toContain('Your paid time reached 12 paid months on 1 January 2027');
     expect(html).toContain('moves forward as further paid time is served');
     expect(html).not.toContain('end of each paid month');
     expect(html).toContain('vested-through date is <span class="font-medium text-foreground">1 March 2027</span>');
@@ -36,8 +37,8 @@ describe('EntitlementCard', () => {
   it('does not say 12 months were reached until the twelfth is served', () => {
     const html = render(ENTITLEMENT.twelvePaid);
 
-    expect(html).not.toContain('reached 12 months');
-    expect(html).toContain('12 of 12</span> months');
+    expect(html).not.toContain('reached 12 paid months');
+    expect(html).toContain('12 of 12</span> paid months');
     expect(html).toContain('12 paid months are reached on 1 January 2027');
   });
 

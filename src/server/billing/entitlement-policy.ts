@@ -10,7 +10,7 @@ import type {
   PaymentStatus,
   SubscriptionState,
 } from '@/server/db/billing-store';
-import { isAnnualTerm, MONTH_END_TOLERANCE_MS, REVERSAL_RECORD_WINDOW_MS } from '@/server/billing/paddle-assumptions';
+import { isAnnualTerm, REVERSAL_RECORD_WINDOW_MS } from '@/server/billing/paddle-assumptions';
 
 /**
  * What a customer may access, as pure functions: the one place that answers it, for the webhook and reconcile path
@@ -29,21 +29,24 @@ import { isAnnualTerm, MONTH_END_TOLERANCE_MS, REVERSAL_RECORD_WINDOW_MS } from 
  * - A billing period is a payment at one of the offer prices together with the payments of the same subscription,
  *   billed at the same interval, whose periods lie within its period, such as a prorated charge (`billingPeriods`):
  *   proration pays for time already paid for, so it adds no time. A payment at another interval within it, such as a
- *   monthly one after a move from an annual term, is a billing period of its own. A billing period counts for the part of its period that the money still
- *   kept from its payments pays for. With C charged before tax across them and R returned (refunds, credits and
- *   chargebacks in effect now; a reversed one no longer returns anything), it counts for the first (C - R) / C of its
- *   period, from the period's start. Nothing if R reaches C, or if nothing was charged (a trial, a period discounted in
- *   full). A discount is not money returned: the share is of what was charged. A billing period kept in full counts
- *   for its whole period, even if its subscription was cancelled or paused before the period ended: that time was paid
- *   for.
- * - The customer's paid time is the counted parts of all their payments, merged where they meet or overlap, so no
- *   stretch of time counts twice. It adds up across gaps: separate subscriptions, with or without time between them,
- *   all count. It starts at the start of its first counted part.
- * - It vests when the paid time served (the paid time before now) reaches 12 months: the length of the 12 calendar
- *   months from its start. If every billing period so far counted in full, it may vest at the end of one up to
- *   MONTH_END_TOLERANCE_MS short of that. From then on it is vested through the end of the paid time served: the
- *   latest moment before now that paid time covers. In a gap that stays where the last paid period ended; a later paid
- *   period moves it on as it is served. It is never later than now.
+ *   monthly one after a move from an annual term, is a billing period of its own. A billing period counts for the part
+ *   of its period that the money still kept from its payments pays for. With C charged before tax across them and R
+ *   returned (refunds, credits and chargebacks in effect now; a reversed one no longer returns anything), it counts for
+ *   the first (C - R) / C of its period, from the period's start. Nothing if R reaches C, or if nothing was charged (a
+ *   trial, a period discounted in full). A discount is not money returned: the share is of what was charged. A billing
+ *   period kept in full counts for its whole period, even if its subscription was cancelled or paused before the
+ *   period ended: that time was paid for.
+ * - A billing period pays for months: a monthly one for one month and an annual one for twelve, whatever the length of
+ *   the period, as a calendar month runs from 28 to 31 days (`monthsOf`). Its counted part counts for the calendar
+ *   months it covers from the period's start, up to the period's months: a monthly period kept in full is one paid
+ *   month, half of it kept is half a month, and an annual period kept for its first 181 days, from 1 January, is six.
+ * - The customer's paid time is the counted parts of all their billing periods. It adds up across gaps: separate
+ *   subscriptions, with or without time between them, all count. Where counted parts overlap, the time counts once, by
+ *   the part that began first. It starts at the start of its first counted part.
+ * - It vests when the paid time served (the counted parts before now) reaches 12 paid months by that count. From then
+ *   on it is vested through the end of the paid time served: the latest moment before now that paid time covers. In a
+ *   gap that stays where the last paid period ended; a later paid period moves it on as it is served. It is never
+ *   later than now.
  * - An annual payment kept in full vests its term when it is paid: its grant is confirmed from the start of its billing
  *   period, through the term's end, so the releases published up to then are vested as they are published, even if the
  *   subscription is cancelled or paused before the term ends. Any refund, credit or chargeback of it withdraws the
@@ -214,16 +217,9 @@ export function addMonths(date: Date, months: number): Date {
   );
 }
 
-/** Whole months from `start` to `end`, counting a month that ends within the month-end tolerance of `end`. */
-export function wholeMonths(start: Date, end: Date): number {
-  let months = 0;
-  while (addMonths(start, months + 1).getTime() <= end.getTime() + MONTH_END_TOLERANCE_MS) months++;
-  return months;
-}
-
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** A billing period: its payment, and the payments of the same subscription and interval whose periods lie within it. */
+/** A billing period: its payment, and the payments of its subscription and interval whose periods lie within it. */
 interface BillingPeriod {
   payment: Payment;
   within: Payment[];
@@ -235,11 +231,34 @@ interface PaidTime {
   startedAt: Date;
   /** The end of the latest billing period at an offer price. */
   billedThrough: Date;
-  /** The billing periods at the offer prices. */
-  periods: BillingPeriod[];
-  /** The counted parts of their periods, merged where they meet or overlap, in order. */
-  counted: [number, number][];
+  /**
+   * The counted parts of the billing periods, cut where they meet or overlap so that each stretch of time is counted by
+   * one of them, in order.
+   */
+  counted: Stretch[];
 }
+
+/** A stretch of paid time, and the counted part that counts it. */
+interface Stretch {
+  from: number;
+  to: number;
+  part: CountedPart;
+}
+
+/**
+ * The counted part of a billing period: from its start to the end of the time the money kept pays for. It counts for
+ * the calendar months it covers from `periodStart`, times `scale`, which is less than 1 only for a period longer than
+ * its months (a monthly period of 31 days that starts on the 28th, for one month).
+ */
+interface CountedPart {
+  periodStart: Date;
+  from: number;
+  to: number;
+  scale: number;
+}
+
+/** Paid months closer than this to 12 are 12: a sum of shares of periods can fall short by a rounding error. */
+const MONTHS_EPSILON = 1e-6;
 
 /** The adjustments that return money, and the reversals that restore it. */
 const RETURNING_ACTIONS = ['refund', 'credit', 'chargeback'] as const;
@@ -302,9 +321,10 @@ class Ledger {
   }
 
   /**
-   * The billing periods of the payments at the offer prices: each payment whose period does not lie within the period of
-   * another payment of the same subscription billed at the same interval, with those that do. Of two payments for the same period, the one that
-   * charged more holds it (then the lower transaction id), so the grouping does not depend on the order of the ledger.
+   * The billing periods of the payments at the offer prices: each payment whose period does not lie within the period
+   * of another payment of the same subscription billed at the same interval, with those that do. Of two payments for
+   * the same period, the one that charged more holds it (then the lower transaction id), so the grouping does not
+   * depend on the order of the ledger.
    */
   billingPeriods(): BillingPeriod[] {
     const payments = this.input.payments
@@ -346,52 +366,42 @@ class Ledger {
   /** The customer's paid time, or null if no payment counts for any time. */
   paidTime(): PaidTime | null {
     const periods = this.billingPeriods();
-    const counted = merge(
-      periods.flatMap((period) => {
-        const part = this.countedPart(period);
-        return part ? [part] : [];
-      }),
+    const counted = onceEach(
+      periods
+        .flatMap((period) => {
+          const part = this.countedPart(period);
+          return part ? [part] : [];
+        })
+        .sort((a, b) => a.from - b.from || a.to - b.to),
     );
     if (counted.length === 0) return null;
 
     return {
-      startedAt: new Date(counted[0][0]),
+      startedAt: new Date(counted[0].from),
       billedThrough: new Date(Math.max(...periods.map((period) => period.payment.periodEndsAt.getTime()))),
-      periods,
       counted,
     };
   }
 
-  /**
-   * When the paid time vests, or null if it does not reach 12 months: when the paid time served reaches the length of
-   * the 12 calendar months from its start, or the end of a counted part within the month-end tolerance of that, if
-   * every billing period to there counted in full and so is sooner.
-   */
+  /** When the paid time served reaches 12 paid months, or null if it does not. */
   vestsAt(paid: PaidTime): Date | null {
-    const start = paid.startedAt.getTime();
-    const required = addMonths(paid.startedAt, 12).getTime() - start;
-    const vestings: number[] = [];
-
     let served = 0;
-    for (const [from, to] of paid.counted) {
-      if (served + (to - from) >= required) {
-        vestings.push(from + (required - served));
-        break;
+    for (const { from, to, part } of paid.counted) {
+      const months = credit(part, to) - credit(part, from);
+      if (served + months >= 12 - MONTHS_EPSILON) {
+        const at = monthsFrom(part.periodStart, (credit(part, from) + 12 - served) / part.scale);
+        return new Date(Math.min(to, Math.max(from, Math.ceil(at.getTime()))));
       }
-      served += to - from;
-      const allFull = paid.periods
-        .filter(({ payment }) => payment.periodStartsAt.getTime() >= start && payment.periodStartsAt.getTime() < to)
-        .every((period) => this.keptShare(period) >= 1);
-      if (served >= required - MONTH_END_TOLERANCE_MS && allFull) vestings.push(to);
+      served += months;
     }
-    return vestings.length === 0 ? null : new Date(Math.min(...vestings));
+    return null;
   }
 
   /**
    * A grant for each annual term: confirmed when paid (from its billing period's start) through the term's end while
    * nothing of its payment is returned, and withdrawn otherwise. An annual term is a payment at an offer price that
-   * bills yearly, that charged something, and whose billing period is a whole year (12 calendar months, less the
-   * month-end tolerance). A shorter payment at a yearly price, such as a prorated charge for a plan change, grants no
+   * bills yearly, that charged something, and whose billing period is a whole year: 12 calendar months from its start,
+   * so `monthsOf` gives 12. A shorter payment at a yearly price, such as a prorated charge for a plan change, grants no
    * term: it counts only as paid time, like any other payment.
    *
    * vested_entitlements keeps one grant per term start, so of two annual terms with the same start, one decides: the
@@ -432,7 +442,7 @@ class Ledger {
       this.isOffered(payment) &&
       payment.charged > 0 &&
       isAnnualTerm(payment.billingInterval, payment.billingFrequency) &&
-      payment.periodEndsAt.getTime() >= addMonths(payment.periodStartsAt, 12).getTime() - MONTH_END_TOLERANCE_MS
+      monthsOf(payment) >= 12
     );
   }
 
@@ -452,49 +462,102 @@ class Ledger {
     return this.input.offerPriceIds.includes(payment.priceId);
   }
 
-  // The first kept share of the billing period's period, or null if nothing of it is kept.
-  private countedPart(period: BillingPeriod): [number, number] | null {
+  // The first kept share of the billing period's period, or null if nothing of it is kept or it pays for no months.
+  private countedPart(period: BillingPeriod): CountedPart | null {
     const share = this.keptShare(period);
-    if (share <= 0) return null;
+    const { payment } = period;
+    const months = monthsOf(payment);
+    if (share <= 0 || months <= 0) return null;
 
-    const startsAt = period.payment.periodStartsAt.getTime();
-    const endsAt = period.payment.periodEndsAt.getTime();
-    return [startsAt, share >= 1 ? endsAt : startsAt + Math.floor(share * (endsAt - startsAt))];
+    const from = payment.periodStartsAt.getTime();
+    const end = payment.periodEndsAt.getTime();
+    return {
+      periodStart: payment.periodStartsAt,
+      from,
+      to: share >= 1 ? end : from + Math.floor(share * (end - from)),
+      scale: months / calendarMonths(payment.periodStartsAt, end),
+    };
   }
 }
 
 /**
- * How far the customer is towards vesting, while they have access: their paid time (served or paid ahead) in whole
- * months, and when it reaches 12 months; or, if it has not been paid that far, when it would if every billing period
- * from the end of the latest one so far counted in full.
+ * The paid months a payment's billing period pays for: its billing interval's months (12 a year, one a month) times its
+ * frequency, whatever the length of the period, as a calendar month runs from 28 to 31 days. A period that covers fewer
+ * calendar months than that from its start pays for the calendar months it covers. Nothing for another interval.
+ */
+export function monthsOf(
+  payment: Pick<Payment, 'billingInterval' | 'billingFrequency' | 'periodStartsAt' | 'periodEndsAt'>,
+): number {
+  const nominal =
+    payment.billingInterval === 'year'
+      ? 12 * payment.billingFrequency
+      : payment.billingInterval === 'month'
+        ? payment.billingFrequency
+        : 0;
+  return Math.max(0, Math.min(nominal, calendarMonths(payment.periodStartsAt, payment.periodEndsAt.getTime())));
+}
+
+// The calendar months from `start` to `end`: the whole months (addMonths) and the share of the next one.
+function calendarMonths(start: Date, end: number): number {
+  if (end <= start.getTime()) return 0;
+  let whole = 0;
+  while (addMonths(start, whole + 1).getTime() <= end) whole++;
+  const from = addMonths(start, whole).getTime();
+  return whole + (end - from) / (addMonths(start, whole + 1).getTime() - from);
+}
+
+// The moment `months` calendar months (whole and part) after `start`: the inverse of calendarMonths.
+function monthsFrom(start: Date, months: number): Date {
+  const whole = Math.floor(months);
+  const from = addMonths(start, whole).getTime();
+  return new Date(from + (months - whole) * (addMonths(start, whole + 1).getTime() - from));
+}
+
+// The paid months a counted part counts for from its start to `at`.
+function credit(part: CountedPart, at: number): number {
+  return part.scale * calendarMonths(part.periodStart, Math.min(part.to, Math.max(part.from, at)));
+}
+
+/**
+ * How far the customer is towards vesting, while they have access: their paid months (served or paid ahead), whole,
+ * and when they reach 12; or, if they have not been paid that far, when they would if every month from the end of the
+ * latest billing period were paid in full.
  */
 function progress(paid: PaidTime, vestsAt: Date | null): CurrentRun {
-  const counted = sum(paid.counted.map(([from, to]) => to - from));
-  const required = addMonths(paid.startedAt, 12).getTime() - paid.startedAt.getTime();
+  const months = sum(paid.counted.map(({ from, to, part }) => credit(part, to) - credit(part, from)));
   return {
     startedAt: paid.startedAt,
-    paidThrough: new Date(paid.counted.at(-1)![1]),
-    monthsPaid: wholeMonths(paid.startedAt, new Date(paid.startedAt.getTime() + counted)),
-    vestsAt: vestsAt ?? new Date(paid.billedThrough.getTime() + Math.max(0, required - counted)),
+    paidThrough: new Date(paid.counted.at(-1)!.to),
+    monthsPaid: Math.floor(months + MONTHS_EPSILON),
+    vestsAt: vestsAt ?? monthsFrom(paid.billedThrough, 12 - months),
   };
 }
 
 // The end of the paid time served by `now`: the latest moment before it that a counted part covers. A part starting at
 // `now` has served nothing yet.
 function servedThrough(paid: PaidTime, now: number): number {
-  const last = paid.counted.filter(([from]) => from < now).at(-1)!;
-  return Math.min(last[1], now);
+  const last = paid.counted.filter(({ from }) => from < now).at(-1)!;
+  return Math.min(last.to, now);
 }
 
-// The intervals merged where they meet or overlap, in order.
-function merge(intervals: [number, number][]): [number, number][] {
-  const merged: [number, number][] = [];
-  for (const [from, to] of [...intervals].sort((a, b) => a[0] - b[0] || a[1] - b[1])) {
-    const last = merged.at(-1);
-    if (last && from <= last[1]) last[1] = Math.max(last[1], to);
-    else merged.push([from, to]);
+// The counted parts cut where they meet or overlap into stretches, each counted by the part that began first (the
+// longer on a tie), in order, so overlapping time counts once and a part counts only time no earlier part covers.
+// Neighbouring stretches counted by the same part are joined.
+function onceEach(parts: CountedPart[]): Stretch[] {
+  const edges = [...new Set(parts.flatMap(({ from, to }) => [from, to]))].sort((a, b) => a - b);
+  const stretches: Stretch[] = [];
+  for (let i = 0; i + 1 < edges.length; i++) {
+    const [from, to] = [edges[i], edges[i + 1]];
+    const covering = parts.filter((part) => part.from <= from && part.to >= to);
+    if (covering.length === 0) continue;
+    const part = covering.reduce((first, next) =>
+      next.from < first.from || (next.from === first.from && next.to > first.to) ? next : first,
+    );
+    const last = stretches.at(-1);
+    if (last && last.to === from && last.part === part) last.to = to;
+    else stretches.push({ from, to, part });
   }
-  return merged;
+  return stretches;
 }
 
 // How much an adjustment returns: everything charged if Paddle calls it full (its amount, computed on another total,

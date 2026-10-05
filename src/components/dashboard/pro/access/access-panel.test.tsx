@@ -49,7 +49,7 @@ describe('AccessPanel', () => {
 
     expect(html).toContain('licence.key');
     expect(html).toContain('serves you every Tenantry Pro release');
-    expect(html).toContain('4 of 12</span> months');
+    expect(html).toContain('4 of 12</span> paid months');
     expect(html).toContain('1 January 2027');
   });
 

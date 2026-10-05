@@ -33,17 +33,19 @@ export default function EulaPage() {
         or when those 30 days pass without the payment being collected. All dates and times in this section are in UTC.
       </p>
       <p>
-        Vesting follows the money you keep: paid time adds up across all your billing periods, with or without gaps
-        between them, and vests at 12 months, and money returned to you takes away the time it paid for. Each payment
-        for a billing period of any of your Tenantry Pro subscriptions, at a monthly or yearly price this site has
-        offered, gives a paid period: the part of that billing period that the money kept from the payment pays for,
-        counted from the start of the billing period. A payment kept in full gives the whole billing period, even if the
-        subscription was cancelled or paused before the period ended. If part of a payment has been returned to you, the
-        paid period is the same share of the billing period as the share of the payment you kept: if half of a
-        month&apos;s payment is refunded, the paid period is the first half of that month. A payment of which everything
-        has been returned, or for which nothing was charged (a trial, or a period discounted to zero), gives no paid
-        period. Amounts are compared before tax. A discount does not count as money returned, so a discounted payment
-        that you keep gives the whole billing period.
+        Vesting follows the money you keep: your paid months add up across all your billing periods, with or without
+        gaps between them, and vest at 12, and money returned to you takes away the time it paid for. Each billing
+        period of any of your Tenantry Pro subscriptions, at a monthly or yearly price this site has offered, gives a
+        paid period: the part of that billing period that the money kept from its payments pays for, counted from the
+        start of the billing period. A payment for part of a billing period you have already paid for, such as a
+        prorated charge, adds no time: its money counts together with the billing period&apos;s payment. A billing
+        period whose payments you keep in full gives the whole billing period, even if the subscription was cancelled or
+        paused before the period ended. If part of the money has been returned to you, the paid period is the same share
+        of the billing period as the share of the money you kept: if half of a month&apos;s payment is refunded, the
+        paid period is the first half of that month. A billing period of which everything has been returned, or for
+        which nothing was charged (a trial, or a period discounted to zero), gives no paid period. Amounts are compared
+        before tax. A discount does not count as money returned, so a discounted payment that you keep gives the whole
+        billing period.
       </p>
       <p>
         Money is returned to you by a refund, a credit or a chargeback once it has been approved. A correction of tax
@@ -53,19 +55,22 @@ export default function EulaPage() {
         time, and a reversal restores it.
       </p>
       <p>
-        Your paid time is the total length of your paid periods, from all of your Tenantry Pro subscriptions, whether or
-        not there are gaps between them, counting any time in which paid periods overlap, as when you change plan or
-        hold two subscriptions, once. It starts at the start of your first paid period. It vests when the paid time
-        served, up to the present time, adds up to the length of the 12 calendar months from its start (&quot;12 paid
-        months&quot;). If every billing period from its start so far was kept in full, it vests at the end of one of
-        them that falls no more than three days short of that, which allows for billing dates at the end of shorter
-        months. Once it has vested, its vested-through date is the end of the paid time you have served: the latest
-        time, up to the present, that one of your paid periods covers. The date moves on as further paid time is served,
-        in the same subscription or a later one; between subscriptions it stays at the end of your last paid period; and
-        it is never later than the present time. For example, if you pay for six months, have no subscription for two
-        years and then pay for six more months, your paid time vests when the twelfth paid month has been served, and
-        your vested-through date is then that day, so the releases published during the two years are vested too. If
-        half of the sixth month&apos;s payment had been refunded, it would vest half a month later, if you kept paying.
+        Your paid months count your paid periods, from all of your Tenantry Pro subscriptions, whether or not there are
+        gaps between them. A monthly billing period kept in full is one paid month and an annual billing period kept in
+        full is twelve, whatever the number of days in them. A paid period that is part of a billing period counts for
+        the calendar months it covers from the start of the billing period: the first half of a monthly billing period
+        is half a paid month. Time in which paid periods overlap, as when you change plan or hold two subscriptions,
+        counts once, for the paid period that began first. Your paid time (all your paid periods together) starts at the
+        start of your first paid period. It vests when the paid months you have served, up to the present time, add up
+        to 12 (&quot;12 paid months&quot;). Once it has vested, its vested-through date is the end of the paid time you
+        have served: the latest time, up to the present, that one of your paid periods covers. The date moves on as
+        further paid time is served, in the same subscription or a later one; between subscriptions it stays at the end
+        of your last paid period; and it is never later than the present time. For example, if you pay for six months,
+        have no subscription for two years and then pay for six more months, your paid time vests at the end of the
+        twelfth monthly billing period, and your vested-through date is then that day, so the releases published during
+        the two years are vested too. If half of the sixth month&apos;s payment had been refunded, that month would be
+        half a paid month, and your paid time would vest halfway through a thirteenth monthly billing period, when half
+        of its days have been served, if you kept paying.
       </p>
       <p>
         A full refund of your subscription&apos;s latest paid billing period, or a chargeback of any of its payments,

@@ -35,8 +35,9 @@ export default function RefundsPage() {
         vested releases, vested-through date) are defined in the <a href="/legal/eula">EULA</a>, section 2. Vesting
         follows the money you keep: a refund, a credit or a chargeback of a payment takes away the time that money paid
         for, and any vesting that relied on it, whenever it is approved, as that section sets out. For example, a refund
-        of half a month&apos;s payment leaves the first half of that month as a paid period: your paid time reaches 12
-        paid months half a month later than it would have. Any refund of an annual term withdraws the term&apos;s grant.
+        of half a month&apos;s payment leaves the first half of that month as a paid period, half a paid month, so your
+        paid time reaches 12 paid months half of a monthly billing period later than it would have. Any refund of an
+        annual term withdraws the term&apos;s grant.
       </p>
       <p>
         When a full refund of your subscription&apos;s latest paid billing period is approved, or any of its payments is

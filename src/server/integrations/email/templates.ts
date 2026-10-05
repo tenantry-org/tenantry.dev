@@ -56,7 +56,7 @@ export function feedTokenCreatedEmail(
 }
 
 /**
- * Sent when a grant is confirmed: paid time reaches 12 months in total, or an annual term is paid. Not sent as the
+ * Sent when a grant is confirmed: paid time reaches 12 paid months in total, or an annual term is paid. Not sent as the
  * vested-through date moves forward month by month afterwards. `annualTerm` says the date is the end of an annual term
  * not over yet, whose releases are vested as they are published.
  */
@@ -68,7 +68,7 @@ export function vestingConfirmedEmail(
 ): EmailMessage {
   const what = annualTerm
     ? `Your annual term is paid, so every Tenantry Pro release published on or before ${longDate(vestedThrough)}, the end of the term and your vested-through date, is vested, including those published later in the term.`
-    : `Your paid time has reached 12 months, so every Tenantry Pro release published on or before ${longDate(vestedThrough)}, your vested-through date, is now vested.`;
+    : `Your paid time has reached 12 paid months, so every Tenantry Pro release published on or before ${longDate(vestedThrough)}, your vested-through date, is now vested.`;
   const next = annualTerm
     ? "A refund, credit or chargeback of the term's payment withdraws them, even after the term. Paying for another year vests that year's releases in the same way."
     : 'Your vested-through date moves forward as further paid time is served, now or in a later subscription; between subscriptions it stays where your last paid period ended. A refund, credit or chargeback takes away the time its money paid for.';

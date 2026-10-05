@@ -112,20 +112,21 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
   if (paidTime.reached) {
     return (
       <p>
-        Your paid time reached 12 months on {formatDate(paidTime.vestsAt)}. Your vested-through date moves forward as
-        further paid time is served.
+        Your paid time reached 12 paid months on {formatDate(paidTime.vestsAt)}. Your vested-through date moves forward
+        as further paid time is served.
       </p>
     );
   }
 
   return (
     <p>
-      Paid time: <span className={'font-medium text-foreground'}>{paidTime.monthsPaid} of 12</span> months. If your
-      subscription continues, 12 paid months are reached on {formatDate(paidTime.vestsAt)}, and your releases then start
-      to vest: those published up to your vested-through date, the end of the paid time you have served. Paid time adds
-      up across subscriptions, with or without a gap between them. A refund, credit or chargeback of a payment takes
-      away the time that money paid for, so 12 paid months are reached later; a full refund of your latest paid billing
-      period, or a chargeback of any payment, also cancels your subscription.
+      Paid time: <span className={'font-medium text-foreground'}>{paidTime.monthsPaid} of 12</span> paid months. Each
+      monthly billing period you keep is a paid month, and an annual one twelve. If your subscription continues, 12 paid
+      months are reached on {formatDate(paidTime.vestsAt)}, and your releases then start to vest: those published up to
+      your vested-through date, the end of the paid time you have served. Paid months add up across subscriptions, with
+      or without a gap between them. A refund, credit or chargeback of a payment takes away the time that money paid
+      for, so 12 paid months are reached later; a full refund of your latest paid billing period, or a chargeback of any
+      payment, also cancels your subscription.
     </p>
   );
 }
