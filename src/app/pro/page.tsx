@@ -29,13 +29,13 @@ const YOUR_STEP = publishedSince('pro', 'v0.8.0')
 const WORKFLOWS = [
   {
     title: 'Keep every tenant database migrated',
-    text: 'Run migrate-tenants as a deployment step to apply pending migrations to every tenant database or schema. It tries every one, unless --max-failures or a stop signal ends the run early, and exits non-zero if any failed, which stops the release. Run one at a time: two runs from overlapping deployments race.',
+    text: 'Run migrate-tenants as a deployment step to apply pending migrations to every tenant database or schema. It tries every one, unless --max-failures or a stop signal ends the run early, and exits non-zero unless every one migrated, which stops the release. Run one at a time: two runs from overlapping deployments race, and with EF Core 8 on MySQL a race inside a larger migration can leave it half applied.',
     caption: 'Program.cs',
     code: `await using var app = builder.Build();
 
 // dotnet run -- migrate-tenants
 if (await app.RunTenantMigrationsIfRequestedAsync(args) is { } exitCode)
-    return exitCode;   // 1 if any database or schema failed
+    return exitCode;   // not 0 unless every database and schema migrated
 
 await app.RunAsync();
 return 0;`,
