@@ -88,10 +88,10 @@ again before Hangfire creates the job:
 
 ```csharp
 builder.Services.AddTenantry<string>(tenant => tenant
-    .ResolveFromHeader("X-Tenant")                             // no access check: any caller may name any tenant
+    .ResolveFromHeader("X-Tenant")
     .UseInMemoryStore([acme, globex])
     .RequireTenantByDefault()
-    .ValidateTenantActivity(t => t.As<AppTenant>().IsActive)   // the tenant is not suspended
+    .ValidateTenantActivity(t => t.As<AppTenant>().IsActive)
     .UsePro(pro => pro.AddHangfirePropagation()));
 
 builder.Services.AddHangfire((sp, config) => config
@@ -100,10 +100,6 @@ builder.Services.AddHangfire((sp, config) => config
     .UseTenantry(sp));
 builder.Services.AddHangfireServer();
 ```
-
-The app in this post has no sign-in. `ValidateTenantActivity` checks the tenant, not the caller: an application with users
-also checks that the caller may use the tenant the header names, with `ValidateTenantAccessByClaim` or
-`ValidateTenantAccess`.
 
 `OrderTotalsJob` and the `/totals` endpoint are unchanged. Enqueued in each tenant's request, the job ran as that
 tenant, with its `DbContext` and `ITenantContext<string>` resolved in the tenant's scope:
@@ -132,12 +128,8 @@ Administrator code that runs without a tenant names one with `WithTenant`:
 ```csharp
 app.MapPost("/admin/totals/{tenantId}", (string tenantId, IBackgroundJobClient jobs) =>
     jobs.WithTenant(tenantId).Enqueue<OrderTotalsJob>(job => job.RunAsync()))
-    .AllowMissingTenant()
-    .RequireAuthorization("TenantAdministration");
+    .AllowMissingTenant();
 ```
-
-The endpoint chooses the tenant from its route, which Tenantry's access validation does not check, so it needs an
-authorization policy of its own.
 
 A request to `/admin/totals/globex` with no tenant header enqueued a job that ran as Globex and saw its one order.
 
