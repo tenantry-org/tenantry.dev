@@ -2,8 +2,9 @@
 title: Running EF Core migrations across tenant databases
 description: With a database per tenant, every release has to migrate every tenant's database. What a hand-written loop gets wrong, and how Tenantry Pro runs it as a deployment step.
 date: 2026-10-03
+updated: 2026-10-05
 author: Oliver McNally
-versions: Tenantry 0.6, .NET 10 and EF Core 10
+versions: Tenantry 0.7, .NET 10, EF Core 10 and PostgreSQL 16
 tags: [dotnet, efcore, multitenancy, devops]
 next:
   label: Read the tenant migrations guide
@@ -71,7 +72,7 @@ await using var app = builder.Build();   // disposing it at exit writes out the 
 
 // dotnet MyApp.dll migrate-tenants
 if (await app.RunTenantMigrationsIfRequestedAsync(args) is { } exitCode)
-    return exitCode;   // 1 if any database failed, which fails the deployment step
+    return exitCode;   // not 0 if any database failed, which fails the deployment step
 
 await app.RunAsync();
 return 0;
@@ -99,7 +100,8 @@ Console.WriteLine($"{report.Succeeded} of {report.Total} databases migrated");
 ```
 
 Each result names its tenants, its database and schema, its duration, the exception if it failed, and the migrations
-this run applied. A migration another process applied first is not counted.
+added to its history during the run. A migration another process applied first is not counted, but when two runs
+migrate the same database at once, either or both may list one.
 
 ### How many at once
 
