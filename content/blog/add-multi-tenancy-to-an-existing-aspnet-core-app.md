@@ -2,9 +2,9 @@
 title: Add multi-tenancy to an existing ASP.NET Core application
 description: Keep your organisations table as the tenant registry, resolve the tenant on each request, and isolate EF Core data with one call on the DbContext you already have.
 date: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 author: Oliver McNally
-versions: Tenantry 0.6, .NET 10, EF Core 10 and PostgreSQL 16
+versions: Tenantry 0.7, .NET 10, EF Core 10 and PostgreSQL 16
 tags: [dotnet, aspnetcore, efcore, multitenancy]
 next:
   label: Get started with Tenantry Core
@@ -201,7 +201,10 @@ The isolation is in EF Core, not in the database:
 - SQL you send yourself with `SqlQuery` or `ExecuteSql` is not seen. Add the tenant to it yourself. `FromSql` on a
   tenant entity is filtered like any other query on it.
 - `IgnoreQueryFilters()` turns the tenant filter off for that query, for administrators' reports. On EF Core 10,
-  `IgnoreQueryFilters([TenantryQueryFilters.Tenant])` keeps your other filters.
+  `IgnoreQueryFilters([TenantryQueryFilters.Tenant])` keeps your other filters. The build warns at both calls
+  (TNY1002). In the report, which reads every organisation on purpose, put
+  `#pragma warning disable TNY1002 // the admin report reads every organisation's orders` before the query and
+  `#pragma warning restore TNY1002` after it.
 - A context whose options do not call `UseTenantry()` is not isolated.
 - Anything that reaches the database directly is not checked. If that matters, add row-level security in the
   database, or give each tenant a database of its own.
