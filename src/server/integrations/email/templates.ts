@@ -91,14 +91,12 @@ export function vestingConfirmedEmail(
 export interface WithdrawnGrant {
   kind: 'qualifying_run' | 'annual_term';
   vestedThrough: Date;
-  withdrawnReason: 'refund' | 'chargeback' | 'term_not_completed' | null;
+  withdrawnReason: 'refund' | 'chargeback' | null;
 }
 
 const WITHDRAWN_BECAUSE: Record<NonNullable<WithdrawnGrant['withdrawnReason']>, string> = {
   refund: 'money paid for it was refunded or credited',
   chargeback: 'a payment it relied on was charged back',
-  // No longer recorded (vesting follows the money kept), but rows from before may still say so.
-  term_not_completed: 'the subscription ended before the annual term was completed',
 };
 
 /** Sent when vested releases are taken away: money returned from an annual term, or that a qualifying period relied on. */

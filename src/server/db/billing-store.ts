@@ -85,7 +85,7 @@ export interface Access {
 
 export type GrantKind = 'qualifying_run' | 'annual_term';
 export type GrantStatus = 'confirmed' | 'withdrawn';
-export type WithdrawnReason = 'refund' | 'chargeback' | 'term_not_completed';
+export type WithdrawnReason = 'refund' | 'chargeback';
 
 /** A row of `vested_entitlements`, keyed by kind and start. */
 export interface Grant {
