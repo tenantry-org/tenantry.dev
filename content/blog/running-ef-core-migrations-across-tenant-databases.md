@@ -69,6 +69,7 @@ migrations and exits:
 
 ```csharp
 await using var app = builder.Build();   // disposing it at exit writes out the last log messages
+app.UseTenantry();                       // without it, the host refuses to start serving requests
 
 // dotnet MyApp.dll migrate-tenants
 if (await app.RunTenantMigrationsIfRequestedAsync(args) is { } exitCode)
@@ -101,7 +102,7 @@ Console.WriteLine($"{report.Succeeded} of {report.Total} databases migrated");
 
 Each result names its tenants, its database and schema, its duration, the exception if it failed, and the migrations
 added to its history during the run. A migration another process applied first is not counted, but when two runs
-migrate the same database at once, either or both may list one.
+migrate the same database at once, a migration may be listed by either run, or by both.
 
 ### How many at once
 
