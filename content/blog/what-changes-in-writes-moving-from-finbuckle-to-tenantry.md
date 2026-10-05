@@ -1,6 +1,6 @@
 ---
-title: What changes in a shared-database app's writes when it moves from Finbuckle.MultiTenant to Tenantry
-description: The same Order entity and the same writes, run against Finbuckle.MultiTenant 10.1.4 and Tenantry Core 0.7.0, with the SQL each one sends and the result.
+title: Writes after moving from Finbuckle.MultiTenant to Tenantry
+description: The same Order entity and the same writes in one shared database, run against Finbuckle.MultiTenant 10.1.4 and Tenantry Core 0.7.0, with the SQL each one sends and the result.
 date: 2026-10-04
 author: Oliver McNally
 versions: Tenantry 0.7.0, Finbuckle.MultiTenant 10.1.4, .NET 10, EF Core 10.0.12 and SQLite

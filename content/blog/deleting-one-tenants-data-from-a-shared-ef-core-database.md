@@ -6,8 +6,8 @@ author: Oliver McNally
 versions: Tenantry Core and Pro 0.7.0, .NET 10, EF Core 10.0.12 and SQLite
 tags: [dotnet, efcore, multitenancy, database]
 next:
-  label: Read about offboarding a tenant
-  href: /docs/pro/tenant-lifecycle#offboarding-a-tenant
+  label: See what Tenantry Pro includes
+  href: /pro
 draft: true
 ---
 

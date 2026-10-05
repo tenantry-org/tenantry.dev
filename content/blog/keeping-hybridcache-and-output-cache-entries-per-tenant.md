@@ -1,6 +1,6 @@
 ---
-title: Keeping HybridCache and output-cache entries per tenant in ASP.NET Core
-description: Two calls in AddTenantry key HybridCache entries and cached responses by tenant. What they returned for two tenants, with no tenant, after invalidation and on a second instance.
+title: Keeping HybridCache and output-cache entries per tenant
+description: In ASP.NET Core, two calls in AddTenantry key HybridCache entries and cached responses by tenant. What they returned for two tenants, with no tenant, after invalidation and on a second instance.
 date: 2026-10-04
 author: Oliver McNally
 versions: Tenantry 0.7.0, .NET 10 and Microsoft.Extensions.Caching.Hybrid 10.10.0

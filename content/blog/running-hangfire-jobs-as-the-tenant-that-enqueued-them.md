@@ -1,13 +1,13 @@
 ---
-title: Running Hangfire jobs as the tenant that enqueued them, in a shared database
-description: A Hangfire job enqueued in a tenant's request runs with no tenant unless something carries it. What Tenantry Core does on its own, and what Tenantry Pro's Hangfire integration adds, including suspended tenants.
+title: Running Hangfire jobs as the tenant that enqueued them
+description: In a shared database, a Hangfire job enqueued in a tenant's request runs with no tenant unless something carries it. What Tenantry Core does on its own, and what Tenantry Pro's Hangfire integration adds, including suspended tenants.
 date: 2026-10-04
 author: Oliver McNally
 versions: Tenantry Core and Pro 0.7.0, Hangfire 1.8.25, .NET 10, EF Core 10.0.12 and SQLite
 tags: [dotnet, hangfire, efcore, multitenancy]
 next:
-  label: Read the Hangfire guide
-  href: /docs/pro/hangfire
+  label: See what Tenantry Pro includes
+  href: /pro
 draft: true
 ---
 
@@ -80,7 +80,9 @@ app.MapPost("/totals-core", (IBackgroundJobClient jobs, ITenantContext<string> t
 That ran as Acme and saw its two orders, totalling 150. `RunInScopeAsync` also applies `ValidateTenantActivity`: with
 Globex suspended, the same job for Globex failed with `TenantInactiveException: Tenant 'globex' is not active, so no
 work runs for it.` This is enough for a few jobs. Every job then takes a tenant id and opens its own scope, and a job
-that leaves either out runs as no tenant.
+that leaves either out runs as no tenant. Core's guide to
+[running work as a tenant](/docs/core/non-http-hosts#running-work-as-a-tenant) describes `RunInScopeAsync` and the
+other ways to do it.
 
 ## With Tenantry Pro's Hangfire integration
 
