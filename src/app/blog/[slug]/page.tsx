@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, ResolvingMetadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
@@ -55,9 +55,15 @@ export default async function PostPage(props: Readonly<{ params: Promise<{ slug:
   );
 }
 
-export async function generateMetadata(props: Readonly<{ params: Promise<{ slug: string }> }>): Promise<Metadata> {
+export async function generateMetadata(
+  props: Readonly<{ params: Promise<{ slug: string }> }>,
+  parent: ResolvingMetadata,
+): Promise<Metadata> {
   const post = getPost((await props.params).slug);
   if (!post) notFound();
+  // A page's openGraph replaces the layout's whole, so the site's preview image (src/app/opengraph-image.tsx) is
+  // passed on here, and to twitter, which otherwise falls back to a card with no image.
+  const { openGraph, twitter } = await parent;
 
   return {
     title: `${post.title} | Tenantry`,
@@ -73,7 +79,9 @@ export async function generateMetadata(props: Readonly<{ params: Promise<{ slug:
       modifiedTime: post.updated,
       authors: [post.author],
       tags: post.tags,
+      images: openGraph?.images,
     },
+    twitter: { card: 'summary_large_image', images: twitter?.images },
     robots: post.draft ? { index: false, follow: false } : undefined,
   };
 }
