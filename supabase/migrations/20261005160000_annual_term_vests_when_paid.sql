@@ -2,8 +2,13 @@
 -- the releases published up to its term's end from the start of its billing period, and any refund, credit or
 -- chargeback of it withdraws that (src/server/billing/entitlement-policy.ts). No grant waits for its term to end any
 -- more, so:
---   vested_entitlements.status          is confirmed or withdrawn. A conditional row (an annual term kept so far) is
---                                       confirmed from its start, as the next recompute of its customer would store it.
+--   vested_entitlements.status          is confirmed or withdrawn. A conditional row whose payment is recorded with no
+--                                       refund, credit or chargeback against it is confirmed from its start, as the
+--                                       next recompute of its customer would store it. Any other conditional row is
+--                                       deleted: computed rows are only ever the recompute's, so the customer's next
+--                                       recompute (reconcile visits them while the term's billing period lasts) stores
+--                                       it as the ledger says, withdrawn if money was returned. Until then it vests
+--                                       nothing.
 --   active_subscriptions.conditional_through  goes: nothing is waiting to be confirmed.
 --   set_customer_entitlement            no longer reads it.
 --   customers_to_reconcile              no longer looks for conditional rows. A customer whose annual term has not
@@ -12,9 +17,19 @@
 -- There is no down migration. supabase/migration-tests/20261005160000_annual_term_vests_when_paid tests it against
 -- rows of the schema before it.
 
-update public.vested_entitlements
-set status = 'confirmed', confirmed_at = started_at, updated_at = now()
-where status = 'conditional';
+update public.vested_entitlements v
+set status = 'confirmed', confirmed_at = v.started_at, updated_at = now()
+where v.status = 'conditional'
+  and exists (select 1 from public.payments p where p.transaction_id = v.transaction_id)
+  and not exists (
+    select 1
+    from public.payment_adjustments a
+    where a.transaction_id = v.transaction_id
+      and a.action in ('refund', 'credit', 'chargeback', 'refund_reverse', 'credit_reverse', 'chargeback_reverse')
+      and a.status in ('approved', 'reversed')
+  );
+
+delete from public.vested_entitlements where status = 'conditional';
 
 alter table public.vested_entitlements
   drop constraint vested_entitlements_status_check,
