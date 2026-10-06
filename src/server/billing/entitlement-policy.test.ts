@@ -1028,6 +1028,45 @@ describe('what counts as money returned', () => {
     ).toMatchObject({ paidThrough: new Date(date('2027-01-01T00:00:00Z').getTime() + kept) });
   });
 
+  describe('a new purchase at a lower price overlapping a period already paid for', () => {
+    const oldYear = annual('2027-01-01T00:00:00Z');
+    const newYear = annual('2027-07-01T00:00:00Z', { charged: 30000 });
+    const annualGrants = (entitlement: Entitlement) => entitlement.grants.filter((g) => g.kind === 'annual_term');
+
+    it('gives both years their terms and about 18 paid months', () => {
+      const entitlement = compute({ payments: [oldYear, newYear], now: '2027-07-02T00:00:00Z' });
+
+      expect(annualGrants(entitlement)).toEqual([
+        expect.objectContaining({ transactionId: oldYear.transactionId, status: 'confirmed' }),
+        expect.objectContaining({ transactionId: newYear.transactionId, status: 'confirmed' }),
+      ]);
+      expect(vested(entitlement)).toBe('2028-07-01T00:00:00.000Z');
+      expect(entitlement.run).toMatchObject({ monthsPaid: 18, paidThrough: date('2028-07-01T00:00:00Z') });
+    });
+
+    it('keeps the new year when the old one is credited for its second half at the switch', () => {
+      const credit = adjustment(oldYear, 'credit', '2027-07-01T00:00:00Z', { amount: 19500, itemTypes: ['proration'] });
+      const entitlement = compute({ payments: [oldYear, newYear], adjustments: [credit], now: '2027-07-02T00:00:00Z' });
+
+      expect(annualGrants(entitlement)).toEqual([
+        expect.objectContaining({ transactionId: oldYear.transactionId, status: 'withdrawn' }),
+        expect.objectContaining({ transactionId: newYear.transactionId, status: 'confirmed' }),
+      ]);
+      expect(vested(entitlement)).toBe('2028-07-01T00:00:00.000Z');
+      // Half of the old year (182.5 of its 365 days, to 2 July 12:00) and the new year from 1 July: about 18 months.
+      expect(entitlement.run).toMatchObject({ monthsPaid: 18 });
+    });
+
+    it('counts a cheaper new monthly purchase overlapping a month', () => {
+      const january = payment('2027-01-01T00:00:00Z');
+      const cheaper = payment('2027-01-15T00:00:00Z', { charged: 2000 });
+      const entitlement = compute({ payments: [january, cheaper], now: '2027-01-20T00:00:00Z' });
+
+      // Both count: to 15 February, January and 14 of the new month's 31 days.
+      expect(entitlement.run?.paidThrough).toEqual(date('2027-02-15T00:00:00Z'));
+    });
+  });
+
   describe('a duplicate charge for a period already paid for', () => {
     const year = monthly('2027-01-01T00:00:00Z', 12);
     const may = year[4];

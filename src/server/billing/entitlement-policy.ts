@@ -26,11 +26,11 @@ import { isAnnualTerm, REVERSAL_RECORD_WINDOW_MS } from '@/server/billing/paddle
  * Vesting follows the money kept, and paid time adds up (the owner's decisions of 4 and 5 October 2026,
  * plans-and-investigations/Tenantry-Licensing-And-Feed-Plan.md section 2):
  *
- * - A billing period is a payment at one of the offer prices together with the smaller payments of the same
- *   subscription, billed at the same interval, whose periods overlap its period, such as a prorated charge
- *   (`billingPeriods`): proration pays for time already paid for, so it adds no time. A payment at another interval,
- *   such as a monthly one after a move from an annual term, and one that charged as much (a duplicate charge, or a new
- *   purchase), is a billing period of its own. A billing period counts for the part
+ * - A billing period is a payment at one of the offer prices together with the payments of the same subscription,
+ *   billed at the same interval, whose periods overlap its period, such as a prorated charge (`billingPeriods`):
+ *   proration pays for time already paid for, so it adds no time. A payment at another interval, such as a monthly one
+ *   after a move from an annual term, and one for a whole period that charged at least half as much (a duplicate
+ *   charge, or a new purchase), is a billing period of its own. A billing period counts for the part
  *   of its period that the money still kept from its payments pays for. With C charged before tax across them and R
  *   returned (refunds, credits and chargebacks in effect now; a reversed one no longer returns anything), it counts for
  *   the first (C - R) / C of its period, from the period's start. Nothing if R reaches C, or if nothing was charged (a
@@ -329,15 +329,16 @@ class Ledger {
 
   /**
    * The billing periods of the payments at the offer prices. Of the payments of one subscription billed at one
-   * interval, a payment for a whole period of that interval (`isWholePeriod`) holds a billing period unless its period overlaps one already held, and so does any other payment that overlaps none. A
-   * payment whose period overlaps one held, and that charged less than the payment holding it (or anything, if that
-   * charged nothing), is within it: a prorated charge, even one stamped with a period that runs past it. One that
-   * charged at least as much is a billing period of its own: a duplicate charge, or a new purchase, such as a new year
-   * after a move to monthly. So money
-   * returned from a duplicate takes nothing from the original; their kept time counts once (`onceEach`), and of two
-   * annual terms for one period the kept one decides (`annualTerms`). Whole periods are taken first, then the
-   * earliest-starting, then the one that charged more, then the one with more kept (then the lower transaction id), so
-   * the grouping does not depend on the order of the ledger.
+   * interval, a payment for a whole period of that interval (`isWholePeriod`) holds a billing period unless its period
+   * overlaps one already held, and so does any other payment that overlaps none. A payment whose period overlaps one
+   * held is within it, such as a prorated charge, even one stamped with a period that runs past it, unless it is for a
+   * whole period and charged at least half as much as the payment holding it: then it is a billing period of its own,
+   * a duplicate charge or a new purchase (a new year after a move to monthly, or at a lower price). Anything within a
+   * period that charged nothing is within it. So money returned from a duplicate takes nothing from the original;
+   * their kept time counts once (`onceEach`), and of two annual terms for one period the kept one decides
+   * (`annualTerms`). Whole periods are taken first, then the earliest-starting, then the one that charged more, then
+   * the one with more kept (then the lower transaction id), so the grouping does not depend on the order of the
+   * ledger.
    */
   billingPeriods(): BillingPeriod[] {
     const whole = (payment: Payment) => (isWholePeriod(payment) ? 1 : 0);
@@ -362,9 +363,13 @@ class Ledger {
           p.periodStartsAt < payment.periodEndsAt &&
           p.periodEndsAt > payment.periodStartsAt,
       );
-      if (holder && (payment.charged < holder.payment.charged || holder.payment.charged <= 0)) {
-        holder.within.push(payment);
-      } else periods.push({ payment, within: [] });
+      const ownPurchase =
+        holder !== undefined &&
+        holder.payment.charged > 0 &&
+        isWholePeriod(payment) &&
+        payment.charged * 2 >= holder.payment.charged;
+      if (holder && !ownPurchase) holder.within.push(payment);
+      else periods.push({ payment, within: [] });
     }
     return periods;
   }
