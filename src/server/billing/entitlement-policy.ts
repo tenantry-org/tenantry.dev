@@ -256,7 +256,7 @@ interface BillingPeriod {
 interface PaidTime {
   /** The start of its first counted part. */
   startedAt: Date;
-  /** The end of the latest billing period at an offer price. */
+  /** The end of the latest billing period at an offer price of which something is kept. */
   billedThrough: Date;
   /**
    * The counted parts of the billing periods, cut where they meet or overlap so that each stretch of time is counted by
@@ -421,7 +421,13 @@ class Ledger {
 
     return {
       startedAt: new Date(counted[0].from),
-      billedThrough: new Date(Math.max(...periods.map((period) => period.payment.periodEndsAt.getTime()))),
+      billedThrough: new Date(
+        Math.max(
+          ...periods
+            .filter((period) => this.keptShare(period) > 0)
+            .map((period) => period.payment.periodEndsAt.getTime()),
+        ),
+      ),
       counted,
     };
   }
@@ -589,7 +595,7 @@ function credit(part: CountedPart, at: number): number {
 /**
  * How far the customer is towards vesting, while they have access: their paid months (served or paid ahead), whole,
  * and when they reach 12; or, if they have not been paid that far, when they would if every month from the later of
- * the end of the latest billing period and now were paid in full, so the estimate is never in the past.
+ * the end of the latest billing period with money kept and now were paid in full, so the estimate is never in the past.
  */
 function progress(paid: PaidTime, vestsAt: Date | null, now: Date): CurrentRun {
   const months = sum(paid.counted.map(({ from, to, part }) => credit(part, to) - credit(part, from)));

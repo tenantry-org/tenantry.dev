@@ -1561,6 +1561,22 @@ describe('timing', () => {
     });
   });
 
+  it('estimates from the end of the paid time, not from the end of a period refunded in full', () => {
+    // An annual term bought on 1 January 2027 and refunded in full on 5 January, then monthly from 1 February.
+    const term = annual('2027-01-01T00:00:00Z');
+    const refund = adjustment(term, 'refund', '2027-01-05T00:00:00Z');
+    const month = payment('2027-02-01T00:00:00Z', { subscriptionId: 'sub_2' });
+    const entitlement = compute({
+      payments: [term, month],
+      adjustments: [refund],
+      subscriptions: [ended('sub_1', '2027-01-05T00:00:00Z'), running('sub_2')],
+      now: '2027-02-15T00:00:00Z',
+    });
+
+    // One paid month to 1 March 2027, then 11 more.
+    expect(entitlement.run).toMatchObject({ monthsPaid: 1, vestsAt: date('2028-02-01T00:00:00Z') });
+  });
+
   it('shows a returning customer the paid time from before their gap, and a lapsed one none', () => {
     const payments = monthly('2027-01-01T00:00:00Z', 3);
     expect(compute({ payments, now: '2029-05-15T00:00:00Z' }).run).toMatchObject({ monthsPaid: 3 });
