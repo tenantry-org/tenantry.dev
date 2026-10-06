@@ -20,6 +20,8 @@ jobs:
   sync:
     name: Copy the posts to dev.to
     runs-on: ubuntu-latest
+    # The script waits up to twenty minutes for the site to serve the posts.
+    timeout-minutes: 30
     # A later push supersedes a run still waiting; one that is copying finishes first.
     concurrency:
       group: devto

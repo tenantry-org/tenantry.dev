@@ -249,7 +249,9 @@ else
   fail 'scripts/feed-publish.sh pushes a published release again as unchanged' "$output"
 fi
 output="$(FEED_PUBLISH_KEY="$publish_key" bash "$repo/scripts/feed-publish.sh" list "$site" 2>&1 || true)"
+# shellcheck disable=SC2034 # read by check's eval
 first_published="$(awk -v v="$v_first" '$1 == v { print $3 }' <<<"$output")"
+# shellcheck disable=SC2034 # read by check's eval
 patch_dated="$(awk -v v="$v_patch" '$1 == v { print $6 }' <<<"$output")"
 check 'scripts/feed-publish.sh lists the releases, with the patch release dated as its minor' \
   '[[ -n "$first_published" && "$patch_dated" == "$first_published" && "$output" == *"$probe_id"* ]]' "$output"

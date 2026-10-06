@@ -69,10 +69,10 @@ pnpm install
 pnpm dev        # runs sync:docs, then next dev
 ```
 
-`pnpm test` runs lint + Prettier + `tsc` + Vitest. CI (`.github/workflows/test.yml`) runs it, `pnpm build` and the
-database tests on every push to master and every pull request; production deployments wait for those jobs (Vercel
-Deployment Checks). Copy [`.env.example`](.env.example) to `.env.local`
-and fill in the values for the services you need.
+`pnpm test` runs lint + Prettier + `tsc` + Vitest. CI (`.github/workflows/test.yml`) runs it, ShellCheck on
+`scripts/*.sh`, `pnpm build`, the database tests and the package feed's end-to-end test on every push to master or
+staging and every pull request; production deployments wait for those jobs (Vercel Deployment Checks). Copy
+[`.env.example`](.env.example) to `.env.local` and fill in the values for the services you need.
 
 **TypeScript is installed twice, under aliases.** `@typescript/native` is TypeScript 7 (`npm:typescript@^7`): its
 `tsc` is what `pnpm typecheck` runs, in `pnpm test` and CI. `typescript` is TypeScript 6
@@ -170,11 +170,11 @@ Each package download (a redirect to the package file) is recorded in `feed_down
 version, the time, and the client's network (an IPv4 address's /24, an IPv6 address's /48). Only the service role reads
 it. The daily reconcile run deletes records older than 90 days, the period the privacy policy states.
 
-`scripts/feed-e2e.sh` (`pnpm test:feed-e2e`) runs the whole journey against a local stack: publishing, creating tokens
-through the Access page's actions, restoring as a subscriber, a lapsed customer with vested releases and one without,
-revoking a token, and vesting through `scripts/rehearse.mjs` and reconcile. `scripts/rehearse.mjs` produces, in the
-sandbox only, the states that take a year to reach (vested, an annual term, a refund, a chargeback, an operator grant)
-and undoes them.
+`scripts/feed-e2e.sh` (`pnpm test:feed-e2e`, and a job in CI) runs the whole journey against a local stack:
+publishing, creating tokens through the Access page's actions, restoring as a subscriber, a lapsed customer with vested
+releases and one without, revoking a token, and vesting through `scripts/rehearse.mjs` and reconcile.
+`scripts/rehearse.mjs` produces, in the sandbox only, the states that take a year to reach (vested, an annual term, a
+refund, a chargeback, an operator grant) and undoes them.
 
 ## Docs pipeline
 
