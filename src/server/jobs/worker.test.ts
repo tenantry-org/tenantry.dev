@@ -18,7 +18,7 @@ function paddleEvent(eventId: string, eventType: string, customerId: string): Jo
     ? customerEvent({ eventId, eventType, occurredAt: '2026-09-28T10:00:00Z', customerId, email: 'buyer@example.com' })
     : subscriptionEvent({ eventId, eventType, occurredAt: '2026-09-28T10:00:00Z', customerId, status: 'active' });
 
-  return { id: eventId, attempts: 1, kind: 'paddle_event', customerId, event };
+  return { id: event.notification_id, attempts: 1, kind: 'paddle_event', customerId, event };
 }
 
 describe('drainJobs', () => {
@@ -37,7 +37,7 @@ describe('drainJobs', () => {
 
     await expect(drainJobs(handlers)).resolves.toEqual({ processed: 2, retrying: 0, failed: 0 });
     expect(handlers.applyPaddleEvent.mock.calls.map(([event]) => event.eventId)).toEqual(['evt_1', 'evt_2']);
-    expect(queue.completeJob.mock.calls).toEqual([['evt_1'], ['evt_2']]);
+    expect(queue.completeJob.mock.calls).toEqual([['ntf_evt_1'], ['ntf_evt_2']]);
     // Only a customer event lets the customer's waiting jobs run sooner: releasing them on every event would spend
     // their attempts without waiting out the backoff.
     expect(queue.releaseWaitingJobs).not.toHaveBeenCalled();
@@ -54,7 +54,7 @@ describe('drainJobs', () => {
     handlers.applyPaddleEvent.mockRejectedValueOnce(foreignKey);
 
     await expect(drainJobs(handlers)).resolves.toEqual({ processed: 0, retrying: 1, failed: 0 });
-    expect(queue.retryJob).toHaveBeenCalledWith(expect.objectContaining({ id: 'evt_1' }), foreignKey);
+    expect(queue.retryJob).toHaveBeenCalledWith(expect.objectContaining({ id: 'ntf_evt_1' }), foreignKey);
     expect(queue.completeJob).not.toHaveBeenCalled();
   });
 
@@ -76,7 +76,7 @@ describe('drainJobs', () => {
     await expect(drainJobs(handlers)).resolves.toEqual({ processed: 0, retrying: 0, failed: 1 });
     expect(alertOperator).toHaveBeenCalledOnce();
     expect(alertOperator).toHaveBeenCalledWith(
-      'Job evt_1 failed for good',
+      'Job ntf_evt_1 failed for good',
       expect.stringContaining('(Paddle event subscription.created, customer ctm_1)'),
     );
     expect(alertOperator.mock.calls[0][1]).toContain('GitHub unavailable');

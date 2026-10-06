@@ -17,27 +17,48 @@ const state = vi.hoisted(() => ({
   calls: [] as FakeCall[],
   inserted: [] as unknown[],
   claimed: [] as unknown[],
+  // customer_jobs' ids as the database keeps them, when a test sets them: an upsert that ignores duplicates stores
+  // and returns a row only if its id is new.
+  jobs: null as Set<string> | null,
 }));
 
 vi.mock('@/server/db/service-role-client', async () => {
   const { fakeSupabase } = await import('@/test/fake-supabase');
   return {
     createServiceRoleClient: () =>
-      fakeSupabase({ customer_jobs: { list: state.inserted } }, state.calls, {
-        claim_customer_jobs: () => state.claimed,
-      }),
+      fakeSupabase(
+        {
+          customer_jobs: {
+            get list() {
+              return state.jobs ? storeLastUpsert(state.jobs) : state.inserted;
+            },
+          },
+        },
+        state.calls,
+        { claim_customer_jobs: () => state.claimed },
+      ),
   };
 });
+
+function storeLastUpsert(jobs: Set<string>): unknown[] {
+  const upsert = state.calls.findLast((call) => call.table === 'customer_jobs' && call.method === 'upsert');
+  const { id } = upsert!.args[0] as { id: string };
+  if (jobs.has(id)) return [];
+  jobs.add(id);
+  return [{ id }];
+}
 
 const subscriptionCreated: PaddleEventJson = {
   event_id: 'evt_1',
   event_type: 'subscription.created',
   occurred_at: '2026-09-28T10:00:00Z',
+  notification_id: 'ntf_1',
   data: { id: 'sub_1', customer_id: 'ctm_1' },
 };
 
 beforeEach(() => {
   state.calls.length = 0;
+  state.jobs = null;
 });
 
 describe('eventCustomerId', () => {
@@ -66,15 +87,18 @@ describe('retryDelayMinutes', () => {
 });
 
 describe('enqueuePaddleEvent', () => {
-  it('stores an event once, ignoring a duplicate delivery', async () => {
-    state.inserted = [{ id: 'evt_1' }];
+  // A replay from Paddle is a new notification of the same event.
+  const replay: PaddleEventJson = { ...subscriptionCreated, notification_id: 'ntf_2' };
+
+  it('stores a notification as a job with its id', async () => {
+    state.inserted = [{ id: 'ntf_1' }];
     await expect(enqueuePaddleEvent(subscriptionCreated)).resolves.toBe(true);
     expect(state.calls).toContainEqual({
       table: 'customer_jobs',
       method: 'upsert',
       args: [
         {
-          id: 'evt_1',
+          id: 'ntf_1',
           kind: 'paddle_event',
           customer_id: 'ctm_1',
           occurred_at: '2026-09-28T10:00:00Z',
@@ -84,9 +108,22 @@ describe('enqueuePaddleEvent', () => {
         { onConflict: 'id', ignoreDuplicates: true },
       ],
     });
+  });
 
-    state.inserted = [];
+  it('drops a second delivery of the same notification', async () => {
+    state.jobs = new Set();
+
+    await expect(enqueuePaddleEvent(subscriptionCreated)).resolves.toBe(true);
     await expect(enqueuePaddleEvent(subscriptionCreated)).resolves.toBe(false);
+    expect([...state.jobs]).toEqual(['ntf_1']);
+  });
+
+  it('stores a replay of an event already stored as a new job', async () => {
+    state.jobs = new Set();
+
+    await expect(enqueuePaddleEvent(subscriptionCreated)).resolves.toBe(true);
+    await expect(enqueuePaddleEvent(replay)).resolves.toBe(true);
+    expect([...state.jobs]).toEqual(['ntf_1', 'ntf_2']);
   });
 });
 
@@ -156,14 +193,14 @@ describe('claimJobs', () => {
 
   it('claims the due jobs, each as its kind', async () => {
     state.claimed = [
-      row({ id: 'evt_1', kind: 'paddle_event', event_type: 'subscription.created', payload: subscriptionCreated }),
-      row({ id: 'evt_2', kind: 'paddle_event', customer_id: null, event_type: 'product.created', payload: {} }),
+      row({ id: 'ntf_1', kind: 'paddle_event', event_type: 'subscription.created', payload: subscriptionCreated }),
+      row({ id: 'ntf_2', kind: 'paddle_event', customer_id: null, event_type: 'product.created', payload: {} }),
       row({ id: 'reconcile_ctm_2', customer_id: 'ctm_2', attempts: 3 }),
     ];
 
     await expect(claimJobs(5, 120)).resolves.toEqual([
-      { id: 'evt_1', attempts: 1, kind: 'paddle_event', customerId: 'ctm_1', event: subscriptionCreated },
-      { id: 'evt_2', attempts: 1, kind: 'paddle_event', customerId: null, event: {} },
+      { id: 'ntf_1', attempts: 1, kind: 'paddle_event', customerId: 'ctm_1', event: subscriptionCreated },
+      { id: 'ntf_2', attempts: 1, kind: 'paddle_event', customerId: null, event: {} },
       { id: 'reconcile_ctm_2', attempts: 3, kind: 'reconcile', customerId: 'ctm_2' },
     ]);
     expect(state.calls).toContainEqual({
@@ -181,7 +218,7 @@ describe('claimJobs', () => {
 });
 
 describe('retryJob', () => {
-  const job: Job = { id: 'evt_1', attempts: 1, kind: 'paddle_event', customerId: 'ctm_1', event: subscriptionCreated };
+  const job: Job = { id: 'ntf_1', attempts: 1, kind: 'paddle_event', customerId: 'ctm_1', event: subscriptionCreated };
   const now = new Date('2026-09-28T10:00:00Z');
 
   it('schedules another attempt with backoff', async () => {
@@ -198,7 +235,7 @@ describe('retryJob', () => {
         },
       ],
     });
-    expect(state.calls).toContainEqual({ table: 'customer_jobs', method: 'eq', args: ['id', 'evt_1'] });
+    expect(state.calls).toContainEqual({ table: 'customer_jobs', method: 'eq', args: ['id', 'ntf_1'] });
   });
 
   it('gives up after the last attempt', async () => {

@@ -75,8 +75,9 @@ async function handleJob(job: Job, handlers: JobHandlers): Promise<keyof DrainRe
         `Job ${job.id} (${describe(job)}, customer ${job.customerId ?? 'none'}) failed on every attempt and will ` +
           `not be retried: ${errorMessage(error)}. Its effect is missing until someone handles it. The next ` +
           "reconcile recomputes the customer's access and entitlement from what is recorded, and records a completed " +
-          'Pro payment Paddle lists that is missing; it does not recover a lost customer, subscription or adjustment ' +
-          'event, which must be replayed from Paddle.',
+          'Pro payment, refund, credit or chargeback Paddle lists that is missing. It does not cancel a subscription ' +
+          'that an approved full refund or chargeback should end, and does not recover a lost customer or ' +
+          'subscription event: for those, replay the notification from Paddle.',
       );
     }
 

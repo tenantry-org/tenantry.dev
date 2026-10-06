@@ -366,9 +366,10 @@ $$;
 -- (src/server/jobs/worker.ts) claims due jobs with claim_customer_jobs, which hands out each customer's oldest pending
 -- job and nothing more of theirs while one is locked, so a customer's jobs never run concurrently or out of order. A
 -- failed job is retried later with backoff (next_attempt_at) and, after its last attempt, marked failed. A job is:
---   paddle_event  a verified Paddle notification, stored once each: its id is Paddle's event id, so a duplicate
---                 delivery, even a concurrent one, adds nothing. A subscription event that arrives before its customer
---                 fails the customers foreign key and waits for customer.created.
+--   paddle_event  a verified Paddle notification, stored once each: its id is Paddle's notification id, so a retried
+--                 delivery, even a concurrent one, adds nothing, and a replay (a new notification) runs again. A
+--                 subscription event that arrives before its customer fails the customers foreign key and waits for
+--                 customer.created.
 --   reconcile     checking one customer's access, GitHub membership and licence against their entitlements, queued
 --                 by the reconcile run for every customer who may need it.
 --   lease         no work: a turn held by work that runs outside the worker (linking a GitHub account), so none of the

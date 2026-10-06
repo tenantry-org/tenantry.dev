@@ -8,9 +8,9 @@ import { serverConfig } from '@/server/config/server-config';
 export const maxDuration = 60;
 
 // Paddle delivers notifications here and expects an answer within 5 seconds. The signature is verified
-// with the destination secret, the event is stored as a customer job (a duplicate delivery changes nothing),
-// and the response goes out. The due jobs then run after the response; the reconcile cron runs them too, so an
-// event that fails is retried even if Paddle sends nothing more.
+// with the destination secret, the notification is stored as a customer job (a retried delivery of the same
+// notification changes nothing), and the response goes out. The due jobs then run after the response; the
+// reconcile cron runs them too, so an event that fails is retried even if Paddle sends nothing more.
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('paddle-signature') || '';
   const rawRequestBody = await request.text();

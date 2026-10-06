@@ -17,6 +17,7 @@ export type PaddleEventJson = {
   event_id: string;
   event_type: string;
   occurred_at: string;
+  notification_id: string;
   data: { [key: string]: Json | undefined };
 };
 
@@ -43,8 +44,9 @@ export function eventCustomerId(event: PaddleEventJson): string | null {
 }
 
 /**
- * Stores a verified Paddle event as a job. Returns false if it was already stored: its id is Paddle's event id, so
- * a duplicate delivery, even a concurrent one, is a no-op (`INSERT … ON CONFLICT DO NOTHING`).
+ * Stores a verified Paddle notification as a job. Returns false if it was already stored: its id is Paddle's
+ * notification id, so a retried delivery of the same notification, even a concurrent one, is a no-op (`INSERT … ON
+ * CONFLICT DO NOTHING`). A replay from Paddle is a new notification of the same event, so it is stored and runs again.
  */
 export async function enqueuePaddleEvent(event: PaddleEventJson): Promise<boolean> {
   const supabase = createServiceRoleClient();
@@ -52,7 +54,7 @@ export async function enqueuePaddleEvent(event: PaddleEventJson): Promise<boolea
     .from('customer_jobs')
     .upsert(
       {
-        id: event.event_id,
+        id: event.notification_id,
         kind: 'paddle_event',
         customer_id: eventCustomerId(event),
         occurred_at: event.occurred_at,
