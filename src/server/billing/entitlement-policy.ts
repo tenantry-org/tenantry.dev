@@ -26,10 +26,11 @@ import { isAnnualTerm, REVERSAL_RECORD_WINDOW_MS } from '@/server/billing/paddle
  * Vesting follows the money kept, and paid time adds up (the owner's decisions of 4 and 5 October 2026,
  * plans-and-investigations/Tenantry-Licensing-And-Feed-Plan.md section 2):
  *
- * - A billing period is a payment at one of the offer prices together with the payments of the same subscription,
- *   billed at the same interval, whose periods lie within its period, such as a prorated charge (`billingPeriods`):
- *   proration pays for time already paid for, so it adds no time. A payment at another interval within it, such as a
- *   monthly one after a move from an annual term, is a billing period of its own. A billing period counts for the part
+ * - A billing period is a payment at one of the offer prices together with the smaller payments of the same
+ *   subscription, billed at the same interval, whose periods overlap its period, such as a prorated charge
+ *   (`billingPeriods`): proration pays for time already paid for, so it adds no time. A payment at another interval,
+ *   such as a monthly one after a move from an annual term, and one that charged as much (a duplicate charge, or a new
+ *   purchase), is a billing period of its own. A billing period counts for the part
  *   of its period that the money still kept from its payments pays for. With C charged before tax across them and R
  *   returned (refunds, credits and chargebacks in effect now; a reversed one no longer returns anything), it counts for
  *   the first (C - R) / C of its period, from the period's start. Nothing if R reaches C, or if nothing was charged (a
@@ -42,7 +43,8 @@ import { isAnnualTerm, REVERSAL_RECORD_WINDOW_MS } from '@/server/billing/paddle
  *   month, half of it kept is half a month, and an annual period kept for its first 181 days, from 1 January, is six.
  * - The customer's paid time is the counted parts of all their billing periods. It adds up across gaps: separate
  *   subscriptions, with or without time between them, all count. Where counted parts overlap, the time counts once, as
- *   the largest credit any of them gives it, so a kept payment never lowers the count. It starts at the start of its first counted part.
+ *   the largest credit any of them gives it, so a kept payment never lowers the count. It starts at the start of its
+ *   first counted part.
  * - It vests when the paid time served (the counted parts before now) reaches 12 paid months by that count. From then
  *   on it is vested through the end of the paid time served: the latest moment before now that paid time covers. In a
  *   gap that stays where the last paid period ended; a later paid period moves it on as it is served. It is never
@@ -309,8 +311,8 @@ class Ledger {
 
   /**
    * The share of a billing period the money kept from its payments pays for, from 0 to 1: what is kept of all they
-   * charged. Nothing if its own payment charged nothing (a trial, a period discounted in full): a period nobody paid for
-   * is no paid time, whatever is charged within it.
+   * charged. Nothing if its own payment charged nothing (a trial, a period discounted in full): a period nobody paid
+   * for is no paid time, whatever is charged within it.
    */
   keptShare(period: BillingPeriod): number {
     if (period.payment.charged <= 0) return 0;
@@ -330,8 +332,9 @@ class Ledger {
    * interval, a payment for a whole period of that interval (its calendar months: one a month, twelve a year) holds a
    * billing period unless its period overlaps one already held, and so does any other payment that overlaps none. A
    * payment whose period overlaps one held, and that charged less than the payment holding it (or anything, if that
-   * charged nothing), is within it: a prorated charge, even one stamped with a period that runs past it. One that charged at least as much is a billing
-   * period of its own: a duplicate charge, or a new purchase, such as a new year after a move to monthly. So money
+   * charged nothing), is within it: a prorated charge, even one stamped with a period that runs past it. One that
+   * charged at least as much is a billing period of its own: a duplicate charge, or a new purchase, such as a new year
+   * after a move to monthly. So money
    * returned from a duplicate takes nothing from the original; their kept time counts once (`onceEach`), and of two
    * annual terms for one period the kept one decides (`annualTerms`). Whole periods are taken first, then the
    * earliest-starting, then the one that charged more, then the one with more kept (then the lower transaction id), so
