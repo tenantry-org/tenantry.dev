@@ -131,9 +131,9 @@ export async function syncCustomer(
  *     that vests beyond their previous vested-through date: paid time confirmed after it, or an annual term ending
  *     after it. A vested-through date moving forward with the time served sends nothing, nor does paid time
  *     recomputed from a later start (money returned from its first payment).
- * Nothing is newly vested while an operator grant vests beyond every computed grant. The emails and alerts give the
- * stored vested-through date (`stored`, operator grants included). Anything taken away also alerts the operator. Never
- * throws: a failed email is not resent.
+ * An annual term that ends before an operator grant does vests nothing new, so it sends nothing; paid time reaching 12
+ * months does, since it moves on as it is served. The emails and alerts give the stored vested-through date (`stored`,
+ * operator grants included). Anything taken away also alerts the operator. Never throws: a failed email is not resent.
  */
 async function notifyGrantChanges(
   customerId: string,
@@ -162,7 +162,7 @@ async function notifyGrantChanges(
   // A grant that vests beyond the previous vested-through date: not paid time recomputed from a later start.
   const vested =
     through !== null &&
-    !(stored && stored > through) &&
+    !(stored && stored > through && !confirmed.some((grant) => grant.kind === 'paid_time')) &&
     confirmed.some(
       (grant) =>
         !previousThrough ||

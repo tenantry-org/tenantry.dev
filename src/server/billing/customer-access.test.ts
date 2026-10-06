@@ -478,6 +478,21 @@ describe('vesting emails', () => {
     expect(subjects()).not.toContain('Your Tenantry Pro releases are vested');
   });
 
+  it('tells the customer when their paid time vests under a longer operator grant, which their date stays at', async () => {
+    memory.state.operatorGrants.set('ctm_1', [new Date('2027-07-01T00:00:00Z')]);
+    memory.subscribe('ctm_1');
+    for (let n = 0; n < 12; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+    await syncCustomer('ctm_1', deps, new Date('2026-12-15T00:00:00Z'));
+    vi.clearAllMocks();
+
+    await syncCustomer('ctm_1', deps, new Date('2027-01-01T01:00:00Z'));
+
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-01-01T00:00:00Z'));
+    expect(subjects()).toEqual(['Your Tenantry Pro releases are vested']);
+    expect(deps.sendEmail.mock.calls[0][0].html).toContain('Your paid time has reached 12 paid months');
+    expect(deps.sendEmail.mock.calls[0][0].html).toContain('on or before 1 July 2027, your vested-through date');
+  });
+
   async function refund(adjustmentId: string, transactionId: string, at: string, amount = 3900) {
     await memory.store.recordPaymentAdjustment({
       adjustmentId,
