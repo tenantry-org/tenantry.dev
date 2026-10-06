@@ -10,6 +10,7 @@ import {
   SubscriptionStatus,
 } from '@paddle/paddle-node-sdk';
 import { syncCustomer } from '@/server/billing/customer-access';
+import { latestBillingPeriods } from '@/server/billing/entitlement-policy';
 import { adjustmentAmount } from '@/server/billing/paddle-assumptions';
 import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import type { PaddleAdjustment } from '@/server/integrations/paddle/list-adjustments';
@@ -190,11 +191,13 @@ function amount(value: string): number {
  * Refunds, credits and chargebacks (Paddle adjustments). Each is recorded in the payment ledger, and the customer
  * brought in line (syncCustomer): what an adjustment does to a payment, and so to the paid time and any annual grant, is
  * decided there (entitlement-policy.ts). Paddle does not cancel a subscription whose payment is refunded, so an
- * approved chargeback of any payment, or an approved full refund of the subscription's latest paid billing period,
- * cancels it at once: the subscription.canceled event that follows ends access as any cancellation does. A full refund
- * of an earlier paid billing period (a goodwill refund) cancels nothing (the period counts only for the money kept) and tells the operator. Every chargeback cancels, so charging back each month
- * once the next has renewed cannot keep access going. A partial refund, and a chargeback warning (which can still be
- * reversed), change no access but tell the operator. Credits and reversals change no access. Throwing (Paddle
+ * approved chargeback of any payment, or an approved full refund that leaves nothing kept of the subscription's latest
+ * paid billing period, cancels it at once: the subscription.canceled event that follows ends access as any
+ * cancellation does. A full refund of an earlier paid billing period (a goodwill refund), or of one payment of the
+ * latest while money is still kept from it (a prorated top-up, or one of two charges for the period), cancels nothing
+ * (the period counts only for the money kept) and tells the operator. Every chargeback cancels, so charging back each
+ * month once the next has renewed cannot keep access going. A partial refund, and a chargeback warning (which can
+ * still be reversed), change no access but tell the operator. Credits and reversals change no access. Throwing (Paddle
  * unavailable) makes the worker retry; recording the adjustment again changes nothing.
  */
 async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, deps: BillingDeps) {
@@ -235,18 +238,27 @@ async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, d
     return;
   }
 
-  if (
-    data.action === 'refund' &&
-    !(await paysLatestPeriod(data.customerId, data.subscriptionId, data.transactionId, deps))
-  ) {
-    await deps.alertOperator(
-      `Paddle ${data.action} of an earlier paid billing period for customer ${data.customerId}`,
-      `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId}, which is not the ` +
-        `latest paid billing period recorded for subscription ${data.subscriptionId}, so the subscription was not ` +
-        'cancelled: the period counts only for the money kept. Cancel the ' +
-        'subscription in Paddle if it should end.',
-    );
-    return;
+  if (data.action === 'refund') {
+    const latest = await latestPaidPeriods(data.customerId, data.subscriptionId, deps);
+    if (!latest.some((period) => period.transactionIds.includes(data.transactionId))) {
+      await deps.alertOperator(
+        `Paddle ${data.action} of an earlier paid billing period for customer ${data.customerId}`,
+        `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId}, which is not the ` +
+          `latest paid billing period recorded for subscription ${data.subscriptionId}, so the subscription was not ` +
+          'cancelled: the period counts only for the money kept. Cancel the ' +
+          'subscription in Paddle if it should end.',
+      );
+      return;
+    }
+    if (latest.some((period) => period.keptShare > 0)) {
+      await deps.alertOperator(
+        `Paddle ${data.action} of part of the latest paid billing period for customer ${data.customerId}`,
+        `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId} leaves money kept ` +
+          `from the latest paid billing period of subscription ${data.subscriptionId}, so the subscription was not ` +
+          'cancelled: the period counts only for the money kept. Cancel the subscription in Paddle if it should end.',
+      );
+      return;
+    }
   }
 
   if (await deps.cancelSubscriptionNow(data.subscriptionId)) {
@@ -258,19 +270,17 @@ async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, d
   }
 }
 
-// Whether the transaction pays the subscription's latest recorded billing period that charged something: the one a
-// full refund takes away now. A full refund of an earlier one (a goodwill refund) does not end the subscription; nor
-// does one of a transaction not recorded. A transaction that charged nothing (a trial, a free plan change) is no
-// such period.
-async function paysLatestPeriod(customerId: string, subscriptionId: string, transactionId: string, deps: BillingDeps) {
-  const periods = (await deps.store.listPayments(customerId)).filter(
-    (p) => p.subscriptionId === subscriptionId && p.charged > 0,
-  );
-  const latest = periods.reduce<(typeof periods)[number] | null>(
-    (found, payment) => (!found || payment.periodStartsAt > found.periodStartsAt ? payment : found),
-    null,
-  );
-  return latest?.transactionId === transactionId;
+// The subscription's latest paid billing periods as recorded (latestBillingPeriods): a full refund cancels it only if
+// it is of one of them and leaves nothing kept of them. A full refund of an earlier one (a goodwill refund) does not
+// end the subscription; nor does one of a transaction not recorded. A transaction that charged nothing (a trial, a
+// free plan change) holds no such period.
+async function latestPaidPeriods(customerId: string, subscriptionId: string, deps: BillingDeps) {
+  const [payments, adjustments, offerPriceIds] = await Promise.all([
+    deps.store.listPayments(customerId),
+    deps.store.listPaymentAdjustments(customerId),
+    offeredPriceIds(deps),
+  ]);
+  return latestBillingPeriods({ payments, adjustments, offerPriceIds }, subscriptionId);
 }
 
 // Records the customer's email unless a newer customer event has already been applied: the email decides

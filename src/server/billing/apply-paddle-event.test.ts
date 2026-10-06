@@ -435,6 +435,74 @@ describe('applyPaddleEvent', () => {
       );
     });
 
+    it.each([
+      ['the annual payment, then the top-up', ['txn_year', 'txn_topup']],
+      ['the top-up, then the annual payment', ['txn_topup', 'txn_year']],
+    ])(
+      'cancels only once nothing is kept of an annual period and its later top-up: refunding %s',
+      async (_, [first, second]) => {
+        // A year from October 2026, and a prorated 500 charged within it in March, which starts later but is part of
+        // the year's billing period.
+        for (const [eventId, transactionId, total, startsAt] of [
+          ['evt_year', 'txn_year', '39000', '2026-10-01T00:00:00Z'],
+          ['evt_topup', 'txn_topup', '500', '2027-03-01T00:00:00Z'],
+        ]) {
+          await applyPaddleEvent(
+            delivered(
+              transactionEvent({
+                eventId,
+                transactionId,
+                interval: 'year',
+                total,
+                period: { startsAt, endsAt: '2027-10-01T00:00:00Z' },
+              }),
+            ),
+            deps,
+          );
+        }
+        const subtotals: Record<string, string> = { txn_year: '39000', txn_topup: '500' };
+        vi.clearAllMocks();
+
+        await adjusted({
+          eventId: 'evt_first',
+          action: 'refund',
+          status: 'approved',
+          transactionId: first,
+          subtotal: subtotals[first],
+        });
+        expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+        expect(deps.alertOperator).toHaveBeenCalledWith(
+          'Paddle refund of part of the latest paid billing period for customer ctm_01',
+          expect.stringContaining('was not cancelled'),
+        );
+
+        await adjusted({
+          eventId: 'evt_second',
+          action: 'refund',
+          status: 'approved',
+          transactionId: second,
+          subtotal: subtotals[second],
+        });
+        expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
+      },
+    );
+
+    it('cancels for a duplicate charge of the latest period only once both charges are refunded', async () => {
+      // A second charge for September 2026, as much as the first: a billing period of its own with the same start.
+      await applyPaddleEvent(delivered(transactionEvent({ eventId: 'evt_duplicate', transactionId: 'txn_dup' })), deps);
+      vi.clearAllMocks();
+
+      await adjusted({ eventId: 'evt_refund_dup', action: 'refund', status: 'approved', transactionId: 'txn_dup' });
+      expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Paddle refund of part of the latest paid billing period for customer ctm_01',
+        expect.stringContaining('txn_dup'),
+      );
+
+      await adjusted({ eventId: 'evt_refund_first', action: 'refund', status: 'approved', transactionId: 'txn_01' });
+      expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
+    });
+
     it('cancels on the first chargeback of any payment, so charging back each month after the next renews fails', async () => {
       // Monthly from September to December 2026; each month charged back once the next has renewed.
       const months = ['2026-09-01', '2026-10-01', '2026-11-01', '2026-12-01', '2027-01-01'];

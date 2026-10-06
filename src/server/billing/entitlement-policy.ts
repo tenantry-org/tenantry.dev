@@ -196,6 +196,29 @@ export function computeEntitlement(input: EntitlementInput): Entitlement {
   };
 }
 
+/**
+ * The subscription's latest paid billing periods (`billingPeriods`): those whose own payment charged something and that
+ * start latest, more than one only when they start together, such as a duplicate charge. Each with the transactions of
+ * its payments and the share of its period the money kept pays for (`keptShare`).
+ */
+export function latestBillingPeriods(
+  input: Pick<EntitlementInput, 'payments' | 'adjustments' | 'offerPriceIds'>,
+  subscriptionId: string,
+): { transactionIds: string[]; keptShare: number }[] {
+  const ledger = new Ledger(input);
+  const periods = ledger
+    .billingPeriods()
+    .filter(({ payment }) => payment.subscriptionId === subscriptionId && payment.charged > 0);
+  const start = Math.max(...periods.map(({ payment }) => payment.periodStartsAt.getTime()));
+
+  return periods
+    .filter(({ payment }) => payment.periodStartsAt.getTime() === start)
+    .map((period) => ({
+      transactionIds: [period.payment, ...period.within].map((payment) => payment.transactionId),
+      keptShare: ledger.keptShare(period),
+    }));
+}
+
 /** Whether a vested-through date covers a release with this entitlement date (pro_releases.entitlement_at). */
 export function coversRelease(vestedThrough: Date | null, entitlementAt: Date): boolean {
   return vestedThrough !== null && entitlementAt.getTime() <= vestedThrough.getTime();
@@ -269,7 +292,7 @@ const RETURNING_ACTIONS = ['refund', 'credit', 'chargeback'] as const;
 class Ledger {
   private readonly adjustments = new Map<string, PaymentAdjustment[]>();
 
-  constructor(private readonly input: EntitlementInput) {
+  constructor(private readonly input: Pick<EntitlementInput, 'payments' | 'adjustments' | 'offerPriceIds'>) {
     for (const adjustment of input.adjustments) {
       const list = this.adjustments.get(adjustment.transactionId) ?? [];
       list.push(adjustment);

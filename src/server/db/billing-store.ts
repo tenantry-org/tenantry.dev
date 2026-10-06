@@ -400,7 +400,7 @@ export async function recordPaymentAdjustment(event: PaymentAdjustmentEvent): Pr
   return data === true;
 }
 
-/** The customer's recorded payments, as the entitlement rules read them. */
+/** The customer's recorded payments, as the entitlement rules read them, oldest period first. */
 export async function listPayments(customerId: string): Promise<Payment[]> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
@@ -408,7 +408,9 @@ export async function listPayments(customerId: string): Promise<Payment[]> {
     .select(
       'transaction_id,subscription_id,price_id,billing_interval,billing_frequency,period_starts_at,period_ends_at,subtotal,discount,total,tax,currency_code',
     )
-    .eq('customer_id', customerId);
+    .eq('customer_id', customerId)
+    .order('period_starts_at')
+    .order('transaction_id');
 
   if (error) throw error;
 
