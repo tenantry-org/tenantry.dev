@@ -248,14 +248,8 @@ export const memory = {
       return (state.entitlementStates.get(customerId)?.grants ?? []).map((grant) => ({ ...grant }));
     },
 
-    // As vested_through() does: the latest confirmed grant's date, operator grants included.
-    async readVestedThrough(customerId: string) {
-      const dates = [
-        ...(state.entitlementStates.get(customerId)?.grants ?? [])
-          .filter((grant) => grant.status === 'confirmed')
-          .map((grant) => grant.vestedThrough),
-        ...(state.operatorGrants.get(customerId) ?? []),
-      ];
+    async readOperatorVestedThrough(customerId: string) {
+      const dates = state.operatorGrants.get(customerId) ?? [];
       return dates.length === 0 ? null : new Date(Math.max(...dates.map((date) => date.getTime())));
     },
 

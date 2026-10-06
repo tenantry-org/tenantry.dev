@@ -494,17 +494,25 @@ export async function listGrants(customerId: string): Promise<Grant[]> {
 }
 
 /**
- * The customer's vested-through date as stored (`vested_through()`): the latest of their confirmed grants, operator
- * grants included, as the package feed and the dashboard read it. Null when nothing is vested.
+ * The latest vested-through date of the customer's confirmed operator grants, or null if they hold none. Operator grants
+ * are added by hand and never written by `set_customer_entitlement`, so the stored vested-through date
+ * (`vested_through()`, as the feed and the dashboard read it) is the later of this and the computed grants' date.
  */
-export async function readVestedThrough(customerId: string): Promise<Date | null> {
+export async function readOperatorVestedThrough(customerId: string): Promise<Date | null> {
   const supabase = createServiceRoleClient();
-  const { data, error } = await supabase.rpc('vested_through', { p_customer_id: customerId });
+  const { data, error } = await supabase
+    .from('vested_entitlements')
+    .select('vested_through')
+    .eq('customer_id', customerId)
+    .eq('kind', 'operator')
+    .eq('status', 'confirmed')
+    .order('vested_through', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error) throw error;
 
-  // The function returns null when nothing is vested; generated return types are never nullable.
-  return (data as string | null) ? new Date(data) : null;
+  return data ? new Date(data.vested_through) : null;
 }
 
 /**

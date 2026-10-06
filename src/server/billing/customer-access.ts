@@ -56,15 +56,17 @@ export async function syncCustomer(
   deps: BillingDeps = defaultBillingDeps,
   now: Date = new Date(),
 ): Promise<CustomerSync> {
-  const [subscriptions, payments, adjustments, email, previousGrants, isTest, offerPriceIds] = await Promise.all([
-    deps.store.listSubscriptions(customerId),
-    deps.store.listPayments(customerId),
-    deps.store.listPaymentAdjustments(customerId),
-    deps.store.getCustomerEmail(customerId),
-    deps.store.listGrants(customerId),
-    deps.store.isTestCustomer(customerId),
-    offeredPriceIds(deps),
-  ]);
+  const [subscriptions, payments, adjustments, email, previousGrants, operatorThrough, isTest, offerPriceIds] =
+    await Promise.all([
+      deps.store.listSubscriptions(customerId),
+      deps.store.listPayments(customerId),
+      deps.store.listPaymentAdjustments(customerId),
+      deps.store.getCustomerEmail(customerId),
+      deps.store.listGrants(customerId),
+      deps.store.readOperatorVestedThrough(customerId),
+      deps.store.isTestCustomer(customerId),
+      offeredPriceIds(deps),
+    ]);
   // A test customer (customers.is_test) is kept by the operator for checks: nobody is emailed or alerted about it.
   if (isTest) deps = { ...deps, sendEmail: async () => false, alertOperator: async () => undefined };
   const { store } = deps;
@@ -78,8 +80,13 @@ export async function syncCustomer(
   });
   const entitled = isEntitled(entitlement.access.status);
 
+  // The vested-through date as stored (vested_through()), operator grants included: the date the feed and the dashboard
+  // use, so the emails give it too.
+  const vestedThrough = latestDate(
+    [entitlement.vestedThrough, operatorThrough].filter((date): date is Date => date !== null),
+  );
+
   const wasEntitled = isEntitled(await store.saveCustomerState(customerId, entitlement));
-  const vestedThrough = await storedVestedThrough(customerId, entitlement, deps);
   await notifyGrantChanges(customerId, previousGrants, entitlement, vestedThrough, email, deps, now);
 
   if (!entitled) {
@@ -112,20 +119,6 @@ export async function syncCustomer(
   }
 
   return { change: 'started', licence, entitlement };
-}
-
-/**
- * The customer's vested-through date as stored (vested_through()), operator grants included: the date the feed and the
- * dashboard use, so the emails give it too. If it cannot be read, the change is recorded already, so this logs the
- * failure and gives the computed date, which leaves out only operator grants.
- */
-async function storedVestedThrough(customerId: string, entitlement: Entitlement, deps: BillingDeps) {
-  try {
-    return await deps.store.readVestedThrough(customerId);
-  } catch (error) {
-    console.error(`Customer access: could not read the vested-through date of customer ${customerId}:`, error);
-    return entitlement.vestedThrough;
-  }
 }
 
 /**
