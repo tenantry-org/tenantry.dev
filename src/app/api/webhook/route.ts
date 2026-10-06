@@ -1,5 +1,5 @@
 import { NextRequest, after } from 'next/server';
-import { getPaddleInstance } from '@/server/integrations/paddle/get-paddle-instance';
+import { verifyNotification } from '@/server/integrations/paddle/verify-notification';
 import { enqueuePaddleEvent, PaddleEventJson } from '@/server/db/customer-jobs';
 import { processJobs } from '@/server/billing/process-jobs';
 import { serverConfig } from '@/server/config/server-config';
@@ -20,10 +20,9 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Missing signature from header' }, { status: 400 });
   }
 
-  try {
-    await getPaddleInstance().webhooks.unmarshal(rawRequestBody, secret, signature);
-  } catch (error) {
-    console.warn('Paddle webhook: signature verification failed:', error);
+  // A rejection that looks like Paddle's own delivery alerts the operator (verify-notification.ts).
+  if (!(await verifyNotification(rawRequestBody, signature, secret))) {
+    console.warn('Paddle webhook: signature verification failed.');
     return Response.json({ error: 'Invalid signature' }, { status: 400 });
   }
 

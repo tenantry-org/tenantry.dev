@@ -1,19 +1,22 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 import { subscriptionEvent } from '@/test/paddle-events';
+import { resetRejectionAlerts } from '@/server/integrations/paddle/verify-notification';
 import { POST } from './route';
 
 const mocks = vi.hoisted(() => ({
   after: vi.fn(),
-  unmarshal: vi.fn(),
+  isSignatureValid: vi.fn(),
+  alertOperator: vi.fn(),
   enqueuePaddleEvent: vi.fn(),
   processJobs: vi.fn(),
 }));
 
 vi.mock('next/server', async (original) => ({ ...(await original<object>()), after: mocks.after }));
 vi.mock('@/server/integrations/paddle/get-paddle-instance', () => ({
-  getPaddleInstance: () => ({ webhooks: { unmarshal: mocks.unmarshal } }),
+  getPaddleInstance: () => ({ webhooks: { isSignatureValid: mocks.isSignatureValid } }),
 }));
+vi.mock('@/server/integrations/email/alerts', () => ({ alertOperator: mocks.alertOperator }));
 vi.mock('@/server/db/customer-jobs', () => ({ enqueuePaddleEvent: mocks.enqueuePaddleEvent }));
 vi.mock('@/server/config/server-config', async () => ({
   serverConfig: (await import('@/test/server-config')).testServerConfig,
@@ -33,8 +36,14 @@ function delivery(body = JSON.stringify(event), signature = 'ts=1;h1=abc') {
 describe('POST /api/webhook', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mocks.unmarshal.mockResolvedValue({ eventId: 'evt_1' });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    resetRejectionAlerts();
+    mocks.isSignatureValid.mockResolvedValue(true);
     mocks.enqueuePaddleEvent.mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('stores the event and answers before processing it, however slow processing is', async () => {
@@ -44,7 +53,7 @@ describe('POST /api/webhook', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ status: 200, eventName: 'subscription.updated', deduped: false });
-    expect(mocks.unmarshal).toHaveBeenCalledWith(JSON.stringify(event), 'webhook-secret', 'ts=1;h1=abc');
+    expect(mocks.isSignatureValid).toHaveBeenCalledWith(JSON.stringify(event), 'webhook-secret', 'ts=1;h1=abc');
     expect(mocks.enqueuePaddleEvent).toHaveBeenCalledWith(event);
     expect(mocks.processJobs).not.toHaveBeenCalled();
 
@@ -64,12 +73,57 @@ describe('POST /api/webhook', () => {
   });
 
   it('rejects a delivery whose signature does not verify, storing nothing', async () => {
-    mocks.unmarshal.mockRejectedValue(new Error('[Paddle] Webhook signature verification failed'));
+    mocks.isSignatureValid.mockResolvedValue(false);
 
     expect((await POST(delivery())).status).toBe(400);
     expect((await POST(delivery(JSON.stringify(event), ''))).status).toBe(400);
     expect(mocks.enqueuePaddleEvent).not.toHaveBeenCalled();
     expect(mocks.after).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed signature header, which the SDK throws on', async () => {
+    mocks.isSignatureValid.mockRejectedValue(new Error('[Paddle] Invalid webhook signature'));
+
+    expect((await POST(delivery(JSON.stringify(event), 'nonsense'))).status).toBe(400);
+    expect(mocks.enqueuePaddleEvent).not.toHaveBeenCalled();
+    expect(mocks.alertOperator).not.toHaveBeenCalled();
+  });
+
+  describe('a rejected delivery that looks like Paddle’s', () => {
+    const NOW = new Date('2026-10-06T12:00:00Z');
+    const signedAt = (date: Date) => `ts=${Math.floor(date.getTime() / 1000)};h1=abc`;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW);
+      mocks.isSignatureValid.mockResolvedValue(false);
+    });
+
+    it('alerts the operator, naming the secret and the clock, at most once in six hours', async () => {
+      expect((await POST(delivery(JSON.stringify(event), signedAt(NOW)))).status).toBe(400);
+      await POST(delivery(JSON.stringify(event), signedAt(NOW)));
+
+      expect(mocks.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Paddle notifications are being rejected',
+        expect.stringContaining('ntf_evt_1 (subscription.updated)'),
+      );
+      expect(mocks.alertOperator.mock.calls[0][1]).toContain('PADDLE_NOTIFICATION_WEBHOOK_SECRET');
+      expect(mocks.alertOperator.mock.calls[0][1]).toContain('clock');
+
+      const later = new Date(NOW.getTime() + 6 * 60 * 60 * 1000);
+      vi.setSystemTime(later);
+      await POST(delivery(JSON.stringify(event), signedAt(later)));
+      expect(mocks.alertOperator).toHaveBeenCalledTimes(2);
+    });
+
+    it('alerts nothing for an old signature, a malformed header or a body that is not a notification', async () => {
+      await POST(delivery(JSON.stringify(event), signedAt(new Date(NOW.getTime() - 10 * 60 * 1000))));
+      await POST(delivery(JSON.stringify(event), `ts=${Math.floor(NOW.getTime() / 1000)}`));
+      await POST(delivery('{"hello": "world"}', signedAt(NOW)));
+      await POST(delivery('not json', signedAt(NOW)));
+
+      expect(mocks.alertOperator).not.toHaveBeenCalled();
+    });
   });
 
   it('fails when the event cannot be stored, so Paddle delivers it again', async () => {
