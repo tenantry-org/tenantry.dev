@@ -18,8 +18,10 @@
 #             chargeback withdraws the vesting and `undo` removes what the script wrote
 #   active    a subscriber: restores 1.<n+1>.0 for 1.*, not the release candidate, which 1.*-* and its own version
 #             restore; with a lock file whose hash matches the package, and a
-#             locked-mode restore from an empty package folder downloads it again through the redirect; a second token
-#             restores until it is revoked through the Access page's action, and then fails
+#             locked-mode restore from an empty package folder downloads it again through the redirect, each download
+#             recorded with its token; the token also restores from NuGetPackageSourceCredentials_TenantryPro, with no
+#             credentials in nuget.config; a second token restores until it is revoked through the Access page's
+#             action, and then fails
 #   vested    lapsed, vested through 15 seconds before the run by an operator grant (scripts/rehearse.mjs): creates a
 #             token, restores 1.<n>.1 for 1.*; 1.<n+1>.0 is not found, even from a lock file
 #   unvested  created a token while subscribed, then lapsed with nothing vested: refused with 403, and refused a new token
@@ -149,16 +151,17 @@ fi
 export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 export NUGET_HTTP_CACHE_PATH="$work/http-cache"  # for packing and pushing; each consumer has its own
 
-# The feed for Tenantry Pro's packages and nuget.org for everything else, as a customer would configure them.
+# The feed for Tenantry Pro's packages and nuget.org for everything else, as a customer would configure them, under the
+# source key the site's nuget.config uses (src/lib/install-snippets.ts: FEED_SOURCE_KEY).
 sources() {
   cat <<SOURCES
   <packageSources>
     <clear />
-    <add key="tenantry" value="$feed" allowInsecureConnections="true" />
+    <add key="TenantryPro" value="$feed" allowInsecureConnections="true" />
     <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
   </packageSources>
   <packageSourceMapping>
-    <packageSource key="tenantry"><package pattern="Tenantry.Pro.*" /></packageSource>
+    <packageSource key="TenantryPro"><package pattern="Tenantry.Pro.*" /></packageSource>
     <packageSource key="nuget.org"><package pattern="*" /></packageSource>
   </packageSourceMapping>
 SOURCES
@@ -207,7 +210,7 @@ pack "$v_rc" "$(iso_before 0)" false
 # push VERSION KEY: dotnet nuget push to the feed. A rerun against the same database finds the packages published
 # already, which --skip-duplicate accepts.
 push() {
-  dotnet nuget push "$work/nupkgs/$probe_id.$1.nupkg" --source tenantry --api-key "$2" \
+  dotnet nuget push "$work/nupkgs/$probe_id.$1.nupkg" --source TenantryPro --api-key "$2" \
     --configfile "$work/nuget.config" --skip-duplicate 2>&1
 }
 for version in "$v_first" "$v_patch" "$v_next" "$v_rc"; do
@@ -230,7 +233,7 @@ echo 'namespace Tenantry.Pro.FeedProbe { public static class Probe { public cons
 pack "$v_first" "$(iso_before 20)" false
 mv "$work/nupkgs/$probe_id.$v_first.nupkg" "$work/other/rebuilt.nupkg"
 mv "$work/other/$probe_id.$v_first.nupkg" "$work/nupkgs/"
-if output="$(dotnet nuget push "$work/other/rebuilt.nupkg" --source tenantry --api-key "$publish_key" \
+if output="$(dotnet nuget push "$work/other/rebuilt.nupkg" --source TenantryPro --api-key "$publish_key" \
   --configfile "$work/nuget.config" --skip-duplicate 2>&1)"; then
   fail 'a different package under a published version is refused, even with --skip-duplicate' "$output"
 else
@@ -341,21 +344,26 @@ check 'a lapsed customer with nothing vested is refused a new token, and told wh
 
 echo "tpf_$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n' | cut -c1-43)" >"$work/token-unknown"
 
-# consumer CUSTOMER VERSION: a project referencing the probe at VERSION with the customer's token, restoring into its own
-# package folder.
+# consumer CUSTOMER VERSION [no-credentials]: a project referencing the probe at VERSION with the customer's token,
+# restoring into its own package folder. With no-credentials, its nuget.config has none, for a build that gives NuGet
+# the token in NuGetPackageSourceCredentials_TenantryPro instead.
 consumer() {
-  local dir="$work/consumer-$1-$(sha256_hex "$2" | cut -c1-8)"
+  local dir credentials=""
+  dir="$work/consumer-$1-$(sha256_hex "$2${3:-}" | cut -c1-8)"
   mkdir -p "$dir"
+  if [[ "${3:-}" != no-credentials ]]; then
+    credentials="  <packageSourceCredentials>
+    <TenantryPro>
+      <add key=\"Username\" value=\"e2e\" />
+      <add key=\"ClearTextPassword\" value=\"$(token "$1")\" />
+    </TenantryPro>
+  </packageSourceCredentials>"
+  fi
   cat >"$dir/nuget.config" <<CONFIG
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
 $(sources)
-  <packageSourceCredentials>
-    <tenantry>
-      <add key="Username" value="e2e" />
-      <add key="ClearTextPassword" value="$(token "$1")" />
-    </tenantry>
-  </packageSourceCredentials>
+$credentials
 </configuration>
 CONFIG
   cat >"$dir/Consumer.csproj" <<PROJECT
@@ -393,6 +401,22 @@ if output="$(restore "$dir" --locked-mode)"; then
   pass 'a locked-mode restore downloads it again, through the redirect'
 else
   fail 'a locked-mode restore downloads it again, through the redirect' "$output"
+fi
+active_token_id="$(rest_get feed_tokens "customer_id=eq.$(customer_of active)&name=eq.CI&select=id" | jq -r '.[0].id')"
+downloads="$(rest_get feed_downloads "token_id=eq.$active_token_id&version=eq.$v_next&select=lower_id")"
+check 'each download is recorded with its token and version' \
+  '[[ "$(jq -r ".[0].lower_id" <<<"$downloads")" == "$probe_lower" ]]' "$downloads"
+# A build that writes its own nuget.config gives NuGet the token in an environment variable a shell can export.
+dir="$(consumer active '1.*' no-credentials)"
+if output="$(
+  NuGetPackageSourceCredentials_TenantryPro="Username=e2e;Password=$(token active)"
+  export NuGetPackageSourceCredentials_TenantryPro
+  restore "$dir"
+)"; then
+  check "the token in NuGetPackageSourceCredentials_TenantryPro restores 1.* as $v_next" \
+    '[[ "$(probe "$dir" resolved)" == $v_next ]]' "$output"
+else
+  fail "the token in NuGetPackageSourceCredentials_TenantryPro restores 1.* as $v_next" "$output"
 fi
 # The release candidate: only a version or range that allows prereleases restores it.
 for range in '1.*-*' "$v_rc"; do

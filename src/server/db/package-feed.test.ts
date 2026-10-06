@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type FakeCall, type FakeTable, MAX_ROWS } from '@/test/fake-supabase';
-import { listFeedPackages, listPublishedReleases, listReleases } from './package-feed';
+import {
+  deleteFeedDownloadsBefore,
+  listFeedPackages,
+  listPublishedReleases,
+  listReleases,
+  recordFeedDownload,
+} from './package-feed';
 
 // The queries the feed's store makes, against a fake client that, like the API, returns at most MAX_ROWS rows a
 // request.
@@ -119,5 +125,42 @@ describe('listPublishedReleases', () => {
       Array.from({ length: 1200 }, (_, index) => `1.${index}.0`),
     );
     expect(state.calls.filter((call) => call.method === 'range').map((call) => call.args[0])).toEqual([0, 500, 1000]);
+  });
+});
+
+describe('the download records', () => {
+  it('records a download by its token, package and version, and the client network', async () => {
+    await recordFeedDownload({
+      tokenId: 'token-id',
+      lowerId: 'tenantry.pro',
+      version: '1.4.0',
+      clientNetwork: '192.0.2.0/24',
+    });
+
+    expect(state.calls).toEqual([
+      {
+        table: 'feed_downloads',
+        method: 'insert',
+        args: [{ token_id: 'token-id', lower_id: 'tenantry.pro', version: '1.4.0', client_network: '192.0.2.0/24' }],
+      },
+    ]);
+  });
+
+  it('throws when the record cannot be written', async () => {
+    state.tables.feed_downloads = { writeError: { code: '23503', message: 'no such package' } };
+
+    await expect(
+      recordFeedDownload({ tokenId: 'token-id', lowerId: 'tenantry.pro', version: '9.9.9', clientNetwork: null }),
+    ).rejects.toMatchObject({ code: '23503' });
+  });
+
+  it('deletes the records from before a time and says how many', async () => {
+    state.tables.feed_downloads = { list: [{}, {}, {}] };
+
+    await expect(deleteFeedDownloadsBefore(new Date('2026-08-02T04:00:00Z'))).resolves.toBe(3);
+    expect(state.calls.map(({ method, args }) => [method, args])).toEqual([
+      ['delete', [{ count: 'exact' }]],
+      ['lt', ['downloaded_at', '2026-08-02T04:00:00.000Z']],
+    ]);
   });
 });

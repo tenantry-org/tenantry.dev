@@ -5,7 +5,7 @@ export const metadata = { title: 'Privacy Policy | Tenantry' };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" lastUpdated="2026-10-05">
+    <LegalPage title="Privacy Policy" lastUpdated="2026-10-06">
       <p>
         This Privacy Policy explains how {LegalEntity.name} (&quot;Tenantry&quot;, &quot;we&quot;) collects, uses, and
         protects personal data when you use our website and Services.
@@ -29,7 +29,10 @@ export default function PrivacyPage() {
           <strong>Entitlement records:</strong> subscription status, the licence keys issued to your account, and the
           vesting worked out from your payments (your paid time and each annual term, and the date each vests through).
           For each feed token: the name you give it, its first few characters, when it was created and revoked, and when
-          it was last used, recorded at most once an hour. We store a hash of each feed token, not the token itself.
+          it was last used, recorded at most once an hour. We store a hash of each feed token, not the token itself. For
+          each package download: the feed token, the package and version, the time, and your network rather than your IP
+          address (its first three numbers for IPv4, its first three groups for IPv6), kept for 90 days to spot a token
+          that is shared or misused.
         </li>
         <li>
           <strong>Usage and performance data:</strong> pages visited, referring site, country, browser, device type and
@@ -68,7 +71,8 @@ export default function PrivacyPage() {
       <h2>5. Data retention</h2>
       <p>
         We retain account and entitlement data for as long as your account is active and as required for legal and
-        accounting purposes. You may request deletion subject to those obligations.
+        accounting purposes. Package download records are deleted after 90 days. You may request deletion subject to
+        those obligations.
       </p>
 
       <h2>6. Your rights</h2>

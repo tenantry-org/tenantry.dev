@@ -119,6 +119,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      feed_downloads: {
+        Row: {
+          client_network: unknown;
+          downloaded_at: string;
+          id: number;
+          lower_id: string;
+          token_id: string;
+          version: string;
+        };
+        Insert: {
+          client_network?: unknown;
+          downloaded_at?: string;
+          id?: never;
+          lower_id: string;
+          token_id: string;
+          version: string;
+        };
+        Update: {
+          client_network?: unknown;
+          downloaded_at?: string;
+          id?: never;
+          lower_id?: string;
+          token_id?: string;
+          version?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'feed_downloads_lower_id_version_fkey';
+            columns: ['lower_id', 'version'];
+            isOneToOne: false;
+            referencedRelation: 'pro_packages';
+            referencedColumns: ['lower_id', 'version'];
+          },
+          {
+            foreignKeyName: 'feed_downloads_token_id_fkey';
+            columns: ['token_id'];
+            isOneToOne: false;
+            referencedRelation: 'feed_tokens';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       feed_tokens: {
         Row: {
           created_at: string;
@@ -608,6 +650,7 @@ export type Database = {
           access_status: string;
           customer_id: string;
           grace_ends_at: string;
+          token_id: string;
           vested_through: string;
         }[];
       };

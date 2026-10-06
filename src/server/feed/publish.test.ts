@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createLocalJWKSet, exportJWK, generateKeyPair, type JWK, type JWTPayload, SignJWT } from 'jose';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listReleases } from '@/server/db/package-feed';
 import type { FakeTable } from '@/test/fake-supabase';
 import { nuspec, zip } from '@/test/zip';
@@ -18,6 +19,30 @@ vi.mock('@/server/db/service-role-client', async () => {
 });
 
 const KEY = 'publish-key';
+
+// GitHub Actions' OIDC signing keys, stood in for by a key pair of the test's own; `other` is a key GitHub never used.
+type SignWith = (claims: JWTPayload, options?: { expiresIn?: string }) => Promise<string>;
+const github = {} as { keys: FeedDeps['githubOidcKeys']; sign: SignWith; other: SignWith };
+
+beforeAll(async () => {
+  const signer = async (): Promise<[SignWith, JWK]> => {
+    const { privateKey, publicKey } = await generateKeyPair('RS256');
+    const sign: SignWith = (claims, { expiresIn = '5m' } = {}) =>
+      new SignJWT(claims)
+        .setProtectedHeader({ alg: 'RS256', kid: 'github' })
+        .setIssuedAt()
+        .setExpirationTime(expiresIn)
+        .sign(privateKey);
+    return [sign, await exportJWK(publicKey)];
+  };
+  const [sign, jwk] = await signer();
+  const [other] = await signer();
+  Object.assign(github, {
+    keys: createLocalJWKSet({ keys: [{ ...jwk, kid: 'github', alg: 'RS256' }] }),
+    sign,
+    other,
+  });
+});
 
 let store: { [K in keyof FeedStore]: ReturnType<typeof vi.fn> };
 let deps: FeedDeps;
@@ -54,6 +79,8 @@ beforeEach(() => {
     ),
     recordPackage: vi.fn(async () => true),
     recordedPackageId: vi.fn(async () => null),
+    recordFeedDownload: vi.fn(),
+    deleteFeedDownloadsBefore: vi.fn(),
     listReleases: vi.fn(async () =>
       [...releases].map(([version, release]) => ({
         version,
@@ -67,15 +94,19 @@ beforeEach(() => {
     storage: { signedDownloadUrl: vi.fn(), storePackageFile: vi.fn(async () => undefined) },
     siteUrl: () => 'https://sandbox.example.com',
     feedPublishKeySha256: () => createHash('sha256').update(KEY).digest('hex'),
+    githubOidcKeys: github.keys,
+    feedPublishActors: () => ['olliejm', 'Release-Manager'],
+    rateLimited: vi.fn(async () => false),
     now: () => new Date('2028-06-01T00:00:00Z'),
   };
 });
 
-function push(files: Record<string, string>, key: string | null = KEY) {
+function push(files: Record<string, string>, key: string | null = KEY, bearer?: string) {
   const form = new FormData();
   form.append('package', new Blob([Buffer.from(zip(files))]), 'package.nupkg');
   const headers = new Headers();
   if (key !== null) headers.set('x-nuget-apikey', key);
+  if (bearer !== undefined) headers.set('authorization', `Bearer ${bearer}`);
   return handlePublish(
     new Request('https://sandbox.example.com/feed/v3/package', { method: 'PUT', body: form, headers }),
     deps,
@@ -496,5 +527,125 @@ describe('handlePublishedList', () => {
   ])('refuses a listing with %s', async (_, key) => {
     expect((await list(key)).status).toBe(403);
     expect(store.listPublishedReleases).not.toHaveBeenCalled();
+  });
+});
+
+describe('publishing from the release workflow with a GitHub OIDC token', () => {
+  /** The claims GitHub gives release.yml in tenantry-org/tenantry-pro running for the tag v0.8.0. */
+  const release = {
+    iss: 'https://token.actions.githubusercontent.com',
+    aud: 'https://sandbox.example.com/feed',
+    repository: 'tenantry-org/tenantry-pro',
+    ref: 'refs/tags/v0.8.0',
+    ref_type: 'tag',
+    job_workflow_ref: 'tenantry-org/tenantry-pro/.github/workflows/release.yml@refs/tags/v0.8.0',
+    actor: 'olliejm',
+  };
+
+  it('publishes for release.yml running for a v* tag pushed by a release manager, with no publish key', async () => {
+    const response = await push(efCore, null, await github.sign(release));
+
+    expect(response.status).toBe(201);
+    expect(deps.storage.storePackageFile).toHaveBeenCalledOnce();
+  });
+
+  it('matches the release managers’ logins in any case, as GitHub does', async () => {
+    expect((await push(efCore, null, await github.sign({ ...release, actor: 'release-manager' }))).status).toBe(201);
+  });
+
+  it.each([
+    [
+      'signed by a key that is not GitHub’s',
+      () => github.other(release),
+      'not valid for https://sandbox.example.com/feed',
+    ],
+    ['that has expired', () => github.sign(release, { expiresIn: '-1m' }), 'not valid'],
+    ['from another issuer', () => github.sign({ ...release, iss: 'https://example.com' }), 'not valid'],
+    [
+      'for another deployment',
+      () => github.sign({ ...release, aud: 'https://tenantry.dev/feed' }),
+      'not valid for https://sandbox.example.com/feed',
+    ],
+    [
+      'from another repository',
+      () => github.sign({ ...release, repository: 'someone/tenantry-pro' }),
+      'not from tenantry-org/tenantry-pro',
+    ],
+    [
+      'for a branch',
+      () => github.sign({ ...release, ref: 'refs/heads/main', ref_type: 'branch' }),
+      'not from release.yml running for a v* tag',
+    ],
+    [
+      'from another workflow',
+      () =>
+        github.sign({
+          ...release,
+          job_workflow_ref: 'tenantry-org/tenantry-pro/.github/workflows/build-test.yml@refs/tags/v0.8.0',
+        }),
+      'not from release.yml running for a v* tag',
+    ],
+    [
+      'from release.yml at a branch, though the run is for a tag',
+      () =>
+        github.sign({
+          ...release,
+          job_workflow_ref: 'tenantry-org/tenantry-pro/.github/workflows/release.yml@refs/heads/main',
+        }),
+      'not from release.yml running for a v* tag',
+    ],
+    [
+      'from a tag that is not a version tag',
+      () =>
+        github.sign({
+          ...release,
+          job_workflow_ref: 'tenantry-org/tenantry-pro/.github/workflows/release.yml@refs/tags/test',
+        }),
+      'not from release.yml running for a v* tag',
+    ],
+    [
+      'pushed by someone who is not a release manager',
+      () => github.sign({ ...release, actor: 'a-collaborator' }),
+      'a-collaborator is not in FEED_PUBLISH_ACTORS',
+    ],
+    ['that is not a JWT', async () => 'not-a-token', 'not valid'],
+  ])('refuses a token %s with 403, storing nothing', async (_, token, reason) => {
+    const response = await push(efCore, null, await token());
+
+    expect(response.status).toBe(403);
+    expect(await response.text()).toContain(reason);
+    expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
+  });
+
+  it('fails, rather than refuses, when GitHub’s keys cannot be fetched, so the release can be run again', async () => {
+    deps.githubOidcKeys = async () => {
+      throw new TypeError('fetch failed');
+    };
+
+    await expect(push(efCore, null, await github.sign(release))).rejects.toThrow('fetch failed');
+    expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
+  });
+
+  it('refuses every token while no release manager is configured', async () => {
+    deps.feedPublishActors = () => [];
+
+    expect((await push(efCore, null, await github.sign(release))).status).toBe(403);
+  });
+
+  it('refuses a refused token even beside a valid publish key', async () => {
+    const response = await push(efCore, KEY, await github.sign({ ...release, actor: 'a-collaborator' }));
+
+    expect(response.status).toBe(403);
+    expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
+  });
+
+  it('does not list the feed for a release token: the listing takes the publish key only', async () => {
+    const headers = new Headers({ authorization: `Bearer ${await github.sign(release)}` });
+    const response = await handlePublishedList(
+      new Request('https://sandbox.example.com/feed/v3/package', { headers }),
+      deps,
+    );
+
+    expect(response.status).toBe(403);
   });
 });

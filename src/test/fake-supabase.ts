@@ -2,9 +2,9 @@
  * Minimal stand-in for the Supabase query builder in unit tests. Every builder method returns the same
  * chain; `maybeSingle()` resolves to the table's `single` row and awaiting the chain resolves to its
  * `list`, cut to the chain's `range` if it has one and to at most MAX_ROWS rows, as the API cuts it, with the
- * whole list's length as `count` if `select` asked for one. Reads resolve with the table's `readError`, and writes
- * with its `writeError`, if any. `rpc(name)` resolves to what the matching `rpcs` handler returns, or with the error
- * it throws, as a failed database function does.
+ * whole list's length as `count` if `select` or `delete` asked for one. Reads resolve with the table's
+ * `readError`, and writes with its `writeError`, if any. `rpc(name)` resolves to what the matching `rpcs`
+ * handler returns, or with the error it throws, as a failed database function does.
  */
 export interface FakeTable {
   list?: unknown[];
@@ -71,6 +71,7 @@ export function fakeSupabase(
         'neq',
         'is',
         'gt',
+        'lt',
         'in',
         'order',
         'limit',
@@ -85,6 +86,7 @@ export function fakeSupabase(
           if (method === 'eq') filters[args[0] as string] = args[1];
           if (method === 'range') range = [args[0] as number, args[1] as number];
           if (method === 'select') counted = (args[1] as { count?: string } | undefined)?.count !== undefined;
+          if (method === 'delete') counted = (args[0] as { count?: string } | undefined)?.count !== undefined;
           if (WRITES.has(method)) wrote = true;
           return chain;
         };

@@ -1,5 +1,5 @@
--- The package feed's tables: feed tokens (created, limited to 10 live per customer, revoked, looked up by hash) and
--- the packages of each release. Run with `supabase test db` against the local database.
+-- The package feed's tables: feed tokens (created, limited to 10 live per customer, revoked, looked up by hash), the
+-- packages of each release, and the download records. Run with `supabase test db` against the local database.
 begin;
 create extension if not exists pgtap with schema extensions;
 -- As postgres with pgTAP's schema on the path: `supabase test db --linked` connects to a hosted database as a
@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(25);
+select plan(31);
 
 insert into public.customers (customer_id, email) values
   ('ctm_active', 'active@example.com'), ('ctm_vested', 'vested@example.com'), ('ctm_new', 'new@example.com');
@@ -42,6 +42,10 @@ select results_eq(
   $$select customer_id, access_status, vested_through from public.feed_customer((select active from hashes))$$,
   $$values ('ctm_active'::text, 'active'::text, null::timestamptz)$$,
   'a token gives its customer and their access');
+select results_eq(
+  $$select token_id from public.feed_customer((select active from hashes))$$,
+  $$select id from public.feed_tokens where customer_id = 'ctm_active'$$,
+  'and its own id, for the download records');
 select results_eq(
   $$select customer_id, access_status, vested_through from public.feed_customer((select vested from hashes))$$,
   $$values ('ctm_vested'::text, 'lapsed'::text, '2028-01-01 00:00+00'::timestamptz)$$,
@@ -107,6 +111,26 @@ select throws_ok(
 select results_eq(
   $$select public from storage.buckets where id = 'pro-packages'$$, $$values (false)$$,
   'the packages'' bucket is private');
+
+-- A download is recorded against a token and a recorded package, with the client's network, and goes with its token.
+select lives_ok(
+  $$insert into public.feed_downloads (token_id, lower_id, version, client_network)
+    values ((select id from public.feed_tokens where customer_id = 'ctm_vested'), 'tenantry.pro.attack', '1.4.0',
+      '192.0.2.0/24')$$,
+  'a download is recorded');
+select is(
+  (select downloaded_at from public.feed_downloads), now(), 'at the time it is made');
+select throws_ok(
+  $$insert into public.feed_downloads (token_id, lower_id, version)
+    values ((select id from public.feed_tokens where customer_id = 'ctm_vested'), 'tenantry.pro.attack', '9.9.9')$$,
+  '23503', null, 'only of a recorded package');
+select throws_ok(
+  $$insert into public.feed_downloads (token_id, lower_id, version, client_network)
+    values ((select id from public.feed_tokens where customer_id = 'ctm_vested'), 'tenantry.pro.attack', '1.4.0',
+      '192.0.2.1/24')$$,
+  '22P02', null, 'with a network, not an address');
+delete from public.feed_tokens where customer_id = 'ctm_vested';
+select is_empty($$select 1 from public.feed_downloads$$, 'a deleted token''s downloads are deleted with it');
 
 -- An annual term paid yesterday, the subscription cancelled today with nothing refunded: stored as the site computes
 -- it (entitlement-policy.ts), the term's grant is confirmed through its end, so the feed serves the releases of the

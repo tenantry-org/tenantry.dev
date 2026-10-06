@@ -64,11 +64,16 @@ export interface ServerConfig extends PublicConfig {
   /** The bearer secret Vercel Cron sends to /api/reconcile. */
   cronSecret: string;
   /**
-   * The hex SHA-256 of the key the release workflow publishes packages to the feed with (its X-NuGet-ApiKey), or
-   * null: publishing is then refused. Only the hash is configured, so the key itself is only in the workflow's
-   * secrets.
+   * The hex SHA-256 of the key the operator's script publishes packages to the feed with (its X-NuGet-ApiKey), or
+   * null: publishing with a key is then refused. Only the hash is configured, so the key itself is only with the
+   * operator. The release workflow publishes with a GitHub OIDC token instead (feedPublishActors).
    */
   feedPublishKeySha256: string | null;
+  /**
+   * The GitHub logins whose release runs may publish with a GitHub Actions OIDC token (FEED_PUBLISH_ACTORS, separated
+   * by commas): the release managers. Empty when unset: no OIDC token is then accepted.
+   */
+  feedPublishActors: string[];
 }
 
 /**
@@ -110,6 +115,17 @@ export function validateServerConfig(
   const feedPublishKeySha256 = value('FEED_PUBLISH_KEY_SHA256')?.toLowerCase() ?? null;
   if (feedPublishKeySha256 && !/^[0-9a-f]{64}$/.test(feedPublishKeySha256)) {
     problems.push('FEED_PUBLISH_KEY_SHA256 must be the hex SHA-256 of the feed publish key (64 hex digits)');
+  }
+
+  const feedPublishActors = (value('FEED_PUBLISH_ACTORS') ?? '')
+    .split(',')
+    .map((login) => login.trim())
+    .filter(Boolean);
+  const notLogins = feedPublishActors.filter((login) => !/^[A-Za-z0-9](?:-?[A-Za-z0-9])*$/.test(login));
+  if (notLogins.length > 0) {
+    problems.push(
+      `FEED_PUBLISH_ACTORS must be GitHub logins separated by commas; these are not: ${notLogins.join(', ')}`,
+    );
   }
 
   const mode = value('PROVISIONING_MODE');
@@ -173,6 +189,7 @@ export function validateServerConfig(
     alertEmail: alertEmail || null,
     cronSecret,
     feedPublishKeySha256,
+    feedPublishActors,
   });
 }
 

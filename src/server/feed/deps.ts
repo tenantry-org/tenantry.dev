@@ -1,7 +1,10 @@
 import 'server-only';
+import type { JWTVerifyGetKey } from 'jose';
 import * as packageFeed from '@/server/db/package-feed';
 import { signedDownloadUrl, storePackageFile } from '@/server/db/package-storage';
 import { serverConfig } from '@/server/config/server-config';
+import { githubOidcKeys } from '@/server/feed/github-oidc';
+import { feedRateLimited } from '@/server/feed/rate-limit';
 
 /** The feed's tables (db/package-feed.ts). */
 export type FeedStore = typeof packageFeed;
@@ -17,14 +20,17 @@ export interface PackageStorage {
 
 /**
  * What the feed uses beyond its own rules: the feed's tables, the package storage, the site's origin (the feed's URLs
- * are absolute) and the publish key's hash. The handlers take it as their last argument, and the real ones by default;
- * the tests pass fakes.
+ * are absolute), who may publish (the publish key's hash, GitHub's OIDC signing keys and the release managers' logins)
+ * and the rate limit. The handlers take it as their last argument, and the real ones by default; the tests pass fakes.
  */
 export interface FeedDeps {
   store: FeedStore;
   storage: PackageStorage;
   siteUrl: () => string;
   feedPublishKeySha256: () => string | null;
+  githubOidcKeys: JWTVerifyGetKey;
+  feedPublishActors: () => string[];
+  rateLimited: (request: Request) => Promise<boolean>;
   now: () => Date;
 }
 
@@ -34,5 +40,8 @@ export const defaultFeedDeps: FeedDeps = {
   // Read when a request is handled, never while a module loads (the build loads them without a configuration).
   siteUrl: () => serverConfig().siteUrl,
   feedPublishKeySha256: () => serverConfig().feedPublishKeySha256,
+  githubOidcKeys,
+  feedPublishActors: () => serverConfig().feedPublishActors,
+  rateLimited: feedRateLimited,
   now: () => new Date(),
 };

@@ -9,7 +9,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(48);
+select plan(50);
 
 -- Structure: holds for every table and function, not only the ones listed below.
 select is_empty(
@@ -66,6 +66,8 @@ values ('tenantry.pro', '1.0.0', 'Tenantry.Pro', 'tenantry.pro/1.0.0/tenantry.pr
 insert into public.feed_tokens (customer_id, name, token_hash, prefix) values
   ('ctm_alice', 'CI', encode(sha256('tpf_alice'), 'hex'), 'tpf_alic'),
   ('ctm_bob', 'CI', encode(sha256('tpf_bob'), 'hex'), 'tpf_bob_');
+insert into public.feed_downloads (token_id, lower_id, version, client_network)
+select id, 'tenantry.pro', '1.0.0', '192.0.2.0/24' from public.feed_tokens;
 insert into public.licence_failures (customer_id, attempts, last_error) values ('ctm_bob', 1, 'signing failed');
 insert into public.customer_jobs (id, kind, customer_id, occurred_at, event_type, payload) values
   ('evt_bob', 'paddle_event', 'ctm_bob', now(), 'customer.updated', '{"data": {"email": "bob@example.com"}}');
@@ -94,6 +96,8 @@ select is_empty($$select 1 from public.licence_failures$$, 'licence failures sho
 select is_empty($$select 1 from public.payment_adjustments$$, 'payment adjustments show no rows');
 select is_empty($$select 1 from public.pro_releases$$, 'releases show no rows');
 select is_empty($$select 1 from public.pro_packages$$, 'packages show no rows');
+select throws_ok($$select 1 from public.feed_downloads$$, '42501', null,
+  'download records cannot be read, not even her own');
 select results_eq($$select id is not null, name, prefix from public.feed_tokens$$, $$values (true, 'CI'::text, 'tpf_alic'::text)$$,
   'only her feed tokens');
 select throws_ok($$select token_hash from public.feed_tokens$$, '42501', null, 'without their hashes');
@@ -106,6 +110,8 @@ select throws_ok(
 select throws_ok(
   $$insert into public.feed_tokens (customer_id, name, token_hash, prefix) values ('ctm_alice', 'x', repeat('c', 64), 'tpf_')$$,
   '42501', null, 'nor insert one');
+select throws_ok(
+  $$delete from public.feed_downloads$$, '42501', null, 'nor delete download records');
 select throws_ok($$select * from public.feed_customer(encode(sha256('tpf_bob'), 'hex'))$$, '42501', null,
   'she cannot look up a feed token');
 select results_eq(

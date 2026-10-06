@@ -5,7 +5,8 @@ import type { Access, AccessStatus } from '@/server/db/billing-store';
 
 /**
  * Service-role data access for the package feed (supabase/migrations/20261004130000_package_feed.sql): feed tokens,
- * the releases and their packages, and the private bucket the packages are stored in. The feed itself is
+ * the releases and their packages, the private bucket the packages are stored in, and the download records
+ * (20261006100000_feed_downloads.sql). The feed itself is
  * src/server/feed; this module only maps rows.
  */
 
@@ -14,6 +15,8 @@ import type { Access, AccessStatus } from '@/server/db/billing-store';
  * (entitlement-policy.ts: currentAccess says what it is now) and their vested-through date.
  */
 export interface FeedCustomer {
+  /** The feed token's id (feed_tokens.id), which the feed's download records name. */
+  tokenId: string;
   customerId: string;
   access: Access;
   vestedThrough: Date | null;
@@ -54,6 +57,7 @@ export async function findFeedCustomer(tokenHash: string): Promise<FeedCustomer 
   const row = data?.[0];
   return row
     ? {
+        tokenId: row.token_id,
         customerId: row.customer_id,
         access: {
           // active_subscriptions' check constraint allows only these; feed_customer gives 'lapsed' for no row.
@@ -65,6 +69,40 @@ export async function findFeedCustomer(tokenHash: string): Promise<FeedCustomer 
         vestedThrough: (row.vested_through as string | null) ? new Date(row.vested_through) : null,
       }
     : null;
+}
+
+/** A package download the feed handed out: the token, the package and version, and the client's network or null. */
+export interface FeedDownload {
+  tokenId: string;
+  lowerId: string;
+  version: string;
+  clientNetwork: string | null;
+}
+
+/** Records a download in feed_downloads, at the database's time. */
+export async function recordFeedDownload(download: FeedDownload): Promise<void> {
+  const supabase = createServiceRoleClient();
+  const { error } = await supabase.from('feed_downloads').insert({
+    token_id: download.tokenId,
+    lower_id: download.lowerId,
+    version: download.version,
+    client_network: download.clientNetwork,
+  });
+
+  if (error) throw error;
+}
+
+/** Deletes the download records from before `cutoff` and returns how many it deleted. */
+export async function deleteFeedDownloadsBefore(cutoff: Date): Promise<number> {
+  const supabase = createServiceRoleClient();
+  const { error, count } = await supabase
+    .from('feed_downloads')
+    .delete({ count: 'exact' })
+    .lt('downloaded_at', cutoff.toISOString());
+
+  if (error) throw error;
+
+  return count ?? 0;
 }
 
 /**

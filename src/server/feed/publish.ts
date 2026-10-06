@@ -1,13 +1,16 @@
 import 'server-only';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { type FeedDeps, defaultFeedDeps } from '@/server/feed/deps';
+import { releaseTokenRefusal } from '@/server/feed/github-oidc';
 import { parseNuspec, readRootFiles } from '@/server/feed/nupkg';
 import { compareVersions, parseVersion } from '@/server/feed/version';
 
 /**
- * Publishing a package to the feed (PackagePublish/2.0.0): what `dotnet nuget push --source <feed>/index.json
- * --api-key <key>` sends, a PUT of the .nupkg as multipart form data with the key in X-NuGet-ApiKey. Only the release
- * workflow holds the key; the server knows only its hash (FEED_PUBLISH_KEY_SHA256).
+ * Publishing a package to the feed (PackagePublish/2.0.0): a PUT of the .nupkg as multipart form data, as `dotnet nuget
+ * push` sends it. Tenantry Pro's release workflow authenticates with a GitHub Actions OIDC token in
+ * `Authorization: Bearer` (github-oidc.ts), so no publish key is stored anywhere. The operator's script
+ * (scripts/feed-publish.sh) sends a publish key in X-NuGet-ApiKey instead, of which the server knows only the hash
+ * (FEED_PUBLISH_KEY_SHA256).
  *
  * A package is accepted if its id is Tenantry.Pro or Tenantry.Pro.*, in the casing it was first published with, its
  * version is major.minor.patch or a release candidate major.minor.patch-rc.N (version.ts), and that id and version are
@@ -43,7 +46,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const PACKAGE_ID = /^Tenantry\.Pro(\.[A-Za-z0-9]+)*$/;
 
 export async function handlePublish(request: Request, deps: FeedDeps = defaultFeedDeps): Promise<Response> {
-  if (!isPublisher(request, deps)) return reply(403, 'A valid publish key is required.');
+  const refusal = await publisherRefusal(request, deps);
+  if (refusal) return reply(403, refusal);
 
   let bytes: Uint8Array;
   try {
@@ -190,7 +194,7 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
  * hashes. Customers' feed tokens cannot read it.
  */
 export async function handlePublishedList(request: Request, deps: FeedDeps = defaultFeedDeps): Promise<Response> {
-  if (!isPublisher(request, deps)) return reply(403, 'A valid publish key is required.');
+  if (!hasPublishKey(request, deps)) return reply(403, 'A valid publish key is required.');
 
   const releases = await deps.store.listPublishedReleases();
   return Response.json(
@@ -207,9 +211,24 @@ export async function handlePublishedList(request: Request, deps: FeedDeps = def
   );
 }
 
-// Whether the request carries the publish key whose SHA-256 is configured (FEED_PUBLISH_KEY_SHA256). Nothing is
-// published or listed while none is configured.
-function isPublisher(request: Request, deps: FeedDeps): boolean {
+// Why the request may not publish, or null if it may: the release workflow's OIDC token when the request has a bearer
+// token, otherwise the publish key.
+async function publisherRefusal(request: Request, deps: FeedDeps): Promise<string | null> {
+  const bearer = /^Bearer\s+(\S+)\s*$/i.exec(request.headers.get('authorization') ?? '');
+  if (bearer) {
+    return releaseTokenRefusal(bearer[1], {
+      siteUrl: deps.siteUrl(),
+      keys: deps.githubOidcKeys,
+      actors: deps.feedPublishActors(),
+    });
+  }
+  return hasPublishKey(request, deps) ? null : 'A valid publish key or GitHub OIDC token is required.';
+}
+
+// Whether the request carries the publish key whose SHA-256 is configured (FEED_PUBLISH_KEY_SHA256). The key is the
+// operator's path, for scripts/feed-publish.sh against the sandbox; the release workflow uses its OIDC token. Nothing
+// is published or listed with a key while none is configured.
+function hasPublishKey(request: Request, deps: FeedDeps): boolean {
   const expected = deps.feedPublishKeySha256();
   const key = request.headers.get('x-nuget-apikey');
   return Boolean(expected && key && sameHash(createHash('sha256').update(key, 'utf8').digest('hex'), expected!));

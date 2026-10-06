@@ -97,15 +97,23 @@ Tenantry Pro's release workflow and `scripts/feed-publish.sh` publish packages w
 contract both rely on; change it here and in both clients together.
 
 `PUT /feed/v3/package`, which is what `dotnet nuget push --source <site>/feed/v3/index.json --api-key <key>` sends: the
-`.nupkg` as a multipart form file, with the publish key in the `X-NuGet-ApiKey` header. The deployment holds only the
-key's SHA-256 (`FEED_PUBLISH_KEY_SHA256`); without it every push is refused.
+`.nupkg` as a multipart form file. It takes one of two credentials:
+
+- The release workflow sends a GitHub Actions OIDC token as `Authorization: Bearer <token>`, requested with the audience
+  `<site>/feed` (`https://tenantry.dev/feed` in production). The site checks it against GitHub's signing keys and
+  accepts it only from `.github/workflows/release.yml` in `tenantry-org/tenantry-pro`, running for a `v*` tag pushed by
+  a login in `FEED_PUBLISH_ACTORS` (comma-separated). Without that setting, no token is accepted. No key is stored
+  anywhere for it (`src/server/feed/github-oidc.ts`).
+- The operator's script, for the sandbox, sends a publish key in the `X-NuGet-ApiKey` header. The deployment holds only
+  the key's SHA-256 (`FEED_PUBLISH_KEY_SHA256`); without it every push with a key is refused. Production can leave it
+  unset once releases publish with OIDC tokens.
 
 | Answer | Meaning                                                                               | What a client does  |
 | ------ | ------------------------------------------------------------------------------------- | ------------------- |
 | 201    | Published. The package's release is recorded with its first package.                  | Carry on.           |
 | 409    | This id and version is already published with exactly these bytes (the same SHA-512). | Treat as published. |
 | 400    | Refused, with the reason as text (below).                                             | Fail.               |
-| 403    | No publish key, or the wrong one.                                                     | Fail.               |
+| 403    | No credential, the wrong key, or an OIDC token refused, with the reason as text.      | Fail.               |
 | 413    | Larger than 4 MB (a Vercel function takes a body of at most 4.5 MB).                  | Fail.               |
 
 `dotnet nuget push --skip-duplicate` and the script treat 409 as published, so re-running a release is safe. Every other
@@ -132,8 +140,8 @@ not, is dated as its `X.Y.0` release for vesting, so customers whose vested rele
 its patches; the security flag is recorded and listed, and changes no date. The first package of a release fixes its
 date and flag; later packages of the same release are checked only for the flag.
 
-`GET /feed/v3/package` with the same header lists what the feed holds: each release's version, dates and security flag,
-with its packages' ids, sizes and SHA-512s. Feed tokens cannot read it.
+`GET /feed/v3/package` with the publish key in `X-NuGet-ApiKey` lists what the feed holds: each release's version, dates
+and security flag, with its packages' ids, sizes and SHA-512s. Feed tokens and OIDC tokens cannot read it.
 
 The publish key is a random string, generated once per environment; only its hash goes into the deployment:
 
@@ -151,9 +159,15 @@ A customer creates and revokes feed tokens on the Access page (`src/app/dashboar
 once, only its SHA-256 is stored, and a customer holds at most 10. The feed, the Access page and the Billing page take
 what a customer may use from the same rules (`entitlement-policy.ts`: `currentAccess`, `canRestore`, `mayUseRelease`),
 so a grace period that has ended stops the feed serving every release at the moment the pages stop saying it does.
-Unauthenticated and bad-credential requests are limited by a Vercel Firewall rate limit rule on `/feed/v3`, set up in
-the dashboard (it is configuration, not code); a credential that is not shaped like a feed token is refused without a
-database query.
+Every feed request is counted against the client's IP address before any token is looked up: the route calls
+`@vercel/firewall`'s `checkRateLimit` with the rate limit ID `package-feed` (`src/server/feed/rate-limit.ts`) and
+answers 429 over the limit. The limit itself is a Vercel Firewall rule with that ID, set in the dashboard. Without the rule, in
+`next dev`, or when the firewall cannot be reached, the request goes ahead and a warning is logged. A credential that is
+not shaped like a feed token is refused without a database query.
+
+Each package download (a redirect to the package file) is recorded in `feed_downloads`: the token, the package and
+version, the time, and the client's network (an IPv4 address's /24, an IPv6 address's /48). Only the service role reads
+it. The daily reconcile run deletes records older than 90 days, the period the privacy policy states.
 
 `scripts/feed-e2e.sh` (`pnpm test:feed-e2e`) runs the whole journey against a local stack: publishing, creating tokens
 through the Access page's actions, restoring as a subscriber, a lapsed customer with vested releases and one without,

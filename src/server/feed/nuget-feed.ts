@@ -1,4 +1,5 @@
 import 'server-only';
+import { isIPv4, isIPv6 } from 'node:net';
 import { canRestore, currentAccess, mayUseRelease } from '@/server/billing/entitlement-policy';
 import type { FeedPackage } from '@/server/db/package-feed';
 import { type FeedDeps, defaultFeedDeps } from '@/server/feed/deps';
@@ -27,7 +28,8 @@ import { FEED_PATH } from '@/lib/install-snippets';
  *
  * Every package resource needs a feed token as the basic-auth password; without a live one the answer is 401 with a
  * Basic challenge, which makes NuGet send the credentials configured for the source. Responses are never cached by
- * anyone but the client: each customer's lists differ.
+ * anyone but the client: each customer's lists differ. Every request counts against the feed's rate limit
+ * (rate-limit.ts), and each package download is recorded with its token (feed_downloads), kept for 90 days.
  */
 
 /** How long a download's signed URL works. NuGet follows the redirect at once. */
@@ -50,14 +52,15 @@ export async function handleFeedRequest(
 
   const token = feedTokenFrom(request);
   const found = token && isFeedTokenShape(token) ? await deps.store.findFeedCustomer(hashFeedToken(token)) : null;
-  if (!found) return unauthorized();
+  if (!found) return unauthorized(deps.siteUrl());
   const customer = { accessStatus: currentAccess(found.access, deps.now()).status, vestedThrough: found.vestedThrough };
 
   // A lapsed customer who never vested may restore nothing: say so, rather than claim the packages do not exist.
   if (!canRestore(customer)) {
     return text(
       403,
-      'This feed token belongs to a Tenantry Pro subscription that has ended, with no releases licensed after it.',
+      "This feed token's Tenantry Pro subscription has ended and no releases are vested, so the feed serves nothing. " +
+        `Subscribe again at ${deps.siteUrl()}/#pricing.`,
     );
   }
 
@@ -70,7 +73,7 @@ export async function handleFeedRequest(
   const packages = visible(customer, await deps.store.listFeedPackages(lowerId));
   if (packages.length === 0) return notFound();
 
-  if (resource === 'flat') return flat(base, packages, file, deps);
+  if (resource === 'flat') return flat(base, packages, file, { request, tokenId: found.tokenId }, deps);
   if (resource === 'registration') return registration(base, packages, file);
 
   return notFound();
@@ -98,7 +101,13 @@ function visible(customer: Parameters<typeof mayUseRelease>[0], packages: FeedPa
   return packages.filter((pkg) => mayUseRelease(customer, pkg.entitlementAt)).sort(compareVersions);
 }
 
-async function flat(base: string, packages: FeedPackage[], file: string[], deps: FeedDeps): Promise<Response> {
+async function flat(
+  base: string,
+  packages: FeedPackage[],
+  file: string[],
+  download: { request: Request; tokenId: string },
+  deps: FeedDeps,
+): Promise<Response> {
   const lowerId = packages[0].lowerId;
 
   if (file.length === 1 && file[0] === 'index.json') {
@@ -111,6 +120,7 @@ async function flat(base: string, packages: FeedPackage[], file: string[], deps:
 
   if (name === `${lowerId}.${version}.nupkg`) {
     const location = await deps.storage.signedDownloadUrl(pkg.storagePath, DOWNLOAD_URL_SECONDS);
+    await recordDownload(download.tokenId, pkg, download.request, deps);
     return new Response(null, { status: 302, headers: { ...PRIVATE, Location: location } });
   }
 
@@ -233,14 +243,70 @@ function search(base: string, packages: FeedPackage[], url: URL) {
   };
 }
 
+// Records a download for the token. A record that cannot be written is logged and the download goes ahead: the record
+// is for spotting a shared token, and a customer's restore matters more.
+async function recordDownload(tokenId: string, pkg: FeedPackage, request: Request, deps: FeedDeps): Promise<void> {
+  try {
+    await deps.store.recordFeedDownload({
+      tokenId,
+      lowerId: pkg.lowerId,
+      version: pkg.version,
+      clientNetwork: clientNetwork(request),
+    });
+  } catch (error) {
+    console.error('Package feed: a download could not be recorded:', error);
+  }
+}
+
 /**
- * Runs a feed handler and makes sure its answer, whatever it is, stays out of shared caches: a failure becomes a 500
- * without its details, and every answer carries PRIVATE. The route wraps each method in it.
+ * The client's network rather than its address: an IPv4 address's /24 or an IPv6 address's /48, from the address
+ * Vercel gives in X-Real-IP (or the first in X-Forwarded-For). Null when there is none.
  */
-export async function serveFeed(handle: () => Promise<Response>): Promise<Response> {
+export function clientNetwork(request: Request): string | null {
+  const address = (
+    request.headers.get('x-real-ip') ??
+    request.headers.get('x-forwarded-for')?.split(',')[0] ??
+    ''
+  ).trim();
+  const v4 = address.replace(/^::ffff:/i, '');
+  if (isIPv4(v4)) return `${v4.split('.').slice(0, 3).join('.')}.0/24`;
+  if (!isIPv6(address)) return null;
+
+  // The eight 16-bit groups, with '::' expanded and a trailing dotted IPv4 part as its two groups.
+  const parts = (side: string | undefined) =>
+    (side ? side.split(':') : []).flatMap((part) => {
+      if (!part.includes('.')) return [part];
+      const [a, b, c, d] = part.split('.').map(Number);
+      return [((a << 8) | b).toString(16), ((c << 8) | d).toString(16)];
+    });
+  const [head, tail] = address.split('::');
+  const groups =
+    tail === undefined
+      ? parts(head)
+      : [...parts(head), ...Array<string>(8 - parts(head).length - parts(tail).length).fill('0'), ...parts(tail)];
+  return `${groups
+    .slice(0, 3)
+    .map((group) => Number.parseInt(group, 16).toString(16))
+    .join(':')}::/48`;
+}
+
+/**
+ * Runs a feed handler and makes sure its answer, whatever it is, stays out of shared caches: a request over the rate
+ * limit gets 429 without reaching the handler (or the database), a failure becomes a 500 without its details, and every
+ * answer carries PRIVATE. The route wraps each method in it.
+ */
+export async function serveFeed(
+  request: Request,
+  handle: () => Promise<Response>,
+  deps: FeedDeps = defaultFeedDeps,
+): Promise<Response> {
   let response: Response;
   try {
-    response = await handle();
+    response = (await deps.rateLimited(request))
+      ? text(429, 'Too many requests to the package feed from this address. Try again in a minute.', {
+          'Retry-After': '60',
+        })
+      : await handle();
   } catch (error) {
     console.error('Package feed: the request failed:', error);
     response = text(500, 'The feed failed to answer. Try again shortly.');
@@ -264,8 +330,11 @@ function text(status: number, message: string, headers: Record<string, string> =
   });
 }
 
-function unauthorized(): Response {
-  return text(401, 'A live Tenantry Pro feed token is required as the password.', {
+function unauthorized(siteUrl: string): Response {
+  const message =
+    'Send a Tenantry Pro feed token as the password. ' +
+    `Create one at ${siteUrl}/dashboard/pro; a revoked token is refused.`;
+  return text(401, message, {
     'WWW-Authenticate': 'Basic realm="Tenantry Pro"',
   });
 }

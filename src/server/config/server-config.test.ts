@@ -70,6 +70,7 @@ describe('validateServerConfig', () => {
       alertEmail: 'ops@tenantry.dev',
       cronSecret: 'cron',
       feedPublishKeySha256: null,
+      feedPublishActors: [],
     });
     expect(config.licenceSigningKey.export({ type: 'pkcs8', format: 'pem' })).toBe(productionKey.pem);
     expect([config, config.paddle, config.paddle.prices, config.email].every(Object.isFrozen)).toBe(true);
@@ -85,6 +86,18 @@ describe('validateServerConfig', () => {
     ).toBe(hash.toLowerCase());
     expect(problems(environment('sandbox', { FEED_PUBLISH_KEY_SHA256: 'publish-key' }))).toEqual([
       expect.stringContaining('FEED_PUBLISH_KEY_SHA256 must be the hex SHA-256'),
+    ]);
+  });
+
+  it('takes the logins that may publish from a release run, separated by commas', () => {
+    expect(
+      validateServerConfig(
+        environment('sandbox', { FEED_PUBLISH_ACTORS: ' olliejm, release-bot ,' }),
+        productionKey.spki,
+      ).feedPublishActors,
+    ).toEqual(['olliejm', 'release-bot']);
+    expect(problems(environment('sandbox', { FEED_PUBLISH_ACTORS: 'olliejm, tenantry-org/release, -x' }))).toEqual([
+      'FEED_PUBLISH_ACTORS must be GitHub logins separated by commas; these are not: tenantry-org/release, -x',
     ]);
   });
 

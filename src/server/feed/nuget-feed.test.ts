@@ -4,7 +4,7 @@ import type { FeedCustomer, FeedPackage } from '@/server/db/package-feed';
 import { computeEntitlement } from '@/server/billing/entitlement-policy';
 import type { FeedDeps, FeedStore } from './deps';
 import { hashFeedToken } from './feed-tokens';
-import { DOWNLOAD_URL_SECONDS, handleFeedRequest, serveFeed } from './nuget-feed';
+import { clientNetwork, DOWNLOAD_URL_SECONDS, handleFeedRequest, serveFeed } from './nuget-feed';
 import { parseVersion } from './version';
 
 // The feed's resources against an in-memory store: what each customer sees, the shape of each answer as the NuGet
@@ -58,7 +58,8 @@ const PACKAGES: FeedPackage[] = [
 ];
 
 const lapsed = { status: 'lapsed', graceEndsAt: null } as const;
-const CUSTOMERS: Record<string, FeedCustomer> = {
+// Each customer's token id is tok_<name> (the store's fake adds it).
+const CUSTOMERS: Record<string, Omit<FeedCustomer, 'tokenId'>> = {
   active: { customerId: 'ctm_active', access: { status: 'active', graceEndsAt: null }, vestedThrough: null },
   grace: {
     customerId: 'ctm_grace',
@@ -91,7 +92,7 @@ beforeEach(() => {
   store = {
     findFeedCustomer: vi.fn(async (hash: string) => {
       const name = Object.keys(CUSTOMERS).find((key) => hashFeedToken(tokenOf(key)) === hash);
-      return name ? CUSTOMERS[name] : null;
+      return name ? { tokenId: `tok_${name}`, ...CUSTOMERS[name] } : null;
     }),
     listFeedPackages: vi.fn(async (lowerId?: string) =>
       PACKAGES.filter((pkg) => lowerId === undefined || pkg.lowerId === lowerId),
@@ -105,6 +106,8 @@ beforeEach(() => {
     listPublishedReleases: vi.fn(),
     listReleases: vi.fn(),
     recordedPackageId: vi.fn(),
+    recordFeedDownload: vi.fn(async () => undefined),
+    deleteFeedDownloadsBefore: vi.fn(),
   };
   deps = {
     store: store as unknown as FeedStore,
@@ -114,13 +117,19 @@ beforeEach(() => {
     },
     siteUrl: () => 'https://sandbox.example.com',
     feedPublishKeySha256: () => null,
+    githubOidcKeys: vi.fn(),
+    feedPublishActors: () => [],
+    rateLimited: vi.fn(async () => false),
     now: () => new Date('2028-06-01T00:00:00Z'),
   };
 });
 
+/** The request serveFeed is given, which only the rate limit reads. */
+const FEED_REQUEST = new Request(`${BASE}/flat/tenantry.pro/index.json`);
+
 /** A request to the feed, with the customer's token as the basic-auth password (any username, as NuGet sends). */
-function get(path: string, customer?: string, init: { authorization?: string } = {}) {
-  const headers = new Headers();
+function get(path: string, customer?: string, init: { authorization?: string; ip?: string } = {}) {
+  const headers = new Headers(init.ip ? { 'x-real-ip': init.ip } : {});
   const authorization =
     init.authorization ??
     (customer ? `Basic ${Buffer.from(`anything:${tokenOf(customer)}`).toString('base64')}` : undefined);
@@ -174,6 +183,10 @@ describe('authentication', () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get('www-authenticate')).toBe('Basic realm="Tenantry Pro"');
+    expect(await response.text()).toBe(
+      'Send a Tenantry Pro feed token as the password. Create one at https://sandbox.example.com/dashboard/pro; a ' +
+        'revoked token is refused.',
+    );
   });
 
   it('takes the token from the username when the password is empty', async () => {
@@ -211,7 +224,10 @@ describe('what each customer sees', () => {
     for (const path of ['flat/tenantry.pro/index.json', 'registration/tenantry.pro/index.json', 'query']) {
       const response = await get(path, 'unvested');
       expect(response.status).toBe(403);
-      expect(await response.text()).toContain('subscription that has ended');
+      expect(await response.text()).toBe(
+        "This feed token's Tenantry Pro subscription has ended and no releases are vested, so the feed serves " +
+          'nothing. Subscribe again at https://sandbox.example.com/#pricing.',
+      );
     }
   });
 
@@ -259,7 +275,7 @@ describe('what each customer sees', () => {
       amount: 39000,
       currencyCode: 'GBP',
     });
-    const asStored = (adjustments: PaymentAdjustment[]): FeedCustomer => {
+    const asStored = (adjustments: PaymentAdjustment[]): (typeof CUSTOMERS)[string] => {
       const entitlement = computeEntitlement({
         subscriptions: [cancelled],
         payments: [term],
@@ -584,7 +600,7 @@ describe('serveFeed', () => {
     store.listFeedPackages.mockRejectedValue(new Error('database unavailable'));
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const response = await serveFeed(() => get('flat/tenantry.pro/index.json', 'active'));
+    const response = await serveFeed(FEED_REQUEST, () => get('flat/tenantry.pro/index.json', 'active'), deps);
 
     expect(response.status).toBe(500);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
@@ -593,10 +609,83 @@ describe('serveFeed', () => {
   });
 
   it('adds the headers to an answer that lacks them', async () => {
-    const response = await serveFeed(async () => new Response('Not found.', { status: 404 }));
+    const response = await serveFeed(FEED_REQUEST, async () => new Response('Not found.', { status: 404 }), deps);
 
     expect(response.status).toBe(404);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('vary')).toBe('Authorization');
+  });
+
+  it('answers 429 to a request over the rate limit, before the handler looks a token up', async () => {
+    vi.mocked(deps.rateLimited).mockResolvedValue(true);
+    const handle = vi.fn(() => get('flat/tenantry.pro/index.json', 'active'));
+
+    const response = await serveFeed(FEED_REQUEST, handle, deps);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('60');
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(deps.rateLimited).toHaveBeenCalledWith(FEED_REQUEST);
+    expect(handle).not.toHaveBeenCalled();
+    expect(store.findFeedCustomer).not.toHaveBeenCalled();
+  });
+
+  it('runs the handler for a request within the rate limit', async () => {
+    const response = await serveFeed(FEED_REQUEST, () => get('flat/tenantry.pro/index.json', 'active'), deps);
+
+    expect(response.status).toBe(200);
+    expect(deps.rateLimited).toHaveBeenCalledWith(FEED_REQUEST);
+  });
+});
+
+describe('download records', () => {
+  it('records each download with its token, package, version and the client network', async () => {
+    await get('flat/Tenantry.Pro/1.4.0/tenantry.pro.1.4.0.nupkg', 'vested', { ip: '203.0.113.77' });
+
+    expect(store.recordFeedDownload).toHaveBeenCalledExactlyOnceWith({
+      tokenId: 'tok_vested',
+      lowerId: 'tenantry.pro',
+      version: '1.4.0',
+      clientNetwork: '203.0.113.0/24',
+    });
+  });
+
+  it('records nothing for a version list, a nuspec or a refused download', async () => {
+    await get('flat/tenantry.pro/index.json', 'active');
+    await get('flat/tenantry.pro/1.4.0/tenantry.pro.nuspec', 'active');
+    await get('flat/tenantry.pro/1.6.0/tenantry.pro.1.6.0.nupkg', 'vested');
+    await get('flat/tenantry.pro/1.4.0/tenantry.pro.1.4.0.nupkg', 'unvested');
+
+    expect(store.recordFeedDownload).not.toHaveBeenCalled();
+  });
+
+  it('still serves the download when the record cannot be written', async () => {
+    store.recordFeedDownload.mockRejectedValue(new Error('database unavailable'));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const response = await get('flat/tenantry.pro/1.4.0/tenantry.pro.1.4.0.nupkg', 'active');
+
+    expect(response.status).toBe(302);
+    expect(logged).toHaveBeenCalledWith('Package feed: a download could not be recorded:', expect.any(Error));
+  });
+});
+
+describe('clientNetwork', () => {
+  const network = (headers: Record<string, string>) =>
+    clientNetwork(new Request('https://sandbox.example.com/feed/v3/index.json', { headers }));
+
+  it('keeps an IPv4 address’s /24 and an IPv6 address’s /48, never the address', () => {
+    expect(network({ 'x-real-ip': '198.51.100.23' })).toBe('198.51.100.0/24');
+    expect(network({ 'x-real-ip': '::ffff:198.51.100.23' })).toBe('198.51.100.0/24');
+    expect(network({ 'x-real-ip': '2001:0db8:00a1:1234::5' })).toBe('2001:db8:a1::/48');
+    expect(network({ 'x-real-ip': '2001:db8::1' })).toBe('2001:db8:0::/48');
+    expect(network({ 'x-real-ip': '::1:2:3:4:192.0.2.1' })).toBe('0:0:1::/48');
+    expect(network({ 'x-real-ip': '2001:db8:1:2:3:4:5:6' })).toBe('2001:db8:1::/48');
+  });
+
+  it('takes the first address of X-Forwarded-For without X-Real-IP, and gives null without an address', () => {
+    expect(network({ 'x-forwarded-for': '192.0.2.9, 10.0.0.1' })).toBe('192.0.2.0/24');
+    expect(network({})).toBeNull();
+    expect(network({ 'x-real-ip': 'unknown' })).toBeNull();
   });
 });
