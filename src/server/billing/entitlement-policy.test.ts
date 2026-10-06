@@ -1428,6 +1428,30 @@ describe('timing', () => {
     expect(vested(at('2028-02-28T00:00:00Z'))).toBe('2028-02-28T00:00:00.000Z');
   });
 
+  it('counts a monthly-price charge for fewer than 27 days only for the calendar months it covers', () => {
+    // Twelve 50p charges, each for one day, a month apart: twelve days, not twelve paid months.
+    const days = Array.from({ length: 12 }, (_, i) =>
+      payment(addMonths(date('2027-01-10T00:00:00Z'), i).toISOString(), {
+        periodEndsAt: new Date(addMonths(date('2027-01-10T00:00:00Z'), i).getTime() + DAY),
+        charged: 50,
+      }),
+    );
+    const oneDays = compute({ payments: days, now: '2030-01-01T00:00:00Z' });
+    expect(oneDays.vestedThrough).toBeNull();
+    expect(compute({ payments: days, now: '2027-12-20T00:00:00Z' }).run).toMatchObject({ monthsPaid: 0 });
+
+    // 5000 for 15 January to 1 February beside January's 3900: January is still one paid month.
+    const year = monthly('2027-01-01T00:00:00Z', 12);
+    const straddling = payment('2027-01-15T00:00:00Z', { periodEndsAt: date('2027-02-01T00:00:00Z'), charged: 5000 });
+    const at = (now: string) => compute({ payments: [...year, straddling], now });
+    expect(compute({ payments: [year[0], straddling], now: '2027-01-20T00:00:00Z' }).run).toMatchObject({
+      monthsPaid: 1,
+      paidThrough: date('2027-02-01T00:00:00Z'),
+    });
+    expect(at('2027-12-31T23:59:59Z').vestedThrough).toBeNull();
+    expect(vested(at('2028-01-01T00:00:00Z'))).toBe('2028-01-01T00:00:00.000Z');
+  });
+
   it('shows six paid months for an annual payment whose kept money falls a penny short of half', () => {
     const year = annual('2027-01-01T00:00:00Z');
     const refund = adjustment(year, 'refund', '2027-01-03T00:00:00Z', { amount: 39000 - 19339 });

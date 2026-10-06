@@ -329,8 +329,7 @@ class Ledger {
 
   /**
    * The billing periods of the payments at the offer prices. Of the payments of one subscription billed at one
-   * interval, a payment for a whole period of that interval (its calendar months: one a month, twelve a year) holds a
-   * billing period unless its period overlaps one already held, and so does any other payment that overlaps none. A
+   * interval, a payment for a whole period of that interval (`isWholePeriod`) holds a billing period unless its period overlaps one already held, and so does any other payment that overlaps none. A
    * payment whose period overlaps one held, and that charged less than the payment holding it (or anything, if that
    * charged nothing), is within it: a prorated charge, even one stamped with a period that runs past it. One that
    * charged at least as much is a billing period of its own: a duplicate charge, or a new purchase, such as a new year
@@ -341,8 +340,7 @@ class Ledger {
    * the grouping does not depend on the order of the ledger.
    */
   billingPeriods(): BillingPeriod[] {
-    const whole = (payment: Payment) =>
-      calendarMonths(payment.periodStartsAt, payment.periodEndsAt.getTime()) >= nominalMonths(payment) ? 1 : 0;
+    const whole = (payment: Payment) => (isWholePeriod(payment) ? 1 : 0);
     const payments = this.input.payments
       .filter((payment) => this.isOffered(payment) && payment.periodEndsAt > payment.periodStartsAt)
       .sort(
@@ -500,19 +498,37 @@ class Ledger {
 }
 
 /**
- * The paid months a payment's billing period pays for: its billing interval's months (12 a year, one a month) times its
- * frequency, whatever the length of the period. A monthly period counts its months even if Paddle's period is shorter
- * than a calendar month. A period at a yearly price that covers fewer calendar months than 12 from its start is not a
- * year but a prorated charge, and pays for the calendar months it covers. Nothing for another interval.
+ * The paid months a payment's billing period pays for: for a whole period (`isWholePeriod`), its billing interval's
+ * months (12 a year, one a month) times its frequency, whatever the length of the period; for a shorter one, such as
+ * a prorated charge, the calendar months it covers. Nothing for another interval.
  */
 export function monthsOf(
   payment: Pick<Payment, 'billingInterval' | 'billingFrequency' | 'periodStartsAt' | 'periodEndsAt'>,
 ): number {
   if (payment.periodEndsAt <= payment.periodStartsAt) return 0;
   const nominal = nominalMonths(payment);
-  if (payment.billingInterval === 'month') return nominal;
+  if (isWholePeriod(payment)) return nominal;
   return Math.min(nominal, calendarMonths(payment.periodStartsAt, payment.periodEndsAt.getTime()));
 }
+
+/**
+ * Whether a payment's period is a whole period of its billing interval: for a monthly price, at least 27 days a month
+ * (Paddle's monthly periods are 28 to 31 days, and may fall a little short at month ends); for a yearly price, the 12
+ * calendar months from its start.
+ */
+export function isWholePeriod(
+  payment: Pick<Payment, 'billingInterval' | 'billingFrequency' | 'periodStartsAt' | 'periodEndsAt'>,
+): boolean {
+  const nominal = nominalMonths(payment);
+  if (nominal <= 0) return false;
+  if (payment.billingInterval === 'month') {
+    return payment.periodEndsAt.getTime() - payment.periodStartsAt.getTime() >= nominal * WHOLE_MONTH_MS;
+  }
+  return calendarMonths(payment.periodStartsAt, payment.periodEndsAt.getTime()) >= nominal;
+}
+
+// The shortest monthly period that counts as a whole month.
+const WHOLE_MONTH_MS = 27 * DAY_MS;
 
 // The months a billing interval pays for: 12 a year and one a month, times the frequency; nothing for another.
 function nominalMonths(payment: Pick<Payment, 'billingInterval' | 'billingFrequency'>): number {
