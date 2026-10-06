@@ -965,6 +965,69 @@ describe('what counts as money returned', () => {
     ]);
   });
 
+  describe('a smaller charge stamped with a period that runs past the one it overlaps', () => {
+    const sameAs = (a: Entitlement, b: Entitlement) => {
+      expect(a.vestedThrough).toEqual(b.vestedThrough);
+      expect(a.run).toEqual(b.run);
+      expect(a.grants).toEqual(b.grants);
+    };
+
+    it('adds nothing to a refunded year: 500 for 1 July 2027 to 1 July 2028 is no term and no year of paid time', () => {
+      const term = annual('2027-01-01T00:00:00Z');
+      const topUp = annual('2027-07-01T00:00:00Z', { charged: 500 });
+      const refund = adjustment(term, 'refund', '2027-07-02T00:00:00Z');
+      for (const now of [
+        '2027-07-03T00:00:00Z',
+        '2028-02-01T00:00:00Z',
+        '2028-08-01T00:00:00Z',
+        '2030-01-01T00:00:00Z',
+      ]) {
+        const entitlement = compute({
+          payments: [term, topUp],
+          adjustments: [refund],
+          now,
+          endedAt: '2027-07-02T00:00:00Z',
+        });
+        expect(entitlement.vestedThrough).toBeNull();
+        expect(entitlement.grants).toEqual([
+          expect.objectContaining({ transactionId: term.transactionId, status: 'withdrawn' }),
+        ]);
+      }
+      for (const now of ['2027-07-03T00:00:00Z', '2028-03-01T00:00:00Z']) {
+        sameAs(compute({ payments: [term, topUp], now }), compute({ payments: [term], now }));
+      }
+    });
+
+    it('adds nothing to a refunded December: 300 for 15 December to 15 January is no month of its own', () => {
+      const year = monthly('2027-01-01T00:00:00Z', 12);
+      const topUp = payment('2027-12-15T00:00:00Z', { charged: 300 });
+      const refund = adjustment(year[11], 'refund', '2027-12-16T00:00:00Z');
+      for (const now of ['2028-01-01T00:00:00Z', '2028-02-01T00:00:00Z']) {
+        const entitlement = compute({ payments: [...year, topUp], adjustments: [refund], now });
+        expect(entitlement.vestedThrough).toBeNull();
+        expect(entitlement.run).toMatchObject({ monthsPaid: 11 });
+      }
+      for (const now of ['2027-12-20T00:00:00Z', '2028-01-01T00:00:00Z', '2028-02-01T00:00:00Z']) {
+        sameAs(compute({ payments: [...year, topUp], now }), compute({ payments: year, now }));
+      }
+    });
+  });
+
+  it('counts a smaller charge stamped from before the month it overlaps within that month', () => {
+    // 300 for 25 December 2026 to 5 January 2027, beside a January refunded in full: within January, so it pays for
+    // 300 / 4200 of it, not for 11 days of its own.
+    const year = monthly('2027-01-01T00:00:00Z', 12);
+    const early = payment('2026-12-25T00:00:00Z', { periodEndsAt: date('2027-01-05T00:00:00Z'), charged: 300 });
+    const refund = adjustment(year[0], 'refund', '2027-01-03T00:00:00Z');
+    const entitlement = compute({ payments: [early, ...year], adjustments: [refund], now: '2027-12-20T00:00:00Z' });
+
+    expect(entitlement.run).toMatchObject({ startedAt: date('2027-01-01T00:00:00Z'), monthsPaid: 11 });
+    const kept = Math.floor((300 / 4200) * 31 * DAY);
+    expect(
+      compute({ payments: [early, ...year.slice(0, 1)], adjustments: [refund], now: '2027-01-20T00:00:00Z' }).run,
+    ).toMatchObject({ paidThrough: new Date(date('2027-01-01T00:00:00Z').getTime() + kept) });
+  });
+
   describe('a duplicate charge for a period already paid for', () => {
     const year = monthly('2027-01-01T00:00:00Z', 12);
     const may = year[4];

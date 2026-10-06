@@ -37,16 +37,16 @@ export default function EulaPage() {
         gaps between them, and vest at 12, and money returned to you takes away the time it paid for. Each billing
         period of any of your Tenantry Pro subscriptions, at a monthly or yearly price this site has offered, gives a
         paid period: the part of that billing period that the money kept from its payments pays for, counted from the
-        start of the billing period. A payment for part of a billing period you have already paid for, such as a
-        prorated charge, adds no time: its money counts together with the billing period&apos;s payment. A refund of a
-        duplicate charge for a billing period you have already paid for is not money returned for that period. A billing
-        period whose payments you keep in full gives the whole billing period, even if the subscription was cancelled or
-        paused before the period ended. If part of the money has been returned to you, the paid period is the same share
-        of the billing period as the share of the money you kept: if half of a month&apos;s payment is refunded, the
-        paid period is the first half of that month. A billing period of which everything has been returned, or for
-        which nothing was charged (a trial, or a period discounted to zero), gives no paid period. Amounts are compared
-        before tax. A discount does not count as money returned, so a discounted payment that you keep gives the whole
-        billing period.
+        start of the billing period. A payment whose period overlaps a billing period&apos;s and that charged less than
+        its payment, such as a prorated charge, adds no time: its money counts together with that billing period&apos;s
+        payment. A refund of a duplicate charge for a billing period you have already paid for is not money returned for
+        that period. A billing period whose payments you keep in full gives the whole billing period, even if the
+        subscription was cancelled or paused before the period ended. If part of the money has been returned to you, the
+        paid period is the same share of the billing period as the share of the money you kept: if half of a
+        month&apos;s payment is refunded, the paid period is the first half of that month. A billing period of which
+        everything has been returned, or for which nothing was charged (a trial, or a period discounted to zero), gives
+        no paid period. Amounts are compared before tax. A discount does not count as money returned, so a discounted
+        payment that you keep gives the whole billing period.
       </p>
       <p>
         Money is returned to you by a refund, a credit or a chargeback once it has been approved. A correction of tax
@@ -82,11 +82,11 @@ export default function EulaPage() {
       <p>
         When you pay a yearly price this site has offered for an annual billing period (an &quot;annual term&quot;),
         Tenantry grants you at once, on condition that you keep the whole of the term&apos;s payments (the payment for
-        the term, and any payment for part of it, such as a prorated charge), that every release whose release date is
-        on or before the end of the term is vested (the &quot;term&apos;s grant&quot;). From when you pay, the end of
-        the term is a vested-through date, even if your subscription ends before the term does. Any refund, credit or
-        chargeback of any of the term&apos;s payments withdraws the term&apos;s grant, at any time, including after the
-        term has ended. The part of the term that the money kept pays for is still a paid period.
+        the term, and any payment counted together with it, such as a prorated charge), that every release whose release
+        date is on or before the end of the term is vested (the &quot;term&apos;s grant&quot;). From when you pay, the
+        end of the term is a vested-through date, even if your subscription ends before the term does. Any refund,
+        credit or chargeback of any of the term&apos;s payments withdraws the term&apos;s grant, at any time, including
+        after the term has ended. The part of the term that the money kept pays for is still a paid period.
       </p>
       <p>
         Your vested-through date is the later of your paid time&apos;s vested-through date and the end of any annual

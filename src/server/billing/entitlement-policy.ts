@@ -325,24 +325,25 @@ class Ledger {
   }
 
   /**
-   * The billing periods of the payments at the offer prices: each payment whose period does not lie within the period
-   * of another payment of the same subscription billed at the same interval, with those that do. Of payments for the
-   * same period, the one that charged more holds it, then the one with more kept (then the lower transaction id), so
+   * The billing periods of the payments at the offer prices. Of the payments of one subscription billed at one
+   * interval, a payment for a whole period of that interval (its calendar months: one a month, twelve a year) holds a
+   * billing period unless its period overlaps one already held, and so does any other payment that overlaps none. A
+   * payment whose period overlaps one held, and that charged less than the payment holding it (or anything, if that
+   * charged nothing), is within it: a prorated charge, even one stamped with a period that runs past it. One that charged at least as much is a billing
+   * period of its own: a duplicate charge, or a new purchase, such as a new year after a move to monthly. So money
+   * returned from a duplicate takes nothing from the original; their kept time counts once (`onceEach`), and of two
+   * annual terms for one period the kept one decides (`annualTerms`). Whole periods are taken first, then the
+   * earliest-starting, then the one that charged more, then the one with more kept (then the lower transaction id), so
    * the grouping does not depend on the order of the ledger.
-   *
-   * A payment for the same period as the one holding it, that charged at least as much, is a duplicate charge, not a
-   * charge within the period: it is a billing period of its own, so money returned from it takes nothing from the
-   * other. Its kept time counts once with the other's (`onceEach`), and of two annual terms for one period the kept one
-   * decides (`annualTerms`).
    */
   billingPeriods(): BillingPeriod[] {
+    const whole = (payment: Payment) =>
+      calendarMonths(payment.periodStartsAt, payment.periodEndsAt.getTime()) >= nominalMonths(payment) ? 1 : 0;
     const payments = this.input.payments
       .filter((payment) => this.isOffered(payment) && payment.periodEndsAt > payment.periodStartsAt)
       .sort(
         (a, b) =>
-          b.periodEndsAt.getTime() -
-            b.periodStartsAt.getTime() -
-            (a.periodEndsAt.getTime() - a.periodStartsAt.getTime()) ||
+          whole(b) - whole(a) ||
           a.periodStartsAt.getTime() - b.periodStartsAt.getTime() ||
           b.charged - a.charged ||
           this.kept(b) - this.kept(a) ||
@@ -356,16 +357,12 @@ class Ledger {
           p.subscriptionId === payment.subscriptionId &&
           p.billingInterval === payment.billingInterval &&
           p.billingFrequency === payment.billingFrequency &&
-          p.periodStartsAt <= payment.periodStartsAt &&
-          p.periodEndsAt >= payment.periodEndsAt,
+          p.periodStartsAt < payment.periodEndsAt &&
+          p.periodEndsAt > payment.periodStartsAt,
       );
-      const duplicate =
-        holder &&
-        holder.payment.periodStartsAt.getTime() === payment.periodStartsAt.getTime() &&
-        holder.payment.periodEndsAt.getTime() === payment.periodEndsAt.getTime() &&
-        payment.charged >= holder.payment.charged;
-      if (holder && !duplicate) holder.within.push(payment);
-      else periods.push({ payment, within: [] });
+      if (holder && (payment.charged < holder.payment.charged || holder.payment.charged <= 0)) {
+        holder.within.push(payment);
+      } else periods.push({ payment, within: [] });
     }
     return periods;
   }
@@ -506,13 +503,16 @@ class Ledger {
 export function monthsOf(
   payment: Pick<Payment, 'billingInterval' | 'billingFrequency' | 'periodStartsAt' | 'periodEndsAt'>,
 ): number {
-  const nominal =
-    payment.billingInterval === 'year'
-      ? 12 * payment.billingFrequency
-      : payment.billingInterval === 'month'
-        ? payment.billingFrequency
-        : 0;
-  return Math.max(0, Math.min(nominal, calendarMonths(payment.periodStartsAt, payment.periodEndsAt.getTime())));
+  return Math.max(
+    0,
+    Math.min(nominalMonths(payment), calendarMonths(payment.periodStartsAt, payment.periodEndsAt.getTime())),
+  );
+}
+
+// The months a billing interval pays for: 12 a year and one a month, times the frequency; nothing for another.
+function nominalMonths(payment: Pick<Payment, 'billingInterval' | 'billingFrequency'>): number {
+  if (payment.billingInterval === 'year') return 12 * payment.billingFrequency;
+  return payment.billingInterval === 'month' ? payment.billingFrequency : 0;
 }
 
 // The calendar months from `start` to `end`: the whole months (addMonths) and the share of the next one.
