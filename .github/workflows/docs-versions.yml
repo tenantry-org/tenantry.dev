@@ -24,10 +24,13 @@ jobs:
   update:
     name: Docs follow the releases
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: master
+          # Every branch's history, to list the commits a reset of staging drops.
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: '.nvmrc'
@@ -70,11 +73,17 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email "$bot"
           git commit -q -m 'Docs: publish the docs of the latest releases' -m "$(cat docs-versions.json)" -- docs-versions.json newest-release.json
-          staging="$(git ls-remote origin refs/heads/staging | cut -f1)"
+          staging="$(git rev-parse origin/staging)"
           git push origin HEAD:master
           check_master
-          # The sandbox follows production (staging is master).
+          # The sandbox follows production (staging is master), so staging is reset to master. Commits that only staging
+          # has are dropped from it, and the warning lists them; they remain in the branch they were pushed from.
+          dropped="$(git log --format='%h %s' "HEAD..$staging")"
           git push --force-with-lease="staging:$staging" origin HEAD:staging
+          if [ -n "$dropped" ]; then
+            dropped="${dropped//%/%25}"
+            echo "::warning::staging reset to master, dropping the commits master lacks:%0A${dropped//$'\n'/%0A}"
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
       # Last, so what could be published is committed first: a release left out (its docs folder, changelog section or

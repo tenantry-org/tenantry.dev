@@ -212,10 +212,12 @@ The same run reads what the site says about the newest release from the release 
 [`newest-release.json`](newest-release.json): the .NET versions Core's package targets and the number of sample
 folders. The home, Pro and comparison pages take these from the file, and the version badge and the docs from `docs-versions.json`. When either file changes, the
 workflow commits both to master and staging and runs the test and audit workflows on the commit, since its own pushes
-start none. Production deploys the commit once they pass. A run that finds nothing new but sees its own commit at
-master's head runs those workflows if they never ran on it, and fast-forwards staging to it; staging with commits master
-lacks is left alone. A release is live at the first run after its packages are published, so within the hour, plus the
-few minutes the checks and the build take. Run the workflow from the Actions tab to publish sooner.
+start none. Production deploys the commit once they pass. Staging is reset to master: commits that only staging has are
+dropped from it, and the run's warning lists them. A run that finds nothing new but sees its own commit at master's
+head runs those workflows if they never ran on it, and fast-forwards staging to it. That run leaves staging alone, with
+a warning, when staging has commits master lacks. A release is live at the first run after its packages are published,
+so within the hour, plus the few minutes the checks and the build take. Run the workflow from the Actions tab to
+publish sooner.
 
 A release whose tag has no `docs` folder, or whose `CHANGELOG.md` has no section for it, is left out, and its line keeps
 the release before it. So is a release of the newest line that does not give the facts above: a nuspec without target
