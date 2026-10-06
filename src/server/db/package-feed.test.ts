@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type FakeCall, type FakeTable, MAX_ROWS } from '@/test/fake-supabase';
-import { listFeedPackages } from './package-feed';
+import { listFeedPackages, listPublishedReleases, listReleases } from './package-feed';
 
 // The queries the feed's store makes, against a fake client that, like the API, returns at most MAX_ROWS rows a
 // request.
@@ -48,10 +48,9 @@ describe('listFeedPackages', () => {
       [0, MAX_ROWS - 1],
       [MAX_ROWS, 2 * MAX_ROWS - 1],
       [2 * MAX_ROWS, 3 * MAX_ROWS - 1],
-      [2 * MAX_ROWS + 1, 3 * MAX_ROWS],
     ]);
     expect(state.calls.filter((call) => call.method === 'order').map((call) => call.args[0])).toEqual(
-      Array.from({ length: 4 }, () => ['lower_id', 'version']).flat(),
+      Array.from({ length: 3 }, () => ['lower_id', 'version']).flat(),
     );
   });
 
@@ -63,18 +62,62 @@ describe('listFeedPackages', () => {
     expect(packages.map((pkg) => pkg.lowerId)).toEqual(
       Array.from({ length: 1200 }, (_, index) => `tenantry.pro.p${index}`),
     );
-    expect(state.calls.filter((call) => call.method === 'range').map((call) => call.args[0])).toEqual([
-      0, 500, 1000, 1200,
-    ]);
+    expect(state.calls.filter((call) => call.method === 'range').map((call) => call.args[0])).toEqual([0, 500, 1000]);
   });
 
-  it('reads one package id, then finds no more', async () => {
+  it('reads one package id in one request, the count telling it there are no more', async () => {
     state.tables.pro_packages = { list: [packageRow(1)] };
 
     await expect(listFeedPackages('tenantry.pro.p1')).resolves.toEqual([
       expect.objectContaining({ packageId: 'Tenantry.Pro.P1', version: '1.4.0', rc: null }),
     ]);
-    expect(state.calls.filter((call) => call.method === 'range')).toHaveLength(2);
+    expect(state.calls.filter((call) => call.method === 'range')).toHaveLength(1);
     expect(state.calls).toContainEqual({ table: 'pro_packages', method: 'eq', args: ['lower_id', 'tenantry.pro.p1'] });
+  });
+
+  it('reads no packages in one request', async () => {
+    await expect(listFeedPackages()).resolves.toEqual([]);
+    expect(state.calls.filter((call) => call.method === 'range')).toHaveLength(1);
+  });
+});
+
+const releaseRow = (index: number) => ({
+  version: `1.${index}.0`,
+  major: 1,
+  minor: index,
+  patch: 0,
+  rc: null,
+  published_at: '2028-01-01T00:00:00Z',
+  security: false,
+  entitlement_at: '2028-01-01T00:00:00Z',
+  pro_packages: [{ package_id: 'Tenantry.Pro', size: 1000, sha512: 'abc=' }],
+});
+
+describe('listReleases', () => {
+  it('reads every release, beyond the API row limit, in pages in the primary key order', async () => {
+    state.tables.pro_releases = { list: Array.from({ length: 1200 }, (_, index) => releaseRow(index)), maxRows: 500 };
+
+    const releases = await listReleases();
+
+    expect(releases.map((release) => release.version)).toEqual(
+      Array.from({ length: 1200 }, (_, index) => `1.${index}.0`),
+    );
+    expect(state.calls.filter((call) => call.method === 'range').map((call) => call.args[0])).toEqual([0, 500, 1000]);
+    expect(state.calls.filter((call) => call.method === 'order').map((call) => call.args[0])).toEqual(
+      Array.from({ length: 3 }, () => 'version'),
+    );
+  });
+});
+
+describe('listPublishedReleases', () => {
+  it('reads every release, beyond the API row limit, in pages in version order', async () => {
+    state.tables.pro_releases = { list: Array.from({ length: 1200 }, (_, index) => releaseRow(index)), maxRows: 500 };
+
+    const releases = await listPublishedReleases();
+
+    expect(releases.map((release) => release.version)).toEqual(
+      Array.from({ length: 1200 }, (_, index) => `1.${index}.0`),
+    );
+    expect(state.calls.filter((call) => call.method === 'range').map((call) => call.args[0])).toEqual([0, 500, 1000]);
   });
 });

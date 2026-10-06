@@ -1,9 +1,10 @@
 /**
  * Minimal stand-in for the Supabase query builder in unit tests. Every builder method returns the same
  * chain; `maybeSingle()` resolves to the table's `single` row and awaiting the chain resolves to its
- * `list`, cut to the chain's `range` if it has one and to at most MAX_ROWS rows, as the API cuts it. Writes
- * resolve with the table's `writeError`, if any. `rpc(name)` resolves to what the matching `rpcs` handler
- * returns, or with the error it throws, as a failed database function does.
+ * `list`, cut to the chain's `range` if it has one and to at most MAX_ROWS rows, as the API cuts it, with the
+ * whole list's length as `count` if `select` asked for one. Writes resolve with the table's `writeError`, if
+ * any. `rpc(name)` resolves to what the matching `rpcs` handler returns, or with the error it throws, as a
+ * failed database function does.
  */
 export interface FakeTable {
   list?: unknown[];
@@ -22,7 +23,7 @@ export interface FakeCall {
   args: unknown[];
 }
 
-type Result = { data: unknown; error: unknown };
+type Result = { data: unknown; error: unknown; count?: number | null };
 
 const WRITES = new Set(['update', 'upsert', 'insert', 'delete']);
 
@@ -47,6 +48,7 @@ export function fakeSupabase(
       const filters: Record<string, unknown> = {};
       let wrote = false;
       let range: [number, number] | null = null;
+      let counted = false;
       // A promise carrying the builder's methods, so awaiting the chain gives the table's list (or, after a
       // write, the table's write error). It settles in a later microtask, after the synchronous chain of
       // builder calls has recorded any write.
@@ -57,6 +59,7 @@ export function fakeSupabase(
         return {
           data: (range ? list.slice(range[0], range[1] + 1) : list).slice(0, tables[table]?.maxRows ?? MAX_ROWS),
           error: null,
+          count: counted ? list.length : null,
         };
       });
       const chain = settled as Promise<Result> & Record<string, unknown>;
@@ -79,6 +82,7 @@ export function fakeSupabase(
           calls?.push({ table, method, args });
           if (method === 'eq') filters[args[0] as string] = args[1];
           if (method === 'range') range = [args[0] as number, args[1] as number];
+          if (method === 'select') counted = (args[1] as { count?: string } | undefined)?.count !== undefined;
           if (WRITES.has(method)) wrote = true;
           return chain;
         };

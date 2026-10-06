@@ -1,11 +1,21 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { listReleases } from '@/server/db/package-feed';
+import type { FakeTable } from '@/test/fake-supabase';
 import { nuspec, zip } from '@/test/zip';
 import type { FeedDeps, FeedStore } from './deps';
 import { handlePublish, handlePublishedList } from './publish';
 import { parseVersion } from './version';
 
 // What `dotnet nuget push` sends: a PUT of the .nupkg as multipart form data, with the key in X-NuGet-ApiKey.
+
+// The tables the store's own queries read, where a test uses one, against a fake client that, like the API, returns at
+// most the table's row limit a request.
+const tables = vi.hoisted(() => ({}) as Record<string, FakeTable>);
+vi.mock('@/server/db/service-role-client', async () => {
+  const { fakeSupabase } = await import('@/test/fake-supabase');
+  return { createServiceRoleClient: () => fakeSupabase(tables) };
+});
 
 const KEY = 'publish-key';
 
@@ -14,6 +24,7 @@ let deps: FeedDeps;
 let releases: Map<string, { security: boolean; publishedAt: string }>;
 
 beforeEach(() => {
+  delete tables.pro_releases;
   releases = new Map();
   store = {
     findFeedCustomer: vi.fn(),
@@ -366,6 +377,25 @@ describe('release dates', () => {
 
     expect((await dated('9.9.0', '2028-05-31T00:00:00Z')).status).toBe(400);
     expect((await dated('9.9.0', '2028-05-31T13:00:00Z')).status).toBe(201);
+  });
+
+  it('refuses a date before an earlier version when the releases run beyond the API row limit', async () => {
+    // The newest earlier release comes last, beyond what one request returns.
+    tables.pro_releases = {
+      list: Array.from({ length: 1200 }, (_, index) => ({
+        version: `9.${index}.0`,
+        major: 9,
+        minor: index,
+        patch: 0,
+        rc: null,
+        published_at: index === 1199 ? '2028-05-31T12:00:00Z' : '2028-05-01T00:00:00Z',
+      })),
+      maxRows: 500,
+    };
+    store.listReleases.mockImplementation(listReleases);
+
+    expect((await dated('10.0.0', '2028-05-31T00:00:00Z')).status).toBe(400);
+    expect((await dated('10.0.0', '2028-05-31T13:00:00Z')).status).toBe(201);
   });
 
   it('dates a release no earlier than its candidates, and a candidate no earlier than the ones before it', async () => {

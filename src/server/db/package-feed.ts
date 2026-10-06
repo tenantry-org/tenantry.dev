@@ -68,36 +68,46 @@ export async function findFeedCustomer(tokenHash: string): Promise<FeedCustomer 
 }
 
 /**
- * The rows a page of packages asks for: the local stack's max_rows (supabase/config.toml). A hosted project's limit may
- * be lower, so a page may come back shorter without being the last.
+ * The rows a page asks for: the local stack's max_rows (supabase/config.toml). A hosted project's limit may be lower,
+ * so a page may come back shorter without being the last.
  */
-const PACKAGE_PAGE_ROWS = 1000;
+const PAGE_ROWS = 1000;
+
+/**
+ * Every row a query gives. One request is cut off at max_rows without an error, so the rows are read in pages, each
+ * from where the last one ended, in an order that is unique, until there are as many as the count each page reports, or
+ * one comes back empty. Usually the first page holds them all.
+ */
+async function readAllRows<Row>(
+  page: (from: number, to: number) => PromiseLike<{ data: Row[] | null; error: unknown; count: number | null }>,
+): Promise<Row[]> {
+  const rows: Row[] = [];
+  for (;;) {
+    const { data, error, count } = await page(rows.length, rows.length + PAGE_ROWS - 1);
+    if (error) throw error;
+
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length === 0 || (count !== null && rows.length >= count)) return rows;
+  }
+}
 
 /** Every package of every release, or only those with this lowercased id. */
 export async function listFeedPackages(lowerId?: string): Promise<FeedPackage[]> {
   const supabase = createServiceRoleClient();
-  const rows = [];
-  // One request is cut off at max_rows without an error, so the packages are read in pages, in the primary key's order,
-  // each from where the last one ended, until one comes back empty.
-  for (let from = 0; ;) {
-    let query = supabase
+  // In the primary key's order.
+  const rows = await readAllRows((from, to) => {
+    const query = supabase
       .from('pro_packages')
       .select(
         'package_id,lower_id,version,storage_path,description,authors,dependency_groups,pro_releases(major,minor,patch,rc,published_at,entitlement_at)',
+        { count: 'exact' },
       )
       .order('lower_id')
       .order('version')
-      .range(from, from + PACKAGE_PAGE_ROWS - 1);
-    if (lowerId !== undefined) query = query.eq('lower_id', lowerId);
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const page = data ?? [];
-    if (page.length === 0) break;
-    rows.push(...page);
-    from += page.length;
-  }
+      .range(from, to);
+    return lowerId === undefined ? query : query.eq('lower_id', lowerId);
+  });
 
   return rows.flatMap((row) => {
     const release = row.pro_releases;
@@ -216,11 +226,16 @@ export async function listReleases(): Promise<
   { version: string; major: number; minor: number; patch: number; rc: number | null; publishedAt: Date }[]
 > {
   const supabase = createServiceRoleClient();
-  const { data, error } = await supabase.from('pro_releases').select('version,major,minor,patch,rc,published_at');
+  // In the primary key's order.
+  const rows = await readAllRows((from, to) =>
+    supabase
+      .from('pro_releases')
+      .select('version,major,minor,patch,rc,published_at', { count: 'exact' })
+      .order('version')
+      .range(from, to),
+  );
 
-  if (error) throw error;
-
-  return (data ?? []).map((row) => ({
+  return rows.map((row) => ({
     version: row.version,
     major: row.major,
     minor: row.minor,
@@ -307,17 +322,21 @@ export interface PublishedRelease {
 /** Every recorded release with its packages, oldest version first (a release candidate before its release). */
 export async function listPublishedReleases(): Promise<PublishedRelease[]> {
   const supabase = createServiceRoleClient();
-  const { data, error } = await supabase
-    .from('pro_releases')
-    .select('version,major,minor,patch,published_at,security,entitlement_at,pro_packages(package_id,size,sha512)')
-    .order('major')
-    .order('minor')
-    .order('patch')
-    .order('rc', { nullsFirst: false });
+  // Each version has its own major, minor, patch and rc, so the order is unique.
+  const rows = await readAllRows((from, to) =>
+    supabase
+      .from('pro_releases')
+      .select('version,major,minor,patch,published_at,security,entitlement_at,pro_packages(package_id,size,sha512)', {
+        count: 'exact',
+      })
+      .order('major')
+      .order('minor')
+      .order('patch')
+      .order('rc', { nullsFirst: false })
+      .range(from, to),
+  );
 
-  if (error) throw error;
-
-  return (data ?? []).map((row) => ({
+  return rows.map((row) => ({
     version: row.version,
     publishedAt: new Date(row.published_at),
     security: row.security,
