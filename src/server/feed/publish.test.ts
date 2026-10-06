@@ -241,6 +241,17 @@ describe('handlePublish', () => {
     expect(releases.get('1.4.3')).toMatchObject({ security: true });
   });
 
+  it.each(['null', '[]', '"1.4.0"', '7'])(
+    'refuses a tenantry-release.json of %s, not a JSON object, with 400',
+    async (json) => {
+      const response = await push({ ...efCore, 'tenantry-release.json': json });
+
+      expect(response.status).toBe(400);
+      expect(await response.text()).toBe('tenantry-release.json is not a JSON object.');
+      expect(store.ensureRelease).not.toHaveBeenCalled();
+    },
+  );
+
   it('refuses with 400, not 409, a package whose manifest disagrees with its release about being a security patch', async () => {
     releases.set('1.4.0', { security: false, publishedAt: '2027-11-20T12:00:00Z' });
     releases.set('1.4.3', { security: false, publishedAt: '2028-03-15T12:00:00Z' });
@@ -399,6 +410,17 @@ describe('package id casing', () => {
     expect(await response.text()).toContain('Tenantry.Pro.Attack');
     expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
     expect((await push({ 'Tenantry.Pro.Attack.nuspec': nuspec('Tenantry.Pro.Attack', '1.5.0') })).status).toBe(201);
+  });
+
+  it('refuses with 400 a first push that loses to a concurrent first push of the id in another casing', async () => {
+    // Both found no recorded casing; the other push recorded Tenantry.Pro.Attack 1.5.0 first, so the casing trigger
+    // refuses this insert as a duplicate, and nothing is recorded at this version.
+    store.recordPackage.mockResolvedValue(false);
+
+    const response = await push({ 'Tenantry.Pro.attack.nuspec': nuspec('Tenantry.Pro.attack', '1.4.0') });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toBe('Tenantry.Pro.attack was published concurrently under another casing; retry.');
   });
 });
 

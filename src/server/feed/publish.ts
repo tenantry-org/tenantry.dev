@@ -64,7 +64,11 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
     const nuspecXml = [...files].find(([name]) => name.toLowerCase().endsWith('.nuspec'))?.[1];
     if (!nuspecXml) return reply(400, 'The package has no nuspec.');
     nuspec = parseNuspec(nuspecXml);
-    manifest = files.has('tenantry-release.json') ? JSON.parse(files.get('tenantry-release.json')!) : {};
+    const parsed: unknown = files.has('tenantry-release.json') ? JSON.parse(files.get('tenantry-release.json')!) : {};
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return reply(400, 'tenantry-release.json is not a JSON object.');
+    }
+    manifest = parsed;
   } catch (error) {
     return reply(400, `The package cannot be read: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -168,8 +172,14 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
     authors: nuspec.authors,
     dependencyGroups: nuspec.dependencyGroups,
   });
-  // A concurrent push of the same version recorded first.
-  if (!recorded) return (await duplicateReply(nuspec.id, nuspec.version, sha512.toString('base64'), deps))!;
+  // A concurrent push recorded first: of the same version, or of the same id in another casing, for which the casing
+  // trigger refuses this one whatever its version.
+  if (!recorded) {
+    return (
+      (await duplicateReply(nuspec.id, nuspec.version, sha512.toString('base64'), deps)) ??
+      reply(400, `${nuspec.id} was published concurrently under another casing; retry.`)
+    );
+  }
 
   return reply(201, `Published ${nuspec.id} ${nuspec.version}.`);
 }

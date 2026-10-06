@@ -108,14 +108,15 @@ key's SHA-256 (`FEED_PUBLISH_KEY_SHA256`); without it every push is refused.
 | 403    | No publish key, or the wrong one.                                                     | Fail.               |
 | 413    | Larger than 4 MB (a Vercel function takes a body of at most 4.5 MB).                  | Fail.               |
 
-`dotnet nuget push --skip-duplicate` and the script treat 409 as published, so re-running a release is safe. Every
-other refusal is 400, never 409, so that `--skip-duplicate` cannot hide it: an id that is not `Tenantry.Pro` or
-`Tenantry.Pro.*`, or differs only in case from a published one; a version that is neither `major.minor.patch` nor a
-release candidate `major.minor.patch-rc.N` (N from 1, no leading zeros, lower case, no build metadata), as Pro's
-release process tags them; different bytes under a version already published (a published version never changes:
-publish a new one); a `tenantry-release.json` date outside the rules below, or a security flag that disagrees with its
-release or is set on an `X.Y.0` release or a release candidate; a patch release whose `X.Y.0` release is not published; a package that cannot
-be read.
+`dotnet nuget push --skip-duplicate` and the script treat 409 as published, so re-running a release is safe. Every other
+refusal is 400, never 409, so that `--skip-duplicate` cannot hide it: an id that is not `Tenantry.Pro` or
+`Tenantry.Pro.*`, or differs only in case from a published one, including one published at the same moment; a version
+that is neither `major.minor.patch` nor a release candidate `major.minor.patch-rc.N` (N from 1, no leading zeros, lower
+case, no build metadata), as Pro's release process tags them; different bytes under a version already published (a
+published version never changes: publish a new one); a `tenantry-release.json` date outside the rules below, or a
+security flag that disagrees with its release or is set on an `X.Y.0` release or a release candidate; a patch release
+whose `X.Y.0` release is not published; a package that cannot be read, or whose `tenantry-release.json` is not a JSON
+object.
 
 A release candidate is published and served like any release, and dated when it is published; it never takes its
 minor's date. The feed lists versions in
