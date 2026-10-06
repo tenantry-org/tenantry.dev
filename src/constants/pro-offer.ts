@@ -19,7 +19,7 @@ export const ProOffer: Offer = {
   description:
     'Migrations and provisioning for tenant databases and schemas, the tenant in background jobs and messages, audit logging, and offboarding.',
   features: [
-    'Hangfire, Quartz.NET, MassTransit and Rebus work run as the tenant it was created for, and refused for a suspended or deleted tenant',
+    'Hangfire, Quartz.NET, MassTransit and Rebus work runs as the tenant it was created for, and is refused for a suspended or deleted tenant',
     'Recurring jobs and background services that run once for each tenant',
     'Audit logging of each tenant’s inserts, updates and deletes',
     'Onboarding and offboarding in one call, including deleting a tenant’s rows from a shared database',

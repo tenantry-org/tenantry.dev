@@ -6,7 +6,12 @@ import { SimpleHeader } from '@/components/shared/simple-header';
 import { Footer } from '@/components/home/footer/footer';
 import { getCurrentUser } from '@/server/db/current-user';
 
-export default function SuccessPage() {
+interface Props {
+  /** `from=pay`: a checkout opened by /pay, for an invoice, a failed renewal or a card update. */
+  searchParams: Promise<{ from?: string }>;
+}
+
+export default function SuccessPage({ searchParams }: Props) {
   return (
     <div className={'flex min-h-screen flex-col bg-surface'}>
       <SimpleHeader />
@@ -15,16 +20,9 @@ export default function SuccessPage() {
           <div className={'flex h-16 w-16 items-center justify-center rounded-full bg-success-surface'}>
             <CircleCheck className={'h-8 w-8 text-success'} aria-hidden={true} />
           </div>
-          <h1 className={'mt-8 text-3xl font-bold tracking-tight md:text-4xl'}>Thanks for subscribing</h1>
-          <p className={'mt-4 text-lg text-muted-foreground'}>
-            Next, create a feed token on your Pro access page: NuGet uses it to restore Tenantry Pro from the package
-            feed. Your licence key is on the same page. The subscription can take a minute to show there.
-          </p>
-          <div className={'mt-10'}>
-            <Suspense fallback={<NextStepButton signedIn={false} />}>
-              <SignedInNextStep />
-            </Suspense>
-          </div>
+          <Suspense>
+            <Message searchParams={searchParams} />
+          </Suspense>
         </div>
       </main>
       <Footer />
@@ -32,11 +30,42 @@ export default function SuccessPage() {
   );
 }
 
-// Buyers are signed in to check out; one whose session has since ended logs in again, and lands on the same page.
-async function SignedInNextStep() {
-  return <NextStepButton signedIn={Boolean(await getCurrentUser())} />;
+// The message comes from the query string, so only it waits for the request.
+async function Message({ searchParams }: Props) {
+  const { from } = await searchParams;
+
+  if (from === 'pay') {
+    // An existing subscriber: a card update takes no payment, so this does not say one was received.
+    return (
+      <>
+        <h1 className={'mt-8 text-3xl font-bold tracking-tight md:text-4xl'}>Done</h1>
+        <p className={'mt-4 text-lg text-muted-foreground'}>
+          It can take a minute to show on your Pro access page. Your feed tokens and licence key are unchanged.
+        </p>
+        <div className={'mt-10'}>
+          <Button size={'lg'} asChild={true}>
+            <Link href={'/dashboard/pro'}>Go to your Pro access page</Link>
+          </Button>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <h1 className={'mt-8 text-3xl font-bold tracking-tight md:text-4xl'}>Thanks for subscribing</h1>
+      <p className={'mt-4 text-lg text-muted-foreground'}>
+        Next, create a feed token on your Pro access page: NuGet uses it to restore Tenantry Pro from the package feed.
+        Your licence key is on the same page. The subscription can take a minute to show there.
+      </p>
+      <div className={'mt-10'}>
+        <NextStepButton signedIn={Boolean(await getCurrentUser())} />
+      </div>
+    </>
+  );
 }
 
+// Buyers are signed in to check out; one whose session has since ended logs in again, and lands on the same page.
 function NextStepButton({ signedIn }: Readonly<{ signedIn: boolean }>) {
   return (
     <Button size={'lg'} asChild={true}>

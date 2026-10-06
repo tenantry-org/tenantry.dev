@@ -29,7 +29,8 @@ function OpenTransaction() {
       settings: {
         displayMode: 'overlay',
         theme: 'dark',
-        successUrl: `${window.location.origin}/checkout/success`,
+        // The success page thanks a new subscriber unless told the checkout came from here.
+        successUrl: `${window.location.origin}/checkout/success?from=pay`,
       },
     },
   }));

@@ -31,26 +31,15 @@ export default function RefundsPage() {
 
       <h2>4. Effect on access and vesting</h2>
       <p>
-        The terms used here (subscription, paid period, paid time, 12 paid months, annual term, the term&apos;s grant,
-        vested releases, vested-through date) are defined in the <a href="/legal/eula">EULA</a>, section 2. Vesting
-        follows the money you keep: a refund, a credit or a chargeback of a payment takes away the time that money paid
-        for, and any vesting that relied on it, whenever it is approved, as that section sets out. For example, a refund
-        of half a month&apos;s payment leaves the first half of that month as a paid period, half a paid month, so your
-        paid time reaches 12 paid months half of a monthly billing period later than it would have. Any refund of an
-        annual term withdraws the term&apos;s grant.
+        A refund, credit or chargeback takes away the paid time its money paid for, and any vesting that relied on it,
+        as the <a href="/legal/eula#vesting">EULA, section 2</a>, sets out. Any refund of an annual term withdraws the
+        term&apos;s grant.
       </p>
       <p>
-        When a full refund of your subscription&apos;s latest paid billing period is approved, or any of its payments is
-        charged back, your subscription is cancelled immediately, and it ends as the EULA, section 8, sets out; the paid
-        time you have kept still counts if you subscribe again. A full refund of an earlier paid billing period, a
-        partial refund, or a credit does not cancel your subscription or change your access while it continues, and your
-        paid time counts only the money you keep. If a chargeback is later reversed, the money counts as kept again, but
-        your subscription stays cancelled.
-      </p>
-      <p>
-        If the purchase you are refunded in full within the 14-day window was an annual term, its grant is withdrawn and
-        the term gives no paid period. A partial refund of an annual term also withdraws its grant, and the term then
-        gives a paid period only for the part of it that the money you keep pays for.
+        A full refund of your subscription&apos;s latest paid billing period, or a chargeback of any of its payments,
+        cancels the subscription at once, and it stays cancelled if the chargeback is reversed; the paid time you have
+        kept still counts if you subscribe again. A partial refund, a credit or a full refund of an earlier billing
+        period does not cancel it.
       </p>
 
       <p className="text-sm text-muted-foreground">

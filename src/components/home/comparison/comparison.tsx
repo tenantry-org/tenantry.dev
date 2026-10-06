@@ -23,7 +23,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
       'Whatever your SaveChanges override checks',
       'Throws by default; TenantMismatchMode can ignore or overwrite it instead',
       'Saved with that TenantId. ABP sets TenantId from the current tenant when the entity object is created, and does not check it on save; its docs say changing it moves the entity to that tenant, and advise setting it only in the entity’s constructor',
-      'Throws before anything is written. For updates and deletes, the database also checks the stored tenant, so an entity attached with another tenant’s row id and the current TenantId changes no row: EF Core throws DbUpdateConcurrencyException',
+      'Throws before anything is written. Updates and deletes also match the stored tenant in the database, so one aimed at another tenant’s row changes nothing and throws',
     ],
   },
   {

@@ -5,7 +5,7 @@ export const metadata = { title: 'Terms of Service | Tenantry' };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Service" lastUpdated="2026-10-04">
+    <LegalPage title="Terms of Service" lastUpdated="2026-10-06">
       <p>
         These Terms of Service (&quot;Terms&quot;) govern your access to and use of the Tenantry website, the Tenantry
         Pro software, the package feed, and related services (collectively, the &quot;Services&quot;) provided by{' '}
@@ -41,7 +41,10 @@ export default function TermsPage() {
 
       <h2>4. Acceptable use</h2>
       <ul>
-        <li>You may not redistribute, resell, or publish the Tenantry Pro packages or source.</li>
+        <li>
+          Except as the <a href="/legal/eula">EULA</a> (section 4) allows, you may not redistribute, resell or publish
+          the Tenantry Pro packages or source.
+        </li>
         <li>You may not circumvent the licence or access controls.</li>
         <li>You may not use the Services in violation of applicable law.</li>
       </ul>
@@ -60,9 +63,10 @@ export default function TermsPage() {
 
       <h2>7. Termination</h2>
       <p>
-        We may suspend or terminate access for breach of these Terms. You may cancel at any time; cancellation stops
-        future renewals. It does not affect the vested releases, which only a refund, credit or chargeback of the
-        payments they rely on can withdraw (EULA, section 2).
+        We may suspend or end your access to the website and the package feed if you breach these Terms. Your licence to
+        Tenantry Pro ends only as the EULA, section 8, provides. You may cancel at any time; cancellation stops future
+        renewals. It does not affect the vested releases, which only a refund, credit or chargeback of the payments they
+        rely on can withdraw (EULA, section 2).
       </p>
 
       <h2>8. Governing law</h2>

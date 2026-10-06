@@ -12,6 +12,7 @@ import { ProofStrip } from '@/components/shared/proof-strip';
 import { TrackedLink } from '@/components/shared/tracked-link';
 import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
+import { VESTED_RELEASES, VESTING_RULES } from '@/constants/vesting';
 import { latestDocsVersion, publishedSince } from '@/lib/docs-versions';
 
 export const metadata: Metadata = {
@@ -80,6 +81,16 @@ builder.Services.AddScoped<IAuditStore, AuditTableStore>();                     
   },
 ];
 
+// When a team needs Pro, from the failures the migrations post lists and the workflows above.
+const NEEDS_PRO = [
+  'migrating each tenant database in a loop at startup gets slow, or one failure leaves tenants on different schemas',
+  'a new tenant needs its database or schema created, migrated and seeded before its first request',
+  'your jobs or messages run on Hangfire, Quartz.NET, MassTransit or Rebus and must run as their tenant',
+  'a tenant leaves, and its rows, database or schema must be removed',
+  'you need a record of who changed each tenant’s data, and when',
+  'you want a schema per tenant, or some tenants in their own database and the rest in a shared one',
+];
+
 const ALSO = [
   {
     title: 'Schema per tenant and mixed mode',
@@ -111,7 +122,7 @@ const QUESTIONS = [
         <Suspense fallback={null}>
           <ProPriceSentence />
         </Suspense>
-        {`Every Tenantry Pro release while you subscribe, from the package feed (a private NuGet feed run by Tenantry), a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. Once you have paid for 12 months (12 monthly billing periods, or a year), across subscriptions and whatever gaps there are between them, releases become vested: they stay licensed to you after the subscription ends. An annual term vests the releases published up to its end as soon as you pay for it, as long as you keep the whole of its payments.`}
+        {`Every Tenantry Pro release while you subscribe, a licence key, and email support with a reply within ${SUPPORT_REPLY_WITHIN}. Releases come from the package feed, Tenantry’s private NuGet feed. After 12 paid months, which need not be consecutive, or as soon as you pay for a year, the releases published up to your vested-through date stay licensed to you after the subscription ends. That date keeps moving while you pay; for a paid year it is the end of that year.`}
       </>
     ),
   },
@@ -179,8 +190,20 @@ const QUESTIONS = [
   },
   {
     question: 'What happens when the subscription ends?',
-    answer: `You keep the vested releases: every release published up to your vested-through date, which 12 paid months, or an annual term whose payments you keep in full, give you, as the EULA sets out. Releases published after that date stop being licensed to you, and if nothing is vested, so do all of them. The package feed then serves you only the vested releases, or nothing. Ending a subscription never takes vested releases away; only money returned to you, by a refund, credit or chargeback, can. If you subscribe again, the paid time you kept still counts, and your vested-through date moves on as further paid time is served. Your application keeps starting with the licence key either way, since the key does not enforce the subscription. Each Pro version runs on one Core minor version (Pro ${latestDocsVersion.version} on Core ${latestDocsVersion.version}.x), so you can take Core patch releases but not the next Core minor until you subscribe again. Code that uses only Core can move to any Core version. Until 1.0, security fixes are released as a patch to the latest two Pro minor versions. Pro minor versions released before Tenantry Pro went on sale were internal development builds: they are not patched. A patch release, a security fix or not, is vested whenever the x.y.0 release of its minor version is, even if it is published after your vested-through date, so the package feed serves it to you.`,
-    link: { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
+    answer: `You keep ${VESTED_RELEASES}. That date is set once you reach 12 paid months, which need not be consecutive, and keeps moving while you pay. An annual term sets it to the end of the term as soon as you pay for it. The package feed keeps serving those releases, and your licence key keeps working. Releases published after that date are no longer licensed to you; if nothing is vested, none are. Only a refund, credit or chargeback can take vested releases away. If you subscribe again, the paid time you kept still counts. A vested Pro minor stays on the Core minor of the same number (Pro ${latestDocsVersion.version} on Core ${latestDocsVersion.version}.x).`,
+    link: [
+      { label: 'EULA', href: VESTING_RULES },
+      { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
+    ],
+  },
+  {
+    question: 'How long is a release patched?',
+    answer:
+      'Until 1.0, security fixes are released as a patch to the latest two Pro minor versions. Pro minor versions released before Tenantry Pro went on sale were internal development builds, and they are not patched. A patch release takes the date of its x.y.0 release, so once that release is vested, the package feed serves you its patches after your subscription ends too.',
+    link: {
+      label: 'Licensing',
+      href: publishedSince('pro', 'v0.8.0') ? '/docs/pro/licensing#security-patches' : '/docs/pro/licensing',
+    },
   },
   {
     question: 'What if Tenantry stops?',
@@ -202,11 +225,11 @@ export default function ProPage() {
               Provision and offboard tenants, migrate their databases, run their jobs and audit their changes
             </h1>
             <p className={'mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground'}>
-              Pro builds on the free, open-source Tenantry Core. With a database or schema per tenant, it creates them,
-              migrates them all as a deployment step, and checks their health. With any layout, a shared database
-              included, it runs Hangfire, Quartz.NET, MassTransit and Rebus work as its tenant, keeps an audit log of
-              each tenant’s changes, and offboards a tenant by deleting its rows or dropping its database or schema,
-              with the step for it registered. One price covers your whole company.
+              Pro builds on the free, open-source Tenantry Core. With a database or schema per tenant, it creates them
+              and migrates them all as a deployment step. With any layout, a shared database included, it runs Hangfire,
+              Quartz.NET, MassTransit and Rebus work as its tenant, keeps an audit log of each tenant’s changes, and
+              offboards a tenant by deleting its rows or dropping its database or schema. One price covers your whole
+              company.
             </p>
             <div className={'mt-8 flex flex-wrap items-center gap-3'}>
               <Button asChild size={'lg'}>
@@ -218,15 +241,22 @@ export default function ProPage() {
                 <Link href={'/docs/pro'}>Pro docs</Link>
               </Button>
             </div>
-            <p className={'mt-10 max-w-2xl rounded-xl border border-border bg-card p-5 text-sm leading-relaxed'}>
-              <span className={'font-semibold'}>Do I need Pro?</span>{' '}
-              <span className={'text-muted-foreground'}>
-                Core isolates tenant data, connects each tenant to a database of its own if you want one, and runs your
-                own background work as a tenant with ITenantScopeFactory. Pro adds a schema per tenant, mixed mode and
-                the operations around tenants; with a shared database or a database per tenant, you do not need it to
-                keep tenants’ data apart. If Core covers your application, it is all you need.
-              </span>
-            </p>
+            <div className={'mt-10 max-w-2xl rounded-xl border border-border bg-card p-5 text-sm leading-relaxed'}>
+              <p>
+                <span className={'font-semibold'}>Do I need Pro?</span>{' '}
+                <span className={'text-muted-foreground'}>
+                  Not to keep tenants’ data apart: Core does that, with a shared database or a database per tenant. Core
+                  already runs your own background work as a tenant with ITenantScopeFactory; Pro adds the Hangfire,
+                  Quartz.NET, MassTransit and Rebus integrations. Pro is for when:
+                </span>
+              </p>
+              <ul className={'mt-2 list-disc pl-5 text-muted-foreground'}>
+                {NEEDS_PRO.map((need) => (
+                  <li key={need}>{need}</li>
+                ))}
+              </ul>
+              <p className={'mt-2 text-muted-foreground'}>Until then, Core is all you need.</p>
+            </div>
           </div>
         </section>
 
