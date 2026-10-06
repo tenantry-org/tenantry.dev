@@ -129,39 +129,15 @@ describe('enqueuePaddleEvent', () => {
 
 describe('enqueueReconcileJobs', () => {
   const NOW = new Date('2026-10-31T04:00:00Z');
-  const queued = () =>
-    state.calls.filter(
-      (call) => (call as FakeCall).table === 'customer_jobs' && (call as FakeCall).method === 'upsert',
-    );
+  const queued = () => state.calls.filter((call) => call.table === 'rpc:enqueue_reconcile_jobs');
 
-  it("queues one job per customer, in the customer's order, once for each run", async () => {
-    await enqueueReconcileJobs(['ctm_entitled', 'ctm_linked'], NOW);
-
-    const [rows, options] = queued()[0].args as [Record<string, unknown>[], unknown];
-    expect(rows).toEqual([
-      {
-        id: 'reconcile_ctm_entitled_2026-10-31T04:00:00.000Z',
-        kind: 'reconcile',
-        customer_id: 'ctm_entitled',
-        occurred_at: '2026-10-31T04:00:00.000Z',
-      },
-      {
-        id: 'reconcile_ctm_linked_2026-10-31T04:00:00.000Z',
-        kind: 'reconcile',
-        customer_id: 'ctm_linked',
-        occurred_at: '2026-10-31T04:00:00.000Z',
-      },
-    ]);
-    expect(options).toEqual({ onConflict: 'id', ignoreDuplicates: true });
-  });
-
-  it('queues every customer in one write, beyond the API row limit', async () => {
+  it('queues every customer as of the run, in one call, beyond the API row limit', async () => {
     const customers = Array.from({ length: 2500 }, (_, index) => `ctm_${String(index).padStart(4, '0')}`);
 
     await enqueueReconcileJobs(customers, NOW);
 
     expect(queued()).toHaveLength(1);
-    expect((queued()[0].args[0] as unknown[]).length).toBe(2500);
+    expect(queued()[0].args).toEqual([{ p_customer_ids: customers, p_occurred_at: '2026-10-31T04:00:00.000Z' }]);
   });
 
   it('writes nothing when there is no one to reconcile', async () => {

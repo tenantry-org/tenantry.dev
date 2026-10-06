@@ -71,28 +71,27 @@ export async function enqueuePaddleEvent(event: PaddleEventJson): Promise<boolea
 }
 
 /**
- * Queues a reconcile job for each customer, as of `at`: it runs after their jobs that occurred before. The job's id
- * includes `at`, so queueing the same customers again for the same `at` adds nothing.
+ * Queues a reconcile job for each customer, as of `at`: it runs after their jobs that occurred before. A customer
+ * whose reconcile job from an earlier run is still pending gets no second one (`enqueue_reconcile_jobs`), so jobs a
+ * run does not reach do not pile up.
  */
 export async function enqueueReconcileJobs(customerIds: string[], at: Date): Promise<void> {
   if (customerIds.length === 0) return;
 
-  const occurredAt = at.toISOString();
   const supabase = createServiceRoleClient();
-  const { error } = await supabase.from('customer_jobs').upsert(
-    customerIds.map((customerId) => ({
-      id: `reconcile_${customerId}_${occurredAt}`,
-      kind: 'reconcile',
-      customer_id: customerId,
-      occurred_at: occurredAt,
-    })),
-    { onConflict: 'id', ignoreDuplicates: true },
-  );
+  const { error } = await supabase.rpc('enqueue_reconcile_jobs', {
+    p_customer_ids: customerIds,
+    p_occurred_at: at.toISOString(),
+  });
 
   if (error) throw error;
 }
 
-/** Claims up to `limit` due jobs, at most one per customer, locking them for `lockSeconds`. */
+/**
+ * Claims up to `limit` due jobs, at most one per customer, locking them for `lockSeconds`. Paddle events, and a
+ * reconcile job that one of its customer's events waits for, come before other reconcile jobs, so a new event does not
+ * wait behind a reconcile run (`claim_customer_jobs`).
+ */
 export async function claimJobs(limit: number, lockSeconds: number): Promise<Job[]> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase.rpc('claim_customer_jobs', { p_limit: limit, p_lock_seconds: lockSeconds });

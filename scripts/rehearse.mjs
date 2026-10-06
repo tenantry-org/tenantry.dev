@@ -251,16 +251,11 @@ async function show() {
 }
 
 async function reconcile() {
-  // A reconcile job for this customer, as the reconcile run queues them (customer_jobs), so it runs even for a lapsed
-  // customer the run would not pick, in order with the customer's other jobs.
-  const at = new Date().toISOString();
+  // A reconcile job for this customer, queued as the reconcile run queues them (enqueue_reconcile_jobs), so it runs
+  // even for a lapsed customer the run would not pick, in order with the customer's other jobs. A customer whose
+  // reconcile job is still pending keeps that one.
   await query(
-    db
-      .from('customer_jobs')
-      .upsert(
-        { id: `reconcile_${customerId}_${at}`, kind: 'reconcile', customer_id: customerId, occurred_at: at },
-        { onConflict: 'id', ignoreDuplicates: true },
-      ),
+    db.rpc('enqueue_reconcile_jobs', { p_customer_ids: [customerId], p_occurred_at: new Date().toISOString() }),
   );
 
   const { NEXT_PUBLIC_SITE_URL, CRON_SECRET } = process.env;

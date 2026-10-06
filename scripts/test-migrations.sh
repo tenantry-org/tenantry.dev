@@ -32,6 +32,7 @@ test_migration 20261005170000_release_candidates 20261005160000 || status=1
 test_migration 20261005180000_patches_take_their_minor_date 20261005170000 || status=1
 test_migration 20261005190000_withdrawn_reasons 20261005180000 || status=1
 test_migration 20261005200000_paid_time_adds_up 20261005190000 || status=1
+test_migration 20261006090000_reconcile_backlog 20261005200000 || status=1
 
 supabase db reset --local >/dev/null
 exit $status

@@ -601,6 +601,7 @@ export type Database = {
         Returns: string;
       };
       customers_to_reconcile: { Args: Record<PropertyKey, never>; Returns: string[] };
+      enqueue_reconcile_jobs: { Args: { p_customer_ids: string[]; p_occurred_at: string }; Returns: undefined };
       feed_customer: {
         Args: { p_token_hash: string };
         Returns: {
