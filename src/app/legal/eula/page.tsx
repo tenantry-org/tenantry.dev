@@ -37,16 +37,18 @@ export default function EulaPage() {
         gaps between them, and vest at 12, and money returned to you takes away the time it paid for. Each billing
         period of any of your Tenantry Pro subscriptions, at a monthly or yearly price this site has offered, gives a
         paid period: the part of that billing period that the money kept from its payments pays for, counted from the
-        start of the billing period. A payment whose period overlaps a billing period&apos;s and that charged less than
-        its payment, such as a prorated charge, adds no time: its money counts together with that billing period&apos;s
-        payment. A refund of a duplicate charge for a billing period you have already paid for is not money returned for
-        that period. A billing period whose payments you keep in full gives the whole billing period, even if the
-        subscription was cancelled or paused before the period ended. If part of the money has been returned to you, the
-        paid period is the same share of the billing period as the share of the money you kept: if half of a
-        month&apos;s payment is refunded, the paid period is the first half of that month. A billing period of which
-        everything has been returned, or for which nothing was charged (a trial, or a period discounted to zero), gives
-        no paid period. Amounts are compared before tax. A discount does not count as money returned, so a discounted
-        payment that you keep gives the whole billing period.
+        start of the billing period. A payment on the same subscription and at the same billing interval whose period
+        overlaps a billing period&apos;s, such as a prorated charge, adds no time: its money counts together with that
+        billing period&apos;s payment. This does not apply to a payment for a whole billing period that charged at least
+        half as much (a new purchase), which gives a billing period of its own, but it applies to anything charged
+        within a billing period for which nothing was charged. A refund of a duplicate charge for a billing period you
+        have already paid for is not money returned for that period. A billing period whose payments you keep in full
+        gives the whole billing period, even if the subscription was cancelled or paused before the period ended. If
+        part of the money has been returned to you, the paid period is the same share of the billing period as the share
+        of the money you kept: if half of a month&apos;s payment is refunded, the paid period is the first half of that
+        month. A billing period of which everything has been returned, or for which nothing was charged (a trial, or a
+        period discounted to zero), gives no paid period. Amounts are compared before tax. A discount does not count as
+        money returned, so a discounted payment that you keep gives the whole billing period.
       </p>
       <p>
         Money is returned to you by a refund, a credit or a chargeback once it has been approved. A correction of tax
@@ -57,8 +59,9 @@ export default function EulaPage() {
       </p>
       <p>
         Your paid months count your paid periods, from all of your Tenantry Pro subscriptions, whether or not there are
-        gaps between them. A monthly billing period kept in full is one paid month and an annual billing period kept in
-        full is twelve, whatever the number of days in them. A paid period that is part of a billing period counts for
+        gaps between them. A monthly billing period of at least 27 days kept in full is one paid month and an annual
+        billing period kept in full is twelve, whatever the number of days in them; a shorter monthly billing period
+        counts for the share of a calendar month it covers. A paid period that is part of a billing period counts for
         the calendar months it covers from the start of the billing period: the first half of a monthly billing period
         is half a paid month. Time in which paid periods overlap, as when you change plan or hold two subscriptions,
         counts once, as the larger of the credits the paid periods give it, so a payment you keep never reduces your

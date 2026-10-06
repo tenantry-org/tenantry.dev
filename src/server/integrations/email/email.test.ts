@@ -103,7 +103,7 @@ describe('email templates', () => {
     const unvested = accessRevokedEmail('cust@example.com', null, paidUntil, SITE).html;
     expect(unvested).toContain('no releases are vested yet, so the package feed serves you none for now');
     expect(unvested).toContain('The time you have paid for runs to 1 March 2027: if it brings your paid months to 12');
-    expect(unvested).not.toContain('no longer licensed');
+    expect(unvested).toContain('Until they do, the releases you downloaded are not licensed for use.');
 
     // An annual term already vested to the end of the time paid for names that date.
     const term = accessRevokedEmail('cust@example.com', paidUntil, paidUntil, SITE).html;

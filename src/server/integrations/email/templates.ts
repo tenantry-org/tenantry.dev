@@ -143,7 +143,7 @@ export function accessRevokedEmail(
   } else if (vestedThrough) {
     what = `so the package feed now serves you only your vested releases: those published on or before ${longDate(vestedThrough)}, your vested-through date, ${patches}, as the licence agreement sets out. They stay licensed to you.`;
   } else if (moving) {
-    what = `and no releases are vested yet, so the package feed serves you none for now. The time you have paid for runs to ${longDate(paidUntil)}: if it brings your paid months to 12 by then, the releases published up to then become vested, as the licence agreement sets out.`;
+    what = `and no releases are vested yet, so the package feed serves you none for now. The time you have paid for runs to ${longDate(paidUntil)}: if it brings your paid months to 12 by then, the releases published up to then become vested, as the licence agreement sets out. Until they do, the releases you downloaded are not licensed for use.`;
   } else {
     what =
       'and no releases are vested, so the package feed now serves you none, and the releases you downloaded are no longer licensed to you, as the licence agreement sets out.';
