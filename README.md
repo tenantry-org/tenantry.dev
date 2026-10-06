@@ -1,8 +1,8 @@
 # tenantry-site
 
-The Tenantry website, documentation, and commercial customer portal — a [Next.js](https://nextjs.org/)
-16 app (App Router, React 19.3, Tailwind v4) that handles marketing, pricing, docs, and the
-purchase → entitlement → access pipeline for **Tenantry Pro**.
+The Tenantry website, docs and customer portal: a [Next.js](https://nextjs.org/) 16 app (App Router, React 19.3,
+Tailwind v4) that handles marketing, pricing, docs, and the purchase → entitlement → access pipeline for
+**Tenantry Pro**.
 
 ## What it does
 
@@ -33,20 +33,21 @@ in.
 
 Key code is in `src/server`, in layers whose imports point only down this list (ESLint enforces it):
 
-- `feed/` — Tenantry Pro's NuGet v3 feed (`/feed/v3/index.json`, routed by `src/app/feed/v3`): each customer's feed
-  tokens, the read resources filtered to the releases they may use, and publishing for the release workflow.
+- `feed/`: Tenantry Pro's NuGet v3 feed (`/feed/v3/index.json`, routed by `src/app/feed/v3`), with each customer's
+  feed tokens, the read resources filtered to the releases they may use, and publishing for the release workflow.
   `scripts/feed-e2e.sh` runs a real `dotnet restore` against it.
-- `billing/` — the rules and services: what a customer may access now and owns for good, computed from their
-  subscriptions and payments (`entitlement-policy.ts`, with the Paddle behaviour it assumes in
+- `billing/`: the rules and services. They cover what a customer may access now and owns for good, computed from
+  their subscriptions and payments (`entitlement-policy.ts`, with the Paddle behaviour it assumes in
   `paddle-assumptions.ts`); storing that and keeping their licence and emails in line with it (`customer-access.ts`);
-  applying Paddle's notifications (`apply-paddle-event.ts`); the reconcile run; and the Pro pages' read models, one per page, each reading only what its page shows (`pro-pages.ts`).
-- `jobs/` — the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order.
-- `integrations/` — Paddle, email (Resend) and the licence issuer.
-- `db/` — `createUserClient` (the signed-in user's session; RLS applies) and `createServiceRoleClient` (bypasses
+  applying Paddle's notifications (`apply-paddle-event.ts`); the reconcile run; and the Pro pages' read models, one
+  per page, each reading only what its page shows (`pro-pages.ts`).
+- `jobs/`: the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order.
+- `integrations/`: Paddle, email (Resend) and the licence issuer.
+- `db/`: `createUserClient` (the signed-in user's session; RLS applies) and `createServiceRoleClient` (bypasses
   RLS), and the only modules that query the database: the billing tables' store, the customer jobs and the
   dashboard's reads. The clients are typed by `src/lib/supabase/database.types.ts`, which is generated from the
   migrations.
-- `config/` — the server's configuration, `serverConfig()`: every setting, validated when the server starts.
+- `config/`: `serverConfig()`, the server's configuration, with every setting validated when the server starts.
 
 Modules in `src/server` import `server-only` (except `db/update-session.ts`, which the proxy runs), so a client
 component that pulls one in fails the build. The services that change a customer's access (`customer-access.ts`,

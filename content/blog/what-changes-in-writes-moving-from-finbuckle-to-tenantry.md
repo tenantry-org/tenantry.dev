@@ -1,9 +1,9 @@
 ---
 title: Writes after moving from Finbuckle.MultiTenant to Tenantry
-description: The same Order entity and the same writes in one shared database, run against Finbuckle.MultiTenant 10.1.4 and Tenantry Core 0.7.0, with the SQL each one sends and the result.
+description: The same Order entity and the same writes in one shared database, run against Finbuckle.MultiTenant 10.1.4 and Tenantry Core 0.8, with the SQL each one sends and the result.
 date: 2026-10-04
 author: Oliver McNally
-versions: Tenantry 0.7.0, Finbuckle.MultiTenant 10.1.4, .NET 10, EF Core 10.0.12 and SQLite
+versions: Tenantry 0.8, Finbuckle.MultiTenant 10.1.4, .NET 10, EF Core 10.0.12 and SQLite
 tags: [dotnet, efcore, multitenancy, aspnetcore]
 next:
   label: Read the guide to migrating from Finbuckle
@@ -14,7 +14,7 @@ draft: true
 A team on Finbuckle.MultiTenant that looks at moving to [Tenantry Core](/docs/core) needs to know whether its data
 ends up isolated the same way, as well as which methods to rename. I ran three writes against both libraries, with the
 same `Order` entity, one shared SQLite database and two tenants, Acme and Globex, each with one order. Order 1 is
-Acme's. Finbuckle.MultiTenant was 10.1.4, the current release; Tenantry was 0.7.0. Both ran on .NET 10 and EF Core
+Acme's. Finbuckle.MultiTenant was 10.1.4, the current release; Tenantry was 0.8. Both ran on .NET 10 and EF Core
 10.0.12.
 
 The entity is the same in both runs, except that under Tenantry it implements `ITenantEntity<string>`:

@@ -3,7 +3,7 @@ title: Keeping HybridCache and output-cache entries per tenant
 description: In ASP.NET Core, two calls in AddTenantry key HybridCache entries and cached responses by tenant. What they returned for two tenants, with no tenant, after invalidation and on a second instance.
 date: 2026-10-04
 author: Oliver McNally
-versions: Tenantry 0.7.0, .NET 10 and Microsoft.Extensions.Caching.Hybrid 10.10.0
+versions: Tenantry 0.8, .NET 10 and Microsoft.Extensions.Caching.Hybrid 10.10.0
 tags: [dotnet, aspnetcore, caching, multitenancy]
 next:
   label: Read the caching guide
@@ -14,7 +14,7 @@ draft: true
 A `HybridCache` entry under `"orders:recent"`, or a cached response for `/catalogue`, belongs to whichever tenant filled
 it, and the next tenant to ask gets the same bytes. Putting the tenant id into every key by hand protects only the calls
 that do it. This post turns on [Tenantry Core](/docs/core)'s cache isolation in an ASP.NET Core application with two
-tenants, Acme and Globex, and shows what each cache returned. I ran it on .NET 10 with Tenantry 0.7.0, through ASP.NET
+tenants, Acme and Globex, and shows what each cache returned. I ran it on .NET 10 with Tenantry 0.8, through ASP.NET
 Core's test server.
 
 ```bash

@@ -3,7 +3,7 @@ title: Deleting one tenant's data from a shared EF Core database
 description: Offboarding a tenant whose rows sit in many tables of a shared database, with foreign keys between them. What Tenantry Pro's offboarding deleted, refused and reported, and what it leaves to you.
 date: 2026-10-04
 author: Oliver McNally
-versions: Tenantry Core and Pro 0.7.0, .NET 10, EF Core 10.0.12 and SQLite
+versions: Tenantry 0.8, .NET 10, EF Core 10.0.12 and SQLite
 tags: [dotnet, efcore, multitenancy, database]
 next:
   label: See what Tenantry Pro includes
@@ -13,8 +13,9 @@ draft: true
 
 When a customer leaves, or asks for its data to be erased, its rows in a shared database are spread over every
 tenant-owned table, with foreign keys between them. Deleting them means a `DELETE` per table, in an order the foreign
-keys accept, in one transaction. This post does it by hand, then offboards the same tenant with Tenantry Pro, and shows
-what happened to its rows and to the other tenant's.
+keys accept, in one transaction. This post does it by hand, then offboards the same tenant with
+[Tenantry Pro](/pro), the paid subscription built on the free, open-source Tenantry Core, and shows what happened to
+its rows and to the other tenant's.
 
 The database is SQLite, with two tenants, Acme and Globex. Each has one customer, three orders and six order lines.
 `Order` references `Customer`, and `OrderLine` references `Order`, both with `DeleteBehavior.Restrict`, so the database

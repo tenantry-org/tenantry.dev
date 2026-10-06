@@ -5,7 +5,7 @@
 **Please do not report security vulnerabilities through public GitHub issues, discussions, or pull
 requests.**
 
-Instead, report them privately via GitHub's **[Private Vulnerability Reporting](https://github.com/tenantry-org/site/security/advisories/new)**
+Instead, report them privately via GitHub's **[Private Vulnerability Reporting](https://github.com/tenantry-org/tenantry.dev/security/advisories/new)**
 (Security → Advisories → "Report a vulnerability"). This keeps the details confidential until a
 fix is available.
 

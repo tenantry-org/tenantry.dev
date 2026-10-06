@@ -15,7 +15,8 @@ With one shared database, a release applies its EF Core migrations once, with `d
 migration bundle. With a database or schema per tenant, it has to apply them to every tenant's database or schema, and
 those tools update one database per run.
 
-This post looks at what that takes, first by hand and then with Tenantry Pro's migration runner.
+This post looks at what that takes, first by hand and then with the migration runner of [Tenantry Pro](/pro), the
+paid subscription built on the free, open-source Tenantry Core.
 
 ## The loop most applications start with
 
@@ -126,7 +127,8 @@ migration health check reports the same, for your monitoring.
 ### New tenants
 
 Provisioning a tenant runs the same migrations as one of its steps, after creating the database or schema and before
-your seeders, so a new tenant starts on the current schema. See [tenant lifecycle](/docs/pro/tenant-lifecycle).
+your own provisioning steps, such as seeding, so a new tenant starts on the current schema. See
+[tenant lifecycle](/docs/pro/tenant-lifecycle).
 
 ### A schema per tenant
 

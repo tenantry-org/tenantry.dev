@@ -3,7 +3,7 @@ title: Running Hangfire jobs as the tenant that enqueued them
 description: In a shared database, a Hangfire job enqueued in a tenant's request runs with no tenant unless something carries it. What Tenantry Core does, and what Tenantry Pro adds, including suspended tenants.
 date: 2026-10-04
 author: Oliver McNally
-versions: Tenantry Core and Pro 0.7.0, Hangfire 1.8.25, .NET 10, EF Core 10.0.12 and SQLite
+versions: Tenantry 0.8, Hangfire 1.8.25, .NET 10, EF Core 10.0.12 and SQLite
 tags: [dotnet, hangfire, efcore, multitenancy]
 next:
   label: See what Tenantry Pro includes
@@ -15,8 +15,9 @@ An application on [Tenantry Core](/docs/core) with one shared database filters e
 tenant and refuses saves without one. A Hangfire job is run later by a worker thread, outside the request that
 enqueued it, so by default it has no tenant: its queries match nothing and its saves throw. This post runs one job
 three ways against SQLite, with two tenants, Acme with two orders and Globex with one: with Core only, with the tenant
-passed by hand, and with Tenantry Pro's Hangfire integration. Hangfire was 1.8.25 with in-memory job storage, and
-retries were off so that each failure showed at once.
+passed by hand, and with the Hangfire integration of [Tenantry Pro](/pro), the paid subscription built on the free,
+open-source Tenantry Core. Hangfire was 1.8.25 with in-memory job storage, and retries were off so that each failure
+showed at once.
 
 The code below leaves out the model and the packages. `AppDbContext` has `Orders` and `OrderTotals`, whose entities
 implement `ITenantEntity<string>`, and is registered with `UseSqlite(...).UseTenantry()`. `AppTenant` is a tenant

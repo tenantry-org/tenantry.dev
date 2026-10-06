@@ -3,7 +3,7 @@ title: A test that fails when an EF Core entity is not tenant-isolated
 description: An xUnit test that lists the entity types with no tenant filter, over EF Core's model and then with Tenantry. What it caught, and what Tenantry refuses or logs without it.
 date: 2026-10-04
 author: Oliver McNally
-versions: Tenantry 0.7.0, .NET 10, EF Core 10.0.12, xUnit v3 3.2.2 and SQLite
+versions: Tenantry 0.8, .NET 10, EF Core 10.0.12, xUnit v3 3.2.2 and SQLite
 tags: [dotnet, efcore, multitenancy, testing]
 next:
   label: See what Tenantry isolates in EF Core
@@ -156,7 +156,9 @@ TNY1002, printed when the project builds, and `SqlQuery` as TNY1003. That one is
 call but `dotnet build` does not print it unless `.editorconfig` raises it to a warning. TNY1001 reports an entity with
 a `TenantId` property that does not implement `ITenantEntity<TKey>`; `Note`, with no `TenantId`, was not reported.
 
-The test also passed for a context whose options do not call `UseTenantry()`, which isolates nothing.
+The test also passed for a context whose options do not call `UseTenantry()`, which isolates nothing. In the
+application, warning TNY1004 reports an `AddDbContext` registration like that; it does not see a context built by hand,
+as the test builds it.
 
 The same model check can run in the application. With `OnUnmarkedEntityType` set to `Reject`, the context with `Note`
 threw at its first query or save; `EnsureCreatedAsync` before it went through:
