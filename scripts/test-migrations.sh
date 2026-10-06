@@ -22,17 +22,27 @@ test_migration() {
 }
 
 status=0
-test_migration 20261004120000_entitlement_ledger 20261002120000 || status=1
-test_migration 20261005090000_retire_github_delivery 20261004130000 || status=1
-test_migration 20261005100000_feed_access 20261005090000 || status=1
-test_migration 20261005120000_money_kept 20261005100000 || status=1
-test_migration 20261005140000_test_customers 20261005130000 || status=1
-test_migration 20261005160000_annual_term_vests_when_paid 20261005150000 || status=1
-test_migration 20261005170000_release_candidates 20261005160000 || status=1
-test_migration 20261005180000_patches_take_their_minor_date 20261005170000 || status=1
-test_migration 20261005190000_withdrawn_reasons 20261005180000 || status=1
-test_migration 20261005200000_paid_time_adds_up 20261005190000 || status=1
-test_migration 20261006090000_reconcile_backlog 20261005200000 || status=1
+# Every folder in supabase/migration-tests, named after the migration it tests, from the migration before that one.
+for dir in supabase/migration-tests/*/; do
+  migration="$(basename "$dir")"
+  if [[ ! -f "supabase/migrations/$migration.sql" ]]; then
+    echo "== $migration: no such migration in supabase/migrations" >&2
+    status=1
+    continue
+  fi
+  previous=""
+  for file in supabase/migrations/*.sql; do
+    version="$(basename "$file")"
+    version="${version%%_*}"
+    if [[ "$version" < "${migration%%_*}" ]]; then previous="$version"; fi
+  done
+  if [[ -z "$previous" ]]; then
+    echo "== $migration: no migration before it to start from" >&2
+    status=1
+    continue
+  fi
+  test_migration "$migration" "$previous" || status=1
+done
 
 supabase db reset --local >/dev/null
 exit $status
