@@ -672,7 +672,8 @@ describe('applyPaddleEvent', () => {
         occurredAt: '2027-01-01T00:00:00.000Z',
         status: 'paid',
       });
-      // No access recorded yet (the subscription event follows), so no current run is shown, but the payment counts.
+      // No access recorded yet (the subscription event follows), so no progress towards 12 paid months is shown, but
+      // the payment counts.
       expect(memory.state.entitlementStates.get('ctm_01')).toMatchObject({ run: null, vestedThrough: null });
     });
 

@@ -32,8 +32,8 @@ export interface CustomerReconciliation {
  *   - a refund, credit or chargeback whose adjustment notification never arrived or failed: the adjustments of the
  *     same subscriptions created in the same window are listed, and any missing, or recorded in an older state, is
  *     recorded as the webhook would,
- *   - entitlement that changes with time alone: a run that reaches 12 months or serves another period (syncCustomer
- *     recomputes it, and tells the customer about a grant confirmed or withdrawn).
+ *   - entitlement that changes with time alone: paid time served that reaches 12 paid months or serves another period
+ *     (syncCustomer recomputes it, and tells the customer about a grant confirmed or withdrawn).
  *
  * Every step is idempotent, so a job that throws is retried later with backoff.
  */

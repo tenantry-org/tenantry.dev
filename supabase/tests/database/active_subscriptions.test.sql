@@ -19,7 +19,7 @@ insert into public.payments (
   ('txn_2', 'ctm_1', 'sub_1', 'subscription_recurring', 'pri_1', 'month', 1, '2027-02-01', '2027-03-01', 3900, 0, 3900,
     'GBP', now(), now());
 
--- The state of a customer two months into a run, with one annual term that was refunded.
+-- The state of a customer with two paid months, and one annual term that was refunded.
 create temporary table run_state as select
   '{"access_status": "active", "run_started_at": "2027-01-01T00:00:00Z", "paid_through": "2027-03-01T00:00:00Z",
     "months_paid": 2, "vests_at": "2028-01-01T00:00:00Z"}'::jsonb as state,
@@ -36,7 +36,7 @@ select results_eq(
     from public.active_subscriptions where customer_id = 'ctm_1'$$,
   $$values ('active'::text, '2027-01-01 00:00+00'::timestamptz, '2027-03-01 00:00+00'::timestamptz, 2,
     '2028-01-01 00:00+00'::timestamptz)$$,
-  'records the access and the current run');
+  'records the access and the paid time');
 select results_eq(
   $$select kind, status, withdrawn_reason, transaction_id from public.vested_entitlements where customer_id = 'ctm_1'$$,
   $$values ('annual_term'::text, 'withdrawn'::text, 'refund'::text, 'txn_0'::text)$$,
@@ -51,7 +51,7 @@ select is(public.vested_through('ctm_1'), null, 'a withdrawn grant vests nothing
 insert into public.vested_entitlements (customer_id, kind, started_at, vested_through, status, confirmed_at, note)
 values ('ctm_1', 'operator', '2025-01-01', '2026-06-01', 'confirmed', now(), 'Merged from ctm_old');
 
--- A month later: the run vested; the refunded annual term is no longer computed (as if its payment were gone).
+-- A month later: the paid time vested; the refunded annual term is no longer computed (as if its payment were gone).
 select is(
   public.set_customer_entitlement('ctm_1',
     '{"access_status": "grace", "grace_ends_at": "2028-03-02T00:00:00Z", "run_started_at": "2027-01-01T00:00:00Z",
@@ -85,7 +85,7 @@ select results_eq(
     ('paid_time'::text, '2028-02-01 00:00+00'::timestamptz)$$,
   'stores no operator grant from the computed grants, and keeps the one added by hand');
 
--- The run is confirmed again later, unchanged.
+-- The paid time's grant is confirmed again later, unchanged.
 select is(
   public.set_customer_entitlement('ctm_1',
     '{"access_status": "lapsed"}',
@@ -98,7 +98,7 @@ select results_eq(
   $$select access_status, grace_ends_at, run_started_at, months_paid from public.active_subscriptions
     where customer_id = 'ctm_1'$$,
   $$values ('lapsed'::text, null::timestamptz, null::timestamptz, 0)$$,
-  'ending access resets the grace end and the run');
+  'ending access resets the grace end and the progress towards 12 paid months');
 select is(public.vested_through('ctm_1'), '2028-02-01 00:00+00'::timestamptz, 'vested rights stay after a lapse');
 select is(
   public.set_customer_entitlement('ctm_1', '{"access_status": "lapsed"}', null, null), 'lapsed',
@@ -120,7 +120,7 @@ select throws_ok(
 select throws_ok(
   $$select public.set_customer_entitlement('ctm_1', '{"access_status": "active", "run_started_at": "2027-01-01T00:00:00Z"}',
     null, null)$$,
-  '23514', null, 'rejects a run without how far it is paid');
+  '23514', null, 'rejects a paid time start without how far it is paid');
 select throws_ok(
   $$select public.set_customer_entitlement('ctm_1', '{"access_status": "active"}',
     '[{"kind": "paid_time", "started_at": "2027-01-01T00:00:00Z", "vested_through": "2028-01-01T00:00:00Z",

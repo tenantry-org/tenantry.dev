@@ -259,7 +259,7 @@ describe('reconcileCustomer', () => {
 
       expect(deps.listCompletedTransactions).toHaveBeenCalledWith(['sub_1'], expect.any(Date));
       expect([...memory.state.payments.keys()].sort()).toEqual(['txn_october', 'txn_september']);
-      // The recovered month is in the run the reconcile stores.
+      // The recovered month is in the paid time the reconcile stores.
       expect(memory.state.entitlementStates.get('ctm_1')?.run).toMatchObject({
         startedAt: new Date('2026-09-01T00:00:00Z'),
         paidThrough: new Date('2026-11-01T00:00:00Z'),

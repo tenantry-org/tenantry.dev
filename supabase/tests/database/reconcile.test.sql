@@ -46,8 +46,8 @@ select ok(
   public.customers_to_reconcile()
     @> array['ctm_access', 'ctm_past_due', 'ctm_failing', 'ctm_running']
     and not public.customers_to_reconcile() && array['ctm_lapsed', 'ctm_vested', 'ctm_annual'],
-  'found by access, a subscription that may entitle, a failing licence or a current run; a lapsed customer, vested '
-    || 'or not, is not');
+  'found by access, a subscription that may entitle, a failing licence or paid time not vested yet; a lapsed '
+    || 'customer, vested or not, is not');
 
 -- Paid time still being served: a payment kept in full counts for its whole period even after the subscription
 -- ended, so vesting can fall due while the customer is lapsed. Visited until two days after the period ends.
