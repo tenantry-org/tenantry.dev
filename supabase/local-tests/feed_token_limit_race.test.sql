@@ -21,7 +21,10 @@ select dblink_connect('second',
   'host=' || host(inet_server_addr()) || ' port=' || inet_server_port() || ' dbname=' || current_database()
     || ' user=postgres password=postgres');
 
--- The customer and their 9 tokens, committed so both connections see them; removed at the end.
+-- The customer and their 9 tokens, committed so both connections see them; removed at the end, and first here, in
+-- case a run was stopped before its clean-up.
+select dblink_exec('first', $$delete from public.feed_tokens where customer_id = 'ctm_token_race'$$);
+select dblink_exec('first', $$delete from public.customers where customer_id = 'ctm_token_race'$$);
 select dblink_exec('first',
   $$insert into public.customers (customer_id, email) values ('ctm_token_race', 'token-race@example.com')$$);
 select count(*) from dblink('first',
