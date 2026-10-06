@@ -209,6 +209,7 @@ export function latestBillingPeriods(
   const periods = ledger
     .billingPeriods()
     .filter(({ payment }) => payment.subscriptionId === subscriptionId && payment.charged > 0);
+  if (periods.length === 0) return [];
   const start = Math.max(...periods.map(({ payment }) => payment.periodStartsAt.getTime()));
 
   return periods

@@ -503,6 +503,30 @@ describe('applyPaddleEvent', () => {
       expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
     });
 
+    it('cancels for a full refund of the latest period paid at a price that is not offered', async () => {
+      await applyPaddleEvent(
+        delivered(
+          transactionEvent({
+            eventId: 'evt_special',
+            transactionId: 'txn_special',
+            priceId: 'pri_01special',
+            period: { startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-11-01T00:00:00Z' },
+          }),
+        ),
+        deps,
+      );
+      vi.clearAllMocks();
+
+      await adjusted({
+        eventId: 'evt_refund_special',
+        action: 'refund',
+        status: 'approved',
+        transactionId: 'txn_special',
+      });
+
+      expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_01');
+    });
+
     it('cancels on the first chargeback of any payment, so charging back each month after the next renews fails', async () => {
       // Monthly from September to December 2026; each month charged back once the next has renewed.
       const months = ['2026-09-01', '2026-10-01', '2026-11-01', '2026-12-01', '2027-01-01'];

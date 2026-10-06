@@ -273,14 +273,17 @@ async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, d
 // The subscription's latest paid billing periods as recorded (latestBillingPeriods): a full refund cancels it only if
 // it is of one of them and leaves nothing kept of them. A full refund of an earlier one (a goodwill refund) does not
 // end the subscription; nor does one of a transaction not recorded. A transaction that charged nothing (a trial, a
-// free plan change) holds no such period.
+// free plan change) holds no such period. Whether its price is offered has no bearing on whether the money for it was
+// returned, so every payment's price counts here.
 async function latestPaidPeriods(customerId: string, subscriptionId: string, deps: BillingDeps) {
-  const [payments, adjustments, offerPriceIds] = await Promise.all([
+  const [payments, adjustments] = await Promise.all([
     deps.store.listPayments(customerId),
     deps.store.listPaymentAdjustments(customerId),
-    offeredPriceIds(deps),
   ]);
-  return latestBillingPeriods({ payments, adjustments, offerPriceIds }, subscriptionId);
+  return latestBillingPeriods(
+    { payments, adjustments, offerPriceIds: payments.map((payment) => payment.priceId) },
+    subscriptionId,
+  );
 }
 
 // Records the customer's email unless a newer customer event has already been applied: the email decides
