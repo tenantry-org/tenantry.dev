@@ -13,10 +13,11 @@ test_migration() {
   local migration="$1" previous="$2"
   local dir="supabase/migration-tests/$migration"
   echo "== $migration, from $previous"
-  supabase db reset --local --version "$previous" >/dev/null
-  supabase test db --local "$dir/before.sql"
+  # Called on the left of ||, where bash suspends set -e, so each step returns on failure itself.
+  supabase db reset --local --version "$previous" >/dev/null || return 1
+  supabase test db --local "$dir/before.sql" || return 1
   # Only the migration under test, and those after it.
-  supabase migration up --local >/dev/null
+  supabase migration up --local >/dev/null || return 1
   supabase test db --local "$dir/after.sql"
 }
 
