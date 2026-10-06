@@ -449,9 +449,9 @@ class Ledger {
    * and whose period is a whole year: 12 calendar months from its start, so `monthsOf` gives 12. A shorter payment at
    * a yearly price, such as a prorated charge for a plan change, grants no term: it counts only as paid time.
    *
-   * vested_entitlements keeps one grant per term start, so of two annual terms with the same start (of two
-   * subscriptions), one decides: the one whose payment charged more, then the later-ending, then the one kept over one
-   * withdrawn, then the lower transaction id.
+   * vested_entitlements keeps one grant per term start, so of two annual terms with the same start (a duplicate charge,
+   * or two subscriptions), one decides: the one kept over one withdrawn, then the one whose payment charged more, then
+   * the later-ending, then the lower transaction id.
    */
   annualTerms(): Grant[] {
     const terms = new Map<number, Grant>();
@@ -496,9 +496,9 @@ class Ledger {
     const otherPayment = this.input.payments.find((p) => p.transactionId === other.transactionId)!;
     const kept = (g: Grant) => (g.status === 'confirmed' ? 1 : 0);
     return (
-      (period.payment.charged - otherPayment.charged ||
+      (kept(grant) - kept(other) ||
+        period.payment.charged - otherPayment.charged ||
         grant.vestedThrough.getTime() - other.vestedThrough.getTime() ||
-        kept(grant) - kept(other) ||
         other.transactionId!.localeCompare(grant.transactionId!)) > 0
     );
   }

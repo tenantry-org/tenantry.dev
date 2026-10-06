@@ -397,6 +397,27 @@ describe('the owner’s table', () => {
       }
     });
 
+    it('lets the kept term decide over a larger payment for the same year refunded in full', () => {
+      const kept = annual('2027-01-01T00:00:00Z', { charged: 35100 });
+      const larger = annual('2027-01-01T00:00:00Z', { subscriptionId: 'sub_2' });
+      const largerRefunded = adjustment(larger, 'refund', '2027-07-02T00:00:00Z');
+      for (const payments of [
+        [kept, larger],
+        [larger, kept],
+      ]) {
+        const entitlement = compute({
+          payments,
+          adjustments: [largerRefunded],
+          subscriptions: [running('sub_1'), running('sub_2')],
+          now: '2027-07-03T00:00:00Z',
+        });
+        expect(vested(entitlement)).toBe('2028-01-01T00:00:00.000Z');
+        expect(entitlement.grants.filter((g) => g.kind === 'annual_term')).toEqual([
+          expect.objectContaining({ transactionId: kept.transactionId, status: 'confirmed' }),
+        ]);
+      }
+    });
+
     it.each(['2027-01-01T00:00:00Z', '2027-01-02T00:00:00Z', '2027-12-31T23:59:59Z', '2029-01-01T00:00:00Z'])(
       'kept in full: at %s the grant is confirmed from the payment, vested through the term end',
       (now) => {
