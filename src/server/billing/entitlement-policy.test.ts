@@ -1418,6 +1418,25 @@ describe('timing', () => {
     ).toMatchObject({ monthsPaid: 1 });
   });
 
+  it('counts a 27-day monthly period kept in full as a paid month', () => {
+    const short = payment('2027-03-01T00:00:00Z', { periodEndsAt: date('2027-03-28T00:00:00Z') });
+    const eleven = monthly('2027-03-28T00:00:00Z', 11);
+    const at = (now: string) => compute({ payments: [short, ...eleven], now });
+
+    expect(at('2027-03-28T00:00:00Z').run).toMatchObject({ monthsPaid: 12 });
+    expect(at('2028-02-27T23:59:59Z').vestedThrough).toBeNull();
+    expect(vested(at('2028-02-28T00:00:00Z'))).toBe('2028-02-28T00:00:00.000Z');
+  });
+
+  it('shows six paid months for an annual payment whose kept money falls a penny short of half', () => {
+    const year = annual('2027-01-01T00:00:00Z');
+    const refund = adjustment(year, 'refund', '2027-01-03T00:00:00Z', { amount: 39000 - 19339 });
+    // 19339 of 39000 kept is 180.99 of the year's 365 days: 5.9998 calendar months, shown as 6.
+    expect(compute({ payments: [year], adjustments: [refund], now: '2027-03-01T00:00:00Z' }).run).toMatchObject({
+      monthsPaid: 6,
+    });
+  });
+
   it('counts an annual period as twelve paid months, and a monthly period half refunded as half of one', () => {
     const year = annual('2027-01-01T00:00:00Z');
     expect(compute({ payments: [year], now: '2027-02-01T00:00:00Z' }).run).toMatchObject({ monthsPaid: 12 });
@@ -1523,7 +1542,7 @@ describe('dates', () => {
     expect(addMonths(date('2027-03-15T00:00:00Z'), 12).toISOString()).toBe('2028-03-15T00:00:00.000Z');
   });
 
-  it('counts a billing period as its months, whatever its length, and a shorter one in proportion', () => {
+  it('counts a billing period as its months, whatever its length, and a short one at a yearly price in proportion', () => {
     const period = (interval: string, frequency: number, start: string, end: string) =>
       monthsOf({
         billingInterval: interval,
@@ -1538,7 +1557,8 @@ describe('dates', () => {
     expect(period('month', 3, '2027-01-01T00:00:00Z', '2027-04-01T00:00:00Z')).toBe(3);
     expect(period('year', 1, '2027-01-01T00:00:00Z', '2028-01-01T00:00:00Z')).toBe(12);
     expect(period('year', 1, '2028-01-01T00:00:00Z', '2029-01-01T00:00:00Z')).toBe(12);
-    expect(period('month', 1, '2027-02-01T00:00:00Z', '2027-02-15T00:00:00Z')).toBe(0.5);
+    // A monthly period counts as a month even if Paddle's period is shorter than a calendar month.
+    expect(period('month', 1, '2027-03-01T00:00:00Z', '2027-03-28T00:00:00Z')).toBe(1);
     expect(period('year', 1, '2027-07-01T00:00:00Z', '2028-01-01T00:00:00Z')).toBe(6);
     expect(period('week', 1, '2027-02-01T00:00:00Z', '2027-02-08T00:00:00Z')).toBe(0);
   });

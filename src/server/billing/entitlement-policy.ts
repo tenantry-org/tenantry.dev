@@ -185,6 +185,7 @@ export function computeEntitlement(input: EntitlementInput): Entitlement {
     access,
     run: isEntitled(access.status) && paid ? progress(paid, vestsAt, input.now) : null,
     vestedThrough: latest(grants.filter((g) => g.status === 'confirmed').map((g) => g.vestedThrough)),
+    paidUntil: paid ? new Date(paid.counted.at(-1)!.to) : null,
     grants,
     paymentStatuses: Object.fromEntries(
       input.payments.map((payment) => [payment.transactionId, ledger.status(payment)]),
@@ -497,16 +498,17 @@ class Ledger {
 
 /**
  * The paid months a payment's billing period pays for: its billing interval's months (12 a year, one a month) times its
- * frequency, whatever the length of the period, as a calendar month runs from 28 to 31 days. A period that covers fewer
- * calendar months than that from its start pays for the calendar months it covers. Nothing for another interval.
+ * frequency, whatever the length of the period. A monthly period counts its months even if Paddle's period is shorter
+ * than a calendar month. A period at a yearly price that covers fewer calendar months than 12 from its start is not a
+ * year but a prorated charge, and pays for the calendar months it covers. Nothing for another interval.
  */
 export function monthsOf(
   payment: Pick<Payment, 'billingInterval' | 'billingFrequency' | 'periodStartsAt' | 'periodEndsAt'>,
 ): number {
-  return Math.max(
-    0,
-    Math.min(nominalMonths(payment), calendarMonths(payment.periodStartsAt, payment.periodEndsAt.getTime())),
-  );
+  if (payment.periodEndsAt <= payment.periodStartsAt) return 0;
+  const nominal = nominalMonths(payment);
+  if (payment.billingInterval === 'month') return nominal;
+  return Math.min(nominal, calendarMonths(payment.periodStartsAt, payment.periodEndsAt.getTime()));
 }
 
 // The months a billing interval pays for: 12 a year and one a month, times the frequency; nothing for another.
@@ -546,7 +548,8 @@ function progress(paid: PaidTime, vestsAt: Date | null, now: Date): CurrentRun {
   return {
     startedAt: paid.startedAt,
     paidThrough: new Date(paid.counted.at(-1)!.to),
-    monthsPaid: Math.floor(months + MONTHS_EPSILON),
+    // Rounded first, so a period whose kept money falls a penny short of its share still shows as whole months.
+    monthsPaid: Math.floor(Math.round(months * 1000) / 1000),
     vestsAt: vestsAt ?? monthsFrom(new Date(Math.max(paid.billedThrough.getTime(), now.getTime())), 12 - months),
   };
 }

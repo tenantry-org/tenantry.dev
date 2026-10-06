@@ -386,6 +386,7 @@ describe('the payment ledger', () => {
           },
         ],
         paymentStatuses: { txn_0: 'refunded' },
+        paidUntil: null,
         ambiguousReversals: [],
       }),
     ).resolves.toBe('lapsed');

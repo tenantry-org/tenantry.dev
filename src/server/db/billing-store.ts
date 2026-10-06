@@ -116,6 +116,8 @@ export interface Entitlement {
   run: CurrentRun | null;
   /** The latest confirmed grant's date, or null if none. */
   vestedThrough: Date | null;
+  /** The end of the time the money kept pays for, served or not, or null if no payment counts for any time. */
+  paidUntil: Date | null;
   grants: Grant[];
   /** Each payment's status now. */
   paymentStatuses: Record<string, PaymentStatus>;

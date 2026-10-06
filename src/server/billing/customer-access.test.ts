@@ -516,6 +516,24 @@ describe('vesting emails', () => {
     expect(message.html).not.toContain('end of each paid month');
   });
 
+  it('tells a customer cancelled mid-month with nothing refunded that the time paid for still runs', async () => {
+    memory.subscribe('ctm_1');
+    for (let n = 0; n < 6; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+    await syncCustomer('ctm_1', deps, new Date('2026-06-10T00:00:00Z'));
+    vi.clearAllMocks();
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-06-15T00:00:00Z'));
+    memory.subscribe('ctm_1', { status: 'canceled' });
+    await syncCustomer('ctm_1', deps, new Date('2026-06-15T00:10:00Z'));
+    vi.useRealTimers();
+
+    expect(subjects()).toEqual(['Your Tenantry Pro subscription has ended']);
+    expect(deps.sendEmail.mock.calls[0][0].html).toContain(
+      'The time you have paid for runs to 1 July 2026: if it brings your paid months to 12',
+    );
+  });
+
   it('tells the customer an annual term is vested when it is paid, and not again at its end', async () => {
     memory.subscribe('ctm_1');
     await pay('txn_year', '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z', 'year');

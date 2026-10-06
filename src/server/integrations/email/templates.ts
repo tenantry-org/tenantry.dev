@@ -129,10 +129,25 @@ export function grantWithdrawnEmail(
 }
 
 /** Sent when a customer's access ends: none of their subscriptions entitles them any more. */
-export function accessRevokedEmail(to: string, vestedThrough: Date | null, siteUrl: string): EmailMessage {
-  const what = vestedThrough
-    ? `so the package feed now serves you only your vested releases: those published on or before ${longDate(vestedThrough)}, your vested-through date, and every patch release of a minor version whose x.y.0 release is vested, as the licence agreement sets out. They stay licensed to you.`
-    : 'and no releases are vested, so the package feed now serves you none, and the releases you downloaded are no longer licensed to you, as the licence agreement sets out.';
+export function accessRevokedEmail(
+  to: string,
+  vestedThrough: Date | null,
+  paidUntil: Date | null,
+  siteUrl: string,
+): EmailMessage {
+  const patches = 'and every patch release of a minor version whose x.y.0 release is vested';
+  const moving = paidUntil !== null && (vestedThrough === null || vestedThrough < paidUntil);
+  let what: string;
+  if (vestedThrough && moving) {
+    what = `so the package feed now serves you only your vested releases: those published on or before your vested-through date, which moves on as the time you have paid for is served, to ${longDate(paidUntil)}, ${patches}, as the licence agreement sets out. They stay licensed to you.`;
+  } else if (vestedThrough) {
+    what = `so the package feed now serves you only your vested releases: those published on or before ${longDate(vestedThrough)}, your vested-through date, ${patches}, as the licence agreement sets out. They stay licensed to you.`;
+  } else if (moving) {
+    what = `and no releases are vested yet, so the package feed serves you none for now. The time you have paid for runs to ${longDate(paidUntil)}: if it brings your paid months to 12 by then, the releases published up to then become vested, as the licence agreement sets out.`;
+  } else {
+    what =
+      'and no releases are vested, so the package feed now serves you none, and the releases you downloaded are no longer licensed to you, as the licence agreement sets out.';
+  }
   const again = vestedThrough
     ? 'You can resubscribe any time:'
     : 'You can resubscribe any time, and the paid months you have kept still count towards 12:';
