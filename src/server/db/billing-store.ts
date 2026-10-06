@@ -494,6 +494,20 @@ export async function listGrants(customerId: string): Promise<Grant[]> {
 }
 
 /**
+ * The customer's vested-through date as stored (`vested_through()`): the latest of their confirmed grants, operator
+ * grants included, as the package feed and the dashboard read it. Null when nothing is vested.
+ */
+export async function readVestedThrough(customerId: string): Promise<Date | null> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.rpc('vested_through', { p_customer_id: customerId });
+
+  if (error) throw error;
+
+  // The function returns null when nothing is vested; generated return types are never nullable.
+  return (data as string | null) ? new Date(data) : null;
+}
+
+/**
  * Stores the customer's derived state in one transaction (`set_customer_entitlement`): their access and paid time
  * (active_subscriptions), their computed grants (vested_entitlements) and each payment's status. Returns the access
  * status it replaced, 'lapsed' for a customer seen for the first time.

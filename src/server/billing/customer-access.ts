@@ -79,12 +79,13 @@ export async function syncCustomer(
   const entitled = isEntitled(entitlement.access.status);
 
   const wasEntitled = isEntitled(await store.saveCustomerState(customerId, entitlement));
-  await notifyGrantChanges(customerId, previousGrants, entitlement, email, deps, now);
+  const vestedThrough = await storedVestedThrough(customerId, entitlement, deps);
+  await notifyGrantChanges(customerId, previousGrants, entitlement, vestedThrough, email, deps, now);
 
   if (!entitled) {
     if (!wasEntitled) return { change: 'unchanged', licence: null, entitlement };
 
-    await endAccess(customerId, email, entitlement, now, deps);
+    await endAccess(customerId, email, entitlement, vestedThrough, now, deps);
     return { change: 'ended', licence: null, entitlement };
   }
 
@@ -114,6 +115,20 @@ export async function syncCustomer(
 }
 
 /**
+ * The customer's vested-through date as stored (vested_through()), operator grants included: the date the feed and the
+ * dashboard use, so the emails give it too. If it cannot be read, the change is recorded already, so this logs the
+ * failure and gives the computed date, which leaves out only operator grants.
+ */
+async function storedVestedThrough(customerId: string, entitlement: Entitlement, deps: BillingDeps) {
+  try {
+    return await deps.store.readVestedThrough(customerId);
+  } catch (error) {
+    console.error(`Customer access: could not read the vested-through date of customer ${customerId}:`, error);
+    return entitlement.vestedThrough;
+  }
+}
+
+/**
  * Tells the customer when their vested releases change, comparing the grants stored before this sync with those stored
  * by it:
  *   - an annual term's grant withdrawn (money returned from its payment);
@@ -123,12 +138,15 @@ export async function syncCustomer(
  *     that vests beyond their previous vested-through date: paid time confirmed after it, or an annual term ending
  *     after it. A vested-through date moving forward with the time served sends nothing, nor does paid time
  *     recomputed from a later start (money returned from its first payment).
- * Anything taken away also alerts the operator. Never throws: a failed email is not resent.
+ * Nothing is newly vested while an operator grant vests beyond every computed grant. The emails and alerts give the
+ * stored vested-through date (`stored`, operator grants included). Anything taken away also alerts the operator. Never
+ * throws: a failed email is not resent.
  */
 async function notifyGrantChanges(
   customerId: string,
   previous: Grant[],
   entitlement: Entitlement,
+  stored: Date | null,
   email: string | null,
   deps: BillingDeps,
   now: Date,
@@ -151,6 +169,7 @@ async function notifyGrantChanges(
   // A grant that vests beyond the previous vested-through date: not paid time recomputed from a later start.
   const vested =
     through !== null &&
+    !(stored && stored > through) &&
     confirmed.some(
       (grant) =>
         !previousThrough ||
@@ -174,7 +193,7 @@ async function notifyGrantChanges(
         : `Vested releases taken away for customer ${customerId}`,
       `The ${what} of Paddle customer ${customerId} no longer vests releases up to ` +
         `${grant.vestedThrough.toISOString()} (${grant.withdrawnReason ?? 'money it relied on was returned'}). Their ` +
-        `vested-through date is now ${through?.toISOString() ?? 'none'}. Check the adjustment in Paddle if this is ` +
+        `vested-through date is now ${stored?.toISOString() ?? 'none'}. Check the adjustment in Paddle if this is ` +
         'unexpected.',
     );
   }
@@ -184,10 +203,10 @@ async function notifyGrantChanges(
 
   if (!email) return;
   for (const grant of withdrawn) {
-    await deps.sendEmail(grantWithdrawnEmail(email, grant, through, deps.config.siteUrl));
+    await deps.sendEmail(grantWithdrawnEmail(email, grant, stored, deps.config.siteUrl));
   }
   if (vested) {
-    await deps.sendEmail(vestingConfirmedEmail(email, through!, annualTerm, deps.config.siteUrl));
+    await deps.sendEmail(vestingConfirmedEmail(email, stored!, annualTerm, deps.config.siteUrl));
   }
 }
 
@@ -255,6 +274,7 @@ async function endAccess(
   customerId: string,
   email: string | null,
   entitlement: Entitlement,
+  vestedThrough: Date | null,
   now: Date,
   deps: BillingDeps,
 ) {
@@ -263,7 +283,7 @@ async function endAccess(
   if (email) {
     // Paid time still being served after a cancel or pause with nothing returned can move or start the vesting.
     const paidUntil = entitlement.paidUntil && entitlement.paidUntil > now ? entitlement.paidUntil : null;
-    await deps.sendEmail(accessRevokedEmail(email, entitlement.vestedThrough, paidUntil, deps.config.siteUrl));
+    await deps.sendEmail(accessRevokedEmail(email, vestedThrough, paidUntil, deps.config.siteUrl));
   } else {
     console.info(`Customer access: no email on file for customer ${customerId}; skipping the revocation email.`);
   }

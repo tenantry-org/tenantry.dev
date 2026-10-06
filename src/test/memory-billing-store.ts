@@ -42,6 +42,8 @@ const state = {
   adjustments: new Map<string, StoredAdjustment>(),
   /** Each customer's last stored state: their run (active_subscriptions) and grants (vested_entitlements). */
   entitlementStates: new Map<string, Entitlement>(),
+  /** Each customer's operator grants' vested-through dates (vested_entitlements of kind operator, confirmed). */
+  operatorGrants: new Map<string, Date[]>(),
   /** The customers marked as test customers (customers.is_test). */
   testCustomers: new Set<string>(),
   /** Every price Pro was offered at (offered_prices). */
@@ -67,6 +69,7 @@ export const memory = {
     state.payments.clear();
     state.adjustments.clear();
     state.entitlementStates.clear();
+    state.operatorGrants.clear();
     state.testCustomers.clear();
     state.offeredPrices.clear();
   },
@@ -243,6 +246,17 @@ export const memory = {
 
     async listGrants(customerId: string) {
       return (state.entitlementStates.get(customerId)?.grants ?? []).map((grant) => ({ ...grant }));
+    },
+
+    // As vested_through() does: the latest confirmed grant's date, operator grants included.
+    async readVestedThrough(customerId: string) {
+      const dates = [
+        ...(state.entitlementStates.get(customerId)?.grants ?? [])
+          .filter((grant) => grant.status === 'confirmed')
+          .map((grant) => grant.vestedThrough),
+        ...(state.operatorGrants.get(customerId) ?? []),
+      ];
+      return dates.length === 0 ? null : new Date(Math.max(...dates.map((date) => date.getTime())));
     },
 
     // As set_customer_entitlement does: returns the access it replaced.

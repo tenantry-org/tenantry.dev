@@ -432,6 +432,52 @@ describe('vesting emails', () => {
     expect(deps.alertOperator).not.toHaveBeenCalled();
   });
 
+  it('gives the date of an operator grant, as the feed does, when the computed grants vest less', async () => {
+    memory.state.operatorGrants.set('ctm_1', [new Date('2026-07-01T00:00:00Z')]);
+    memory.subscribe('ctm_1');
+    await pay('txn_year', '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z', 'year');
+    await syncCustomer('ctm_1', deps, new Date('2026-01-05T00:00:00Z'));
+    await memory.store.recordPaymentAdjustment({
+      adjustmentId: 'adj_1',
+      transactionId: 'txn_year',
+      customerId: 'ctm_1',
+      subscriptionId: 'sub_1',
+      action: 'refund',
+      type: 'full',
+      itemTypes: ['full'],
+      status: 'approved',
+      amount: 3900,
+      currencyCode: 'GBP',
+      createdAt: '2026-01-08T00:00:00Z',
+      updatedAt: '2026-01-08T00:00:00Z',
+      occurredAt: '2026-01-08T00:00:00Z',
+    });
+    vi.clearAllMocks();
+
+    await syncCustomer('ctm_1', deps, new Date('2026-01-08T01:00:00Z'));
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toBeNull();
+    expect(subjects()).toEqual(['Your Tenantry Pro vested releases have changed']);
+    expect(deps.sendEmail.mock.calls[0][0].html).toContain('Your vested-through date is now 1 July 2026');
+    vi.clearAllMocks();
+
+    memory.subscribe('ctm_1', { status: 'canceled' });
+    await syncCustomer('ctm_1', deps, new Date('2026-01-09T00:00:00Z'));
+    expect(subjects()).toEqual(['Your Tenantry Pro subscription has ended']);
+    expect(deps.sendEmail.mock.calls[0][0].html).toContain(
+      'those published on or before 1 July 2026, your vested-through date',
+    );
+  });
+
+  it('sends no vesting email for a grant that vests nothing beyond an operator grant', async () => {
+    memory.state.operatorGrants.set('ctm_1', [new Date('2027-07-01T00:00:00Z')]);
+    memory.subscribe('ctm_1');
+    await pay('txn_year', '2026-01-01T00:00:00Z', '2027-01-01T00:00:00Z', 'year');
+    await syncCustomer('ctm_1', deps, new Date('2026-01-05T00:00:00Z'));
+
+    expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-01-01T00:00:00Z'));
+    expect(subjects()).not.toContain('Your Tenantry Pro releases are vested');
+  });
+
   async function refund(adjustmentId: string, transactionId: string, at: string, amount = 3900) {
     await memory.store.recordPaymentAdjustment({
       adjustmentId,

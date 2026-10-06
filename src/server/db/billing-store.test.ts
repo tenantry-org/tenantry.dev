@@ -6,6 +6,7 @@ import {
   listPaymentAdjustments,
   listPayments,
   listSubscriptions,
+  readVestedThrough,
   recordCustomerEvent,
   recordPayment,
   recordPaymentAdjustment,
@@ -22,6 +23,7 @@ const state = vi.hoisted(() => ({
   /** The error the database functions fail with, if any. */
   rpcError: null as { code: string; message: string } | null,
   customers: [] as string[],
+  vestedThrough: null as string | null,
 }));
 vi.mock('@/server/db/service-role-client', async () => {
   const { fakeSupabase } = await import('@/test/fake-supabase');
@@ -34,6 +36,7 @@ vi.mock('@/server/db/service-role-client', async () => {
         record_payment_adjustment: () => rpcResult(state.applied),
         set_customer_entitlement: () => rpcResult('lapsed'),
         customers_to_reconcile: () => rpcResult(state.customers),
+        vested_through: () => rpcResult(state.vestedThrough),
       }),
   };
 });
@@ -51,6 +54,7 @@ beforeEach(() => {
   state.applied = true;
   state.rpcError = null;
   state.customers = [];
+  state.vestedThrough = null;
 });
 
 describe('Paddle events', () => {
@@ -361,6 +365,14 @@ describe('the payment ledger', () => {
       },
     ]);
     expect(state.calls).toContainEqual({ table: 'vested_entitlements', method: 'neq', args: ['kind', 'operator'] });
+  });
+
+  it('reads the vested-through date as stored, operator grants included, and null when nothing is vested', async () => {
+    await expect(readVestedThrough('ctm_1')).resolves.toBeNull();
+
+    state.vestedThrough = '2027-07-01T00:00:00+00:00';
+    await expect(readVestedThrough('ctm_1')).resolves.toEqual(new Date('2027-07-01T00:00:00Z'));
+    expect(rpcArgs('vested_through')).toEqual({ p_customer_id: 'ctm_1' });
   });
 
   it('stores the derived state in one call and returns the access it replaced', async () => {
