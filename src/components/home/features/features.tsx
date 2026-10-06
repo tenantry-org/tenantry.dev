@@ -6,6 +6,19 @@ import { ProOffer } from '@/constants/pro-offer';
 import { publishedSince } from '@/lib/docs-versions';
 import { cn } from '@/lib/utils';
 
+// The build warnings analyzers.md lists as warnings by default: Core 0.7.0 adds the analyzers, and 0.8.0 adds TNY1004
+// and widens TNY1002 to any query that reads a tenant-owned entity. Kept behind the gates: a withdrawn release leaves
+// the site (README, Docs pipeline).
+function buildWarnings(): string {
+  if (publishedSince('core', 'v0.8.0')) {
+    return ' The build warns about a DbContext registered without UseTenantry() (TNY1004), an entity with a TenantId that is not tenant-owned (TNY1001), a query that ignores the tenant filter (TNY1002), and a tenant read from the request with no access validator (TNY2001).';
+  }
+  if (publishedSince('core', 'v0.7.0')) {
+    return ' The build warns about an entity with a TenantId that is not tenant-owned (TNY1001), IgnoreQueryFilters() on a tenant-owned entity (TNY1002), and a tenant read from the request with no access validator (TNY2001).';
+  }
+  return '';
+}
+
 // What is specific to Tenantry, from Tenantry Core's docs for the release the site shows: efcore-integration.md (write
 // isolation, database per tenant), efcore-advanced.md (models that cannot be isolated), analyzers.md (from
 // Core 0.7.0), tenant-resolution.md and access-control.md.
@@ -22,9 +35,8 @@ const PRINCIPLES = [
   },
   {
     icon: ListChecks,
-    // Core 0.7.0 adds the analyzers. Kept behind the gate: a withdrawn release leaves the site (README, Docs pipeline).
     title: publishedSince('core', 'v0.7.0') ? 'Model checks and build warnings' : 'Model checks',
-    text: `Building a model Tenantry cannot isolate throws, such as a tenant-owned entity whose base type is not tenant-owned.${publishedSince('core', 'v0.7.0') ? ' The build warns about an entity with a TenantId that is not tenant-owned (TNY1001), IgnoreQueryFilters() on a tenant-owned entity (TNY1002), and a tenant read from the request with no access validator (TNY2001).' : ''}`,
+    text: `Building a model Tenantry cannot isolate throws, such as a tenant-owned entity whose base type is not tenant-owned.${buildWarnings()}`,
   },
   {
     icon: SlidersHorizontal,
@@ -46,6 +58,10 @@ const CORE = [
   `Log event ids to alert on, a tenant.id tag on traces, and ${publishedSince('core', 'v0.7.0') ? 'request metrics per tenant' : 'a count of how requests were resolved'}`,
   'A model check that refuses mappings it cannot isolate, and a list of unisolated entity types for your tests',
   `${DOTNET_SUPPORT}; Native AOT for every Core package except Tenantry.EfCore`,
+  // Core 0.8.0 adds Tenantry.Templates.
+  ...(publishedSince('core', 'v0.8.0')
+    ? ['dotnet new templates for a multi-tenant API and worker (Tenantry.Templates)']
+    : []),
 ];
 
 function Edition({

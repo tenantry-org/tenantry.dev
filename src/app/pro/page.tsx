@@ -1,10 +1,11 @@
-import { Fragment } from 'react';
+import { Fragment, Suspense } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import Header from '@/components/home/header/header';
 import { Footer } from '@/components/home/footer/footer';
 import { Pricing } from '@/components/home/pricing/pricing';
+import { ProPriceSentence } from '@/components/home/pricing/pro-price-sentence';
 import { Button } from '@/components/ui/button';
 import { CodeFigure } from '@/components/shared/code-figure';
 import { ProofStrip } from '@/components/shared/proof-strip';
@@ -104,7 +105,15 @@ const nextMinor = `${major}.${minor + 1}`;
 const QUESTIONS = [
   {
     question: 'What does the subscription include?',
-    answer: `Every Tenantry Pro release while you subscribe, from the package feed (a private NuGet feed run by Tenantry), a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. Once you have paid for 12 months (12 monthly billing periods, or a year), across subscriptions and whatever gaps there are between them, releases become vested: they stay licensed to you after the subscription ends. An annual term vests the releases published up to its end as soon as you pay for it, as long as you keep the whole of its payments.`,
+    answer: (
+      <>
+        {/* Pro's price from Paddle, so the page states it without Paddle.js; streamed in when the page is requested. */}
+        <Suspense fallback={null}>
+          <ProPriceSentence />
+        </Suspense>
+        {`Every Tenantry Pro release while you subscribe, from the package feed (a private NuGet feed run by Tenantry), a licence key and email support, with a reply within ${SUPPORT_REPLY_WITHIN}. Once you have paid for 12 months (12 monthly billing periods, or a year), across subscriptions and whatever gaps there are between them, releases become vested: they stay licensed to you after the subscription ends. An annual term vests the releases published up to its end as soon as you pay for it, as long as you keep the whole of its payments.`}
+      </>
+    ),
   },
   {
     question: 'How does my team install it, locally and in CI?',
@@ -124,9 +133,9 @@ const QUESTIONS = [
   },
   {
     question: 'Can I check a release’s packages?',
-    answer: `Core’s, from the first release after 0.7.0. Each Core release attaches its packages to its GitHub release as the release workflow built them, with their SHA-256 checksums and SBOMs, and the workflow signs a build provenance attestation for them, which shows a package was built by that workflow from the tagged commit. Check the copies on the GitHub release: NuGet.org adds its own signature to the packages it serves, so its copies do not match the checksums. ${
+    answer: `Core’s, from the first release after 0.7.0. Each Core release attaches its packages to its GitHub release with their SHA-256 checksums, SBOMs and a build provenance attestation, which shows the release workflow built them from the tagged commit. Check those copies: NuGet.org signs the packages it serves, so its copies do not match the checksums. ${
       publishedSince('pro', 'v0.8.0')
-        ? 'Pro’s, from 0.8.0. Each Pro release publishes the SHA-256 checksums of its packages, signed with Sigstore by Pro’s release workflow, in the public tenantry-pro-docs repository at the release’s tag. The package feed serves each package as the release published it, so the copy NuGet restored can be checked against them.'
+        ? 'Pro’s, from 0.8.0. The SHA-256 checksums of each Pro release’s packages, signed with Sigstore by its release workflow, are in the public tenantry-pro-docs repository at the release’s tag, and the package feed serves the packages unchanged.'
         : 'Pro releases have no published checksums or attestation.'
     }`,
     link: [
@@ -146,9 +155,14 @@ const QUESTIONS = [
     link: { label: 'Refund policy', href: '/legal/refunds' },
   },
   {
+    question: 'Is Pro’s source available?',
+    answer:
+      'No. Pro ships as compiled packages with their debug symbols built in, so stack traces show Pro’s file names and line numbers, but a debugger cannot show its source. Pro’s documentation and samples are public. If Tenantry stops trading and the package feed goes offline for good, you can request the source of your vested releases, as the last answer on this page sets out.',
+  },
+  {
     question: 'How does a company buy it?',
     answer:
-      'Through the checkout on this site, which Paddle runs as our merchant of record. There is no other way to buy it, and there are no seats or tiers.',
+      'Only through the checkout on this site. Paddle runs it as our merchant of record and handles tax and invoices. There are no seats or tiers.',
     link: { label: 'EULA', href: '/legal/eula' },
   },
   {

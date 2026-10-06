@@ -35,16 +35,25 @@ const pages = [
 ];
 
 describe('docs as Markdown', () => {
-  it('lists the newest docs only, Core with its ai-agents page first, then Pro, and the API references as optional', () => {
-    expect(llmsTxt(pages)).toBe(
+  const posts = [{ url: '/blog/a-post', title: 'A post', description: 'What it shows.' }];
+
+  it('lists the pages about Tenantry, the newest docs only, Core with its ai-agents page first, then Pro, and the API references and posts as optional', () => {
+    expect(llmsTxt(pages, posts, null)).toBe(
       [
         '# Tenantry',
         '> Tenantry adds multi-tenancy, with tenant isolation, to ASP.NET Core and EF Core applications. Tenantry ' +
-          'Core is open source (Apache-2.0); Tenantry Pro adds provisioning and offboarding, migrations across tenant ' +
-          'databases, schema per tenant and mixed mode, the tenant in background jobs and messages, and audit logging.',
+          'Core is open source (Apache-2.0) and free for commercial use; Tenantry Pro, a subscription, adds ' +
+          'provisioning and offboarding, migrations across tenant databases, schema per tenant and mixed mode, the ' +
+          'tenant in background jobs and messages, and audit logging.',
         'These are the docs of the newest release, Tenantry 0.6 (Core v0.6.2, Pro v0.6.1), as Markdown. Each page is ' +
           'also a web page at the same address without `.md`. Tenantry is in beta until 1.0. ' +
           "Earlier releases' docs: [0.5](https://tenantry.dev/docs/v0.5.md).",
+        [
+          '## About',
+          '- [Tenantry Pro](https://tenantry.dev/pro): what Pro adds, what the subscription includes, and its pricing.',
+          '- [How Tenantry compares](https://tenantry.dev/compare): Tenantry beside your own query filters, ' +
+            'Finbuckle.MultiTenant and ABP, with sources, and what Tenantry does not do.',
+        ].join('\n'),
         [
           '## Tenantry Core',
           '- [AI agents](https://tenantry.dev/docs/core/ai-agents.md): Using Tenantry with an AI agent.',
@@ -61,10 +70,19 @@ describe('docs as Markdown', () => {
           '- [Core API reference](https://tenantry.dev/docs/core/api.md): Every public type.',
           '- [Core API: ITenantStore](https://tenantry.dev/docs/core/api/tenantry-itenantstore.md): Reads tenants.',
           '- [Pro API: ITenantProvisioner](https://tenantry.dev/docs/pro/api/tenantry-pro-itenantprovisioner.md)',
+          '- [Blog: A post](https://tenantry.dev/blog/a-post): What it shows.',
         ].join('\n'),
       ].join('\n\n') + '\n',
     );
-    expect(llmsTxt(pages)).not.toMatch(/v0\.4|Hidden|Old\./);
+    expect(llmsTxt(pages, posts, null)).not.toMatch(/v0\.4|Hidden|Old\.|costs/);
+  });
+
+  it("states Pro's price, when it could be read, with the line that links the Pro page", () => {
+    expect(llmsTxt(pages, posts, { month: '£15', year: '£150' })).toContain(
+      '- [Tenantry Pro](https://tenantry.dev/pro): what Pro adds, what the subscription includes, and its pricing. ' +
+        'Pro costs £15 a month or £150 a year for your whole company. ' +
+        'The checkout shows the price in your currency, with any tax.\n',
+    );
   });
 
   it("puts the newest guides in one file, without the API references or another version's pages", () => {

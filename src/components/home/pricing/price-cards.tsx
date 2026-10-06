@@ -11,12 +11,14 @@ import Link from 'next/link';
 interface Props {
   option: BillingIntervalOption;
   prices: PricesState;
+  /** This interval's base price, shown until the visitor's own is, or null. */
+  basePrice: string | null;
   proLink: boolean;
 }
 
 const CARD = 'flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm';
 
-export function PriceCards({ option, prices, proLink }: Props) {
+export function PriceCards({ option, prices, basePrice, proLink }: Props) {
   const offer = ProOffer;
   // Read while the home page prerenders, so a build without the public configuration fails (public-config.ts).
   const { paddle, checkoutEnabled } = publicConfig();
@@ -32,7 +34,7 @@ export function PriceCards({ option, prices, proLink }: Props) {
           </div>
           <div className={'flex flex-col gap-1'}>
             <div className={'text-5xl leading-[60px] font-bold tracking-tight'}>Free</div>
-            <div className={'text-sm text-muted-foreground'}>Apache-2.0, on GitHub</div>
+            <div className={'text-sm text-muted-foreground'}>Apache-2.0: free for commercial use</div>
           </div>
           <Button className={'w-full'} size={'lg'} variant={'outline'} asChild={true}>
             <Link href={'/docs/core/getting-started'}>Get started with Core</Link>
@@ -43,7 +45,7 @@ export function PriceCards({ option, prices, proLink }: Props) {
       <div className={CARD}>
         <div className={'flex flex-col gap-6 p-8'}>
           <PriceTitle offer={offer} />
-          <PriceAmount prices={prices} priceId={priceId} priceSuffix={option.priceSuffix} />
+          <PriceAmount prices={prices} basePrice={basePrice} priceId={priceId} priceSuffix={option.priceSuffix} />
           {checkoutEnabled ? (
             <Button className={'w-full'} size={'lg'} asChild={true}>
               <Link href={`/checkout/${priceId}`}>Subscribe to Pro</Link>

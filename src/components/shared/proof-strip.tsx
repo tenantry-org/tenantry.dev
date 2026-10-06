@@ -24,7 +24,10 @@ const PRO_SAMPLES = {
 // Each count links to the repository that holds those samples.
 const SAMPLES = { core: [CORE_SAMPLES], all: [CORE_SAMPLES, PRO_SAMPLES] };
 
-const LICENCE = { text: 'Core is Apache-2.0, on GitHub', href: 'https://github.com/tenantry-org/tenantry-core' };
+const LICENCE = {
+  text: 'Core is Apache-2.0: free for commercial use',
+  href: 'https://github.com/tenantry-org/tenantry-core',
+};
 
 /** A strip of facts a reader can check, each linked to where to check it; `samples` picks Core's samples or both products'. */
 export function ProofStrip({ samples: which }: Readonly<{ samples: keyof typeof SAMPLES }>) {

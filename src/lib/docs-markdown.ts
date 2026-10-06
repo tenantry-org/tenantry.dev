@@ -1,5 +1,6 @@
 import { SITE_ORIGIN } from '@/constants/site';
 import { docsVersionOf, docsVersions, latestDocsVersion } from '@/lib/docs-versions';
+import { type BasePrices, basePriceSentence } from '@/lib/pro-price';
 
 /**
  * The docs as Markdown for AI agents: each page's Markdown at its URL with `.md` on the end, and /llms.txt and
@@ -98,8 +99,18 @@ function apiTitle(page: MarkdownPage): string {
   return page.slugs.length === 2 ? `${product} API reference` : `${product} API: ${page.title}`;
 }
 
-/** /llms.txt: the newest docs' pages, as links to their Markdown, with each page's description. */
-export function llmsTxt(pages: MarkdownPage[]): string {
+/** A blog post, as llms.txt links it. */
+export interface LinkedPost {
+  url: string;
+  title: string;
+  description: string;
+}
+
+/**
+ * /llms.txt: the pages about Tenantry and Pro, the newest docs' pages, as links to their Markdown, with each page's
+ * description, and the published posts. `prices` adds Pro's price, when it could be read.
+ */
+export function llmsTxt(pages: MarkdownPage[], posts: LinkedPost[], prices: BasePrices | null): string {
   const { core, pro, api } = groups(pages);
   const { version, core: coreTag, pro: proTag } = latestDocsVersion;
   const older = docsVersions.filter((entry) => !entry.latest);
@@ -107,16 +118,28 @@ export function llmsTxt(pages: MarkdownPage[]): string {
     [
       '# Tenantry',
       '> Tenantry adds multi-tenancy, with tenant isolation, to ASP.NET Core and EF Core applications. Tenantry Core ' +
-        'is open source (Apache-2.0); Tenantry Pro adds provisioning and offboarding, migrations across tenant ' +
-        'databases, schema per tenant and mixed mode, the tenant in background jobs and messages, and audit logging.',
+        'is open source (Apache-2.0) and free for commercial use; Tenantry Pro, a subscription, adds provisioning and ' +
+        'offboarding, migrations across tenant databases, schema per tenant and mixed mode, the tenant in background ' +
+        'jobs and messages, and audit logging.',
       `These are the docs of the newest release, Tenantry ${version} (Core ${coreTag}, Pro ${proTag}), as Markdown. ` +
         'Each page is also a web page at the same address without `.md`. Tenantry is in beta until 1.0.' +
         (older.length > 0
           ? ` Earlier releases' docs: ${older.map((entry) => `[${entry.version}](${absolute(markdownUrl(entry.base))})`).join(', ')}.`
           : ''),
+      [
+        '## About',
+        `- [Tenantry Pro](${absolute('/pro')}): what Pro adds, what the subscription includes, and its pricing.` +
+          (prices ? ` ${basePriceSentence(prices)}` : ''),
+        `- [How Tenantry compares](${absolute('/compare')}): Tenantry beside your own query filters, ` +
+          'Finbuckle.MultiTenant and ABP, with sources, and what Tenantry does not do.',
+      ].join('\n'),
       ['## Tenantry Core', ...core.map((page) => linkLine(page))].join('\n'),
       ['## Tenantry Pro', ...pro.map((page) => linkLine(page))].join('\n'),
-      ['## Optional', ...api.map((page) => linkLine(page, apiTitle(page)))].join('\n'),
+      [
+        '## Optional',
+        ...api.map((page) => linkLine(page, apiTitle(page))),
+        ...posts.map((post) => `- [Blog: ${post.title}](${absolute(post.url)}): ${post.description}`),
+      ].join('\n'),
     ].join('\n\n') + '\n'
   );
 }

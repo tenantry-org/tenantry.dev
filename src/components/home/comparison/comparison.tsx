@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
+import { publishedSince } from '@/lib/docs-versions';
 
-// Checked in October 2026 against Finbuckle.MultiTenant 10.1.4 and ABP 10.6.1 (the documents in SOURCES, and their
-// source) and against Tenantry Core 0.6 and Pro 0.6. Check them again when any of them releases a major version. A row
-// whose Finbuckle or ABP cell the sources do not support is left out, not filled in.
+// Checked in October 2026 against Finbuckle.MultiTenant 10.1.4 and ABP 10.6.1 (the documents in SOURCES, their source
+// and their packages) and against Tenantry Core and Pro 0.8. Check them again when any of them releases a major
+// version. A row whose Finbuckle or ABP cell the sources do not support is left out, not filled in.
 const PROJECTS = ['Your own query filters', 'Finbuckle.MultiTenant', 'ABP', 'Tenantry'] as const;
 
 const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]; fullOnly?: boolean }[] = [
@@ -27,6 +29,27 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
   {
     label: 'Tenant key type',
     cells: ['Yours', 'string', 'Guid', 'Any IEquatable and IParsable type: Guid, int, string and others'],
+    fullOnly: true,
+  },
+  {
+    label: 'DbContext pooling with a database per tenant',
+    cells: [
+      'You write it',
+      'Not documented; an open issue (#375) has the maintainer recommending against AddDbContextPool',
+      'Not documented',
+      'Yes: AddDbContextPerTenantDatabase with pooled: true, which checks before each connection and command that the tenant has not changed',
+    ],
+    fullOnly: true,
+  },
+  {
+    label: 'Checks at build time',
+    cells: [
+      'None, unless you write analyzers',
+      'None: its packages have no analyzers',
+      'None: its EF Core package has no analyzers',
+      // Core 0.8.0 adds TNY1004. Kept behind the gate: a withdrawn release leaves the site (README, Docs pipeline).
+      `Analyzers ${publishedSince('core', 'v0.8.0') ? 'TNY1001 to TNY1004' : 'TNY1001 to TNY1003'}, TNY2001, TNY3001 and TNY3002`,
+    ],
     fullOnly: true,
   },
   {
@@ -66,11 +89,16 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
         >
           README
         </a>{' '}
-        says that from 10 November, use of its official releases in revenue-generating work falls under an Open Source
-        Maintenance Fee.
+        says that from 10 November 2026, use of its official releases in revenue-generating work falls under an Open
+        Source Maintenance Fee.
       </>,
       'LGPL-3.0; the SaaS module needs a commercial ABP licence (Team or higher)',
-      'Core Apache-2.0; Pro a subscription',
+      <>
+        Core Apache-2.0, free for commercial use; Pro a{' '}
+        <Link href={'/pro#pricing'} className={'text-link hover:underline'}>
+          subscription
+        </Link>
+      </>,
     ],
   },
 ];
@@ -109,6 +137,7 @@ const SOURCES: { project: string; links: { label: string; href: string }[] }[] =
       { label: 'Tenant Management module', href: 'https://abp.io/docs/latest/modules/tenant-management' },
       { label: 'Settings', href: 'https://abp.io/docs/latest/framework/infrastructure/settings' },
       { label: 'Features', href: 'https://abp.io/docs/latest/framework/infrastructure/features' },
+      { label: 'NuGet', href: 'https://www.nuget.org/packages/Volo.Abp.EntityFrameworkCore' },
     ],
   },
 ];

@@ -1,28 +1,20 @@
-'use client';
+import { Suspense } from 'react';
+import { PricingSection } from '@/components/home/pricing/pricing-section';
+import { basePricesOrNull } from '@/server/integrations/paddle/get-base-prices';
 
-import { Toggle } from '@/components/shared/toggle/toggle';
-import { PriceCards } from '@/components/home/pricing/price-cards';
-import { useState } from 'react';
-import { BILLING_INTERVALS, type BillingIntervalOption } from '@/constants/billing-intervals';
-import { usePaddle } from '@/hooks/use-paddle';
-import { usePaddlePrices } from '@/hooks/use-paddle-prices';
-
-/** The pricing block; `proLink` links the Pro card to /pro, which the Pro page itself leaves out. */
+/**
+ * The pricing block; `proLink` links the Pro card to /pro, which the Pro page itself leaves out. Pro's base price is
+ * read from Paddle when the page is requested and streamed into it, so the page's HTML states the price before
+ * Paddle.js loads, and without it. The prerendered shell has the block without it.
+ */
 export function Pricing({ proLink = true }: Readonly<{ proLink?: boolean }>) {
-  const [option, setOption] = useState<BillingIntervalOption>(BILLING_INTERVALS[0]);
-  const prices = usePaddlePrices(usePaddle());
-
   return (
-    <section id="pricing" className={'scroll-mt-16 border-t border-border/70 bg-surface'}>
-      <div className={'mx-auto flex max-w-6xl flex-col items-center px-4 py-20 md:px-8 md:py-24'}>
-        <h2 className={'text-3xl font-bold tracking-tight md:text-4xl'}>Pricing</h2>
-        <p className={'mt-4 mb-10 max-w-xl text-center text-lg text-muted-foreground'}>
-          Core is free. Pro is one subscription for your whole company, billed monthly or yearly. Both are in beta until
-          1.0.
-        </p>
-        <Toggle option={option} setOption={setOption} />
-        <PriceCards option={option} prices={prices} proLink={proLink} />
-      </div>
-    </section>
+    <Suspense fallback={<PricingSection basePrices={null} proLink={proLink} />}>
+      <PricingWithBasePrices proLink={proLink} />
+    </Suspense>
   );
+}
+
+async function PricingWithBasePrices({ proLink }: Readonly<{ proLink: boolean }>) {
+  return <PricingSection basePrices={await basePricesOrNull()} proLink={proLink} />;
 }

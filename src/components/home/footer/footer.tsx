@@ -10,8 +10,27 @@ const COLUMNS = [
       { label: 'Docs', href: '/docs' },
       { label: 'Tenantry Pro', href: '/pro' },
       { label: 'Pricing', href: '/#pricing' },
+      { label: 'Compare', href: '/compare' },
       { label: 'Blog', href: '/blog' },
       { label: 'Core on GitHub', href: 'https://github.com/tenantry-org/tenantry-core', external: true },
+    ],
+  },
+  {
+    title: 'Project',
+    links: [
+      { label: 'Core changelog', href: '/docs/core/changelog' },
+      { label: 'Pro changelog', href: '/docs/pro/changelog' },
+      {
+        label: 'Security policy',
+        href: 'https://github.com/tenantry-org/tenantry-core/security/policy',
+        external: true,
+      },
+      {
+        label: 'Core questions: GitHub issues',
+        href: 'https://github.com/tenantry-org/tenantry-core/issues',
+        external: true,
+      },
+      { label: 'Pro support: support@tenantry.dev', href: 'mailto:support@tenantry.dev' },
     ],
   },
   {
@@ -28,7 +47,7 @@ const COLUMNS = [
 export function Footer() {
   return (
     <footer className={'border-t border-border/70 bg-background'}>
-      <div className={'mx-auto grid max-w-6xl gap-10 px-4 py-12 md:grid-cols-[1fr_auto_auto] md:gap-20 md:px-8'}>
+      <div className={'mx-auto grid max-w-6xl gap-10 px-4 py-12 md:grid-cols-[1fr_auto_auto_auto] md:gap-16 md:px-8'}>
         <div className={'flex flex-col gap-4'}>
           <Link href={'/'} aria-label={'Tenantry home'} className={'w-fit text-foreground'}>
             <Logo className={'h-6'} />

@@ -82,8 +82,8 @@ export default function ComparePage() {
           takes a Finbuckle.MultiTenant application to Tenantry step by step.
         </p>
         <p className={'mt-12 text-sm text-muted-foreground'}>
-          Checked in October 2026 against Finbuckle.MultiTenant 10.1.4 and ABP 10.6.1, their documentation and source.
-          To report something out of date, email{' '}
+          Checked in October 2026 against Finbuckle.MultiTenant 10.1.4 and ABP 10.6.1, their documentation, source and
+          packages. To report something out of date, email{' '}
           <Link href={'mailto:support@tenantry.dev'} className={'text-link hover:underline'}>
             support@tenantry.dev
           </Link>
