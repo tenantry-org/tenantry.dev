@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
@@ -10,7 +11,7 @@ import { ProofStrip } from '@/components/shared/proof-strip';
 import { TrackedLink } from '@/components/shared/tracked-link';
 import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
-import { latestDocsVersion } from '@/lib/docs-versions';
+import { latestDocsVersion, publishedSince } from '@/lib/docs-versions';
 
 export const metadata: Metadata = {
   title: 'Tenantry Pro: multi-tenant migrations, provisioning and jobs',
@@ -32,6 +33,7 @@ const WORKFLOWS = [
 if (await app.RunTenantMigrationsIfRequestedAsync(args) is { } exitCode)
     return exitCode;   // not 0 unless every database and schema migrated
 
+app.UseTenantry();   // Tenantry Core: resolves the tenant and opens the scope for the request
 await app.RunAsync();
 return 0;`,
     link: { label: 'Tenant migrations', href: '/docs/pro/migration-orchestration' },
@@ -122,12 +124,20 @@ const QUESTIONS = [
   },
   {
     question: 'Can I check a release’s packages?',
-    answer:
-      'Core’s, from the first release after 0.7.0. Each Core release attaches its packages to its GitHub release as the release workflow built them, with their SHA-256 checksums and SBOMs, and the workflow signs a build provenance attestation for them, which shows a package was built by that workflow from the tagged commit. Check the copies on the GitHub release: NuGet.org adds its own signature to the packages it serves, so its copies do not match the checksums. Pro releases have no published checksums or attestation.',
-    link: {
-      label: 'Checking a release',
-      href: 'https://github.com/tenantry-org/tenantry-core/blob/master/RELEASING.md#the-release',
-    },
+    answer: `Core’s, from the first release after 0.7.0. Each Core release attaches its packages to its GitHub release as the release workflow built them, with their SHA-256 checksums and SBOMs, and the workflow signs a build provenance attestation for them, which shows a package was built by that workflow from the tagged commit. Check the copies on the GitHub release: NuGet.org adds its own signature to the packages it serves, so its copies do not match the checksums. ${
+      publishedSince('pro', 'v0.8.0')
+        ? 'Pro’s, from 0.8.0. Each Pro release publishes the SHA-256 checksums of its packages, signed with Sigstore by Pro’s release workflow, in the public tenantry-pro-docs repository at the release’s tag. The package feed serves each package as the release published it, so the copy NuGet restored can be checked against them.'
+        : 'Pro releases have no published checksums or attestation.'
+    }`,
+    link: [
+      {
+        label: 'Checking a Core release',
+        href: 'https://github.com/tenantry-org/tenantry-core/blob/master/RELEASING.md#the-release',
+      },
+      ...(publishedSince('pro', 'v0.8.0')
+        ? [{ label: 'Checking a Pro package', href: '/docs/pro/installation#checking-a-package' }]
+        : []),
+    ],
   },
   {
     question: 'Can I try Pro before I buy it?',
@@ -256,17 +266,20 @@ export default function ProPage() {
                 <div key={item.question}>
                   <dt className={'font-semibold'}>{item.question}</dt>
                   <dd className={'mt-2 leading-relaxed text-muted-foreground'}>
-                    {item.answer}{' '}
-                    {item.link && (
-                      <TrackedLink
-                        href={item.link.href}
-                        event={'Pro question link'}
-                        data={{ to: item.link.href }}
-                        className={'text-link hover:underline'}
-                      >
-                        {item.link.label}
-                      </TrackedLink>
-                    )}
+                    {item.answer}
+                    {[item.link ?? []].flat().map((link) => (
+                      <Fragment key={link.href}>
+                        {' '}
+                        <TrackedLink
+                          href={link.href}
+                          event={'Pro question link'}
+                          data={{ to: link.href }}
+                          className={'text-link hover:underline'}
+                        >
+                          {link.label}
+                        </TrackedLink>
+                      </Fragment>
+                    ))}
                   </dd>
                 </div>
               ))}
