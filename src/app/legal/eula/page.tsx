@@ -26,7 +26,14 @@ export default function EulaPage() {
       </ul>
       <p>It ends only as section 8 provides.</p>
 
-      <h2>2. Subscriptions and vesting</h2>
+      <h2 id="vesting">2. Subscriptions and vesting</h2>
+      <p className="rounded-md border border-border bg-card p-4 text-sm">
+        In short, and not part of this agreement: your paid months add up across all your subscriptions, gaps included.
+        Once you have 12 paid months, the releases dated up to the end of the paid time you have served are vested, and
+        that date moves on while you keep paying. Paying for a year vests at once the releases dated up to the end of
+        that year, as long as you keep the whole payment. A patch release takes the date of its x.y.0 release. A refund,
+        credit or chargeback takes away the time its money paid for, and any vesting that relied on it.
+      </p>
       <p>
         Your subscription is active while any Tenantry Pro subscription you hold is in force, and for up to 30 days
         after a renewal payment first fails, while Paddle tries to collect it. It ends when it is cancelled or paused,
@@ -35,20 +42,21 @@ export default function EulaPage() {
       <p>
         Vesting follows the money you keep: your paid months add up across all your billing periods, with or without
         gaps between them, and vest at 12, and money returned to you takes away the time it paid for. Each billing
-        period of any of your Tenantry Pro subscriptions, at a monthly or yearly price this site has offered, gives a
-        paid period: the part of that billing period that the money kept from its payments pays for, counted from the
-        start of the billing period. A payment on the same subscription and at the same billing interval whose period
-        overlaps a billing period&apos;s, such as a prorated charge, adds no time: its money counts together with that
-        billing period&apos;s payment. This does not apply to a payment for a whole billing period that charged at least
-        half as much (a new purchase), which gives a billing period of its own, but it applies to anything charged
-        within a billing period for which nothing was charged. A refund of a duplicate charge for a billing period you
-        have already paid for is not money returned for that period. A billing period whose payments you keep in full
-        gives the whole billing period, even if the subscription was cancelled or paused before the period ended. If
-        part of the money has been returned to you, the paid period is the same share of the billing period as the share
-        of the money you kept: if half of a month&apos;s payment is refunded, the paid period is the first half of that
-        month. A billing period of which everything has been returned, or for which nothing was charged (a trial, or a
-        period discounted to zero), gives no paid period. Amounts are compared before tax. A discount does not count as
-        money returned, so a discounted payment that you keep gives the whole billing period.
+        period of any of your Tenantry Pro subscriptions, at a monthly or yearly price Tenantry has offered at
+        tenantry.dev, gives a paid period: the part of that billing period that the money kept from its payments pays
+        for, counted from the start of the billing period. A payment on the same subscription and at the same billing
+        interval whose period overlaps a billing period&apos;s, such as a prorated charge, adds no time: its money
+        counts together with that billing period&apos;s payment. This does not apply to a payment for a whole billing
+        period that charged at least half as much (a new purchase), which gives a billing period of its own, but it
+        applies to anything charged within a billing period for which nothing was charged. A refund of a duplicate
+        charge for a billing period you have already paid for is not money returned for that period. A billing period
+        whose payments you keep in full gives the whole billing period, even if the subscription was cancelled or paused
+        before the period ended. If part of the money has been returned to you, the paid period is the same share of the
+        billing period as the share of the money you kept: if half of a month&apos;s payment is refunded, the paid
+        period is the first half of that month. A billing period of which everything has been returned, or for which
+        nothing was charged (a trial, or a period discounted to zero), gives no paid period. Amounts are compared before
+        tax. A discount does not count as money returned, so a discounted payment that you keep gives the whole billing
+        period.
       </p>
       <p>
         Money is returned to you by a refund, a credit or a chargeback once it has been approved. A correction of tax
@@ -83,13 +91,13 @@ export default function EulaPage() {
         cancelled. The paid time you have kept still counts if you subscribe again.
       </p>
       <p>
-        When you pay a yearly price this site has offered for an annual billing period (an &quot;annual term&quot;),
-        Tenantry grants you at once, on condition that you keep the whole of the term&apos;s payments (the payment for
-        the term, and any payment counted together with it, such as a prorated charge), that every release whose release
-        date is on or before the end of the term is vested (the &quot;term&apos;s grant&quot;). From when you pay, the
-        end of the term is a vested-through date, even if your subscription ends before the term does. Any refund,
-        credit or chargeback of any of the term&apos;s payments withdraws the term&apos;s grant, at any time, including
-        after the term has ended. The part of the term that the money kept pays for is still a paid period.
+        When you pay a yearly price Tenantry has offered at tenantry.dev for an annual billing period (an &quot;annual
+        term&quot;), Tenantry grants you at once, on condition that you keep the whole of the term&apos;s payments (the
+        payment for the term, and any payment counted together with it, such as a prorated charge), that every release
+        whose release date is on or before the end of the term is vested (the &quot;term&apos;s grant&quot;). From when
+        you pay, the end of the term is a vested-through date, even if your subscription ends before the term does. Any
+        refund, credit or chargeback of any of the term&apos;s payments withdraws the term&apos;s grant, at any time,
+        including after the term has ended. The part of the term that the money kept pays for is still a paid period.
       </p>
       <p>
         Your vested-through date is the later of your paid time&apos;s vested-through date and the end of any annual

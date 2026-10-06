@@ -238,7 +238,8 @@ async function show() {
           : 'nothing',
     };
   });
-  // The paid time, as stored while the customer has access (active_subscriptions).
+  // The paid time, as stored while the customer has access, or after it while paid time runs on to 12 paid months
+  // (active_subscriptions).
   const paidTime = state?.run_started_at
     ? {
         from: state.run_started_at,

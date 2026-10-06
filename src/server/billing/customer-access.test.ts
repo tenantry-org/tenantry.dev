@@ -463,9 +463,7 @@ describe('vesting emails', () => {
     memory.subscribe('ctm_1', { status: 'canceled' });
     await syncCustomer('ctm_1', deps, new Date('2026-01-09T00:00:00Z'));
     expect(subjects()).toEqual(['Your Tenantry Pro subscription has ended']);
-    expect(deps.sendEmail.mock.calls[0][0].html).toContain(
-      'those published on or before 1 July 2026, your vested-through date',
-    );
+    expect(deps.sendEmail.mock.calls[0][0].html).toContain('Your vested-through date is 1 July 2026.');
   });
 
   it('sends no vesting email for a grant that vests nothing beyond an operator grant', async () => {
@@ -579,7 +577,7 @@ describe('vesting emails', () => {
 
   it.each([
     [6, 'and no releases are vested, so the package feed now serves you none'],
-    [12, 'The time you have paid for runs to 1 January 2027: if it brings your paid months to 12'],
+    [12, 'You have paid for time up to 1 January 2027, which brings your paid time to 12 paid months.'],
   ])(
     'tells a customer cancelled mid-month with nothing refunded that the time paid for still runs only if it reaches 12 months: %i paid',
     async (paidMonths, wording) => {
@@ -601,8 +599,8 @@ describe('vesting emails', () => {
   );
 
   it.each([
-    [6, 'those published on or before 1 March 2026, your vested-through date'],
-    [12, 'your vested-through date, which moves on as the time you have paid for is served, to 1 January 2027'],
+    [6, 'Your vested-through date is 1 March 2026. The vested releases'],
+    [12, 'Your vested-through date is 1 March 2026, and it moves on to 1 January 2027 as the time you have paid for'],
   ])(
     'says the date of an operator grant moves on after a mid-month cancel only if paid time reaches 12 months: %i paid',
     async (paidMonths, wording) => {

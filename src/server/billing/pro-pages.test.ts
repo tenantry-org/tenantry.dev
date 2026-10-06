@@ -19,13 +19,20 @@ const { paddle } = testServerConfig();
 
 const BUYER = { email: 'buyer@example.com', email_confirmed_at: '2026-09-01T00:00:00Z' };
 
-/** active_subscriptions as stored: access, the grace end in grace, and the paid time. */
-const stored = (status: string, extra: { grace_ends_at?: string; months_paid?: number; vests_at?: string } = {}) => ({
+/**
+ * active_subscriptions as stored: access, the grace end in grace, and the paid time, which ends when it reaches 12
+ * months unless another end is given (its columns are null together).
+ */
+const stored = (
+  status: string,
+  extra: { grace_ends_at?: string; months_paid?: number; vests_at?: string; paid_through?: string } = {},
+) => ({
   single: {
     access_status: status,
     grace_ends_at: null,
     months_paid: 0,
     vests_at: null,
+    paid_through: extra.vests_at ?? null,
     ...extra,
   },
 });
@@ -86,6 +93,7 @@ describe('readEntitlement', () => {
       canRestore: true,
       vestedThrough: null,
       paidTime: { monthsPaid: 3, vestsAt: '2027-07-01T00:00:00.000Z', reached: false },
+      runsTo: null,
       annualTerm: false,
     });
   });
@@ -142,12 +150,51 @@ describe('readEntitlement', () => {
       canRestore: true,
       vestedThrough: '2027-12-31T00:00:00.000Z',
       paidTime: null,
+      runsTo: null,
       annualTerm: false,
     });
     expect(state.calls).toContainEqual({ table: 'vested_entitlements', method: 'eq', args: ['status', 'confirmed'] });
     expect(state.calls).not.toContainEqual(
       expect.objectContaining({ table: 'vested_entitlements', args: ['kind', expect.anything()] }),
     );
+  });
+
+  it('gives a lapsed customer whose paid time runs on to 12 months the end of it, until it passes', async () => {
+    // Cancelled mid-month in the twelfth paid month, with nothing refunded (computeEntitlement keeps the paid time).
+    state.tables.active_subscriptions = stored('lapsed', {
+      months_paid: 12,
+      vests_at: '2027-01-01T00:00:00Z',
+      paid_through: '2027-01-01T00:00:00Z',
+    });
+
+    await expect(readEntitlement('ctm_1', new Date('2026-12-15T00:00:00Z'))).resolves.toMatchObject({
+      access: 'lapsed',
+      canRestore: false,
+      paidTime: null,
+      runsTo: '2027-01-01T00:00:00.000Z',
+    });
+    await expect(readEntitlement('ctm_1', new Date('2027-01-01T00:00:00Z'))).resolves.toMatchObject({ runsTo: null });
+
+    // Nor for an annual term cancelled mid-term, already vested to the end of the time paid for.
+    state.tables.vested_entitlements = vested('2027-01-01T00:00:00Z', 'annual_term');
+    await expect(readEntitlement('ctm_1', new Date('2026-12-15T00:00:00Z'))).resolves.toMatchObject({ runsTo: null });
+
+    // Nor for a state stored in grace, though its grace has ended.
+    state.tables.vested_entitlements = vested(null);
+    state.tables.active_subscriptions = stored('grace', {
+      grace_ends_at: '2026-12-01T00:00:00Z',
+      months_paid: 12,
+      vests_at: '2027-01-01T00:00:00Z',
+      paid_through: '2027-01-01T00:00:00Z',
+    });
+    await expect(readEntitlement('ctm_1', new Date('2026-12-15T00:00:00Z'))).resolves.toMatchObject({
+      access: 'lapsed',
+      runsTo: null,
+    });
+
+    // While the customer has access, the end of the time paid for is not given.
+    state.tables.active_subscriptions = stored('active', { months_paid: 12, vests_at: '2027-01-01T00:00:00Z' });
+    await expect(readEntitlement('ctm_1', new Date('2026-12-15T00:00:00Z'))).resolves.toMatchObject({ runsTo: null });
   });
 
   it('gives a lapsed customer with nothing vested, or never recorded, nothing to restore', async () => {

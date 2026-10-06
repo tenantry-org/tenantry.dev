@@ -10,6 +10,7 @@ import {
   readLicenceKey,
   readSubscriptions,
   readVested,
+  type StoredState,
 } from '@/server/db/customer-dashboard';
 import { canRestore, currentAccess } from '@/server/billing/entitlement-policy';
 import type { AccessStatus } from '@/server/db/billing-store';
@@ -52,6 +53,12 @@ export interface EntitlementView {
    * subscription, served or paid ahead), when it reaches 12 months, and whether it has by now.
    */
   paidTime: { monthsPaid: number; vestsAt: string; reached: boolean } | null;
+  /**
+   * After access ends, the end of the time they have paid for, when it is still to come, brings their paid time to 12
+   * paid months and is later than the vested-through date: the releases published up to it are vested once it is
+   * served (billing-store.ts: Entitlement.runsTo). Null for an annual term already vested to its end.
+   */
+  runsTo: string | null;
   /**
    * Whether, while they have access, the vested-through date is the end of an annual term not over yet: its payment
    * vested the releases published up to then, as they are published.
@@ -131,8 +138,16 @@ export async function readEntitlement(customerId: string, now: Date = new Date()
             reached: vestedThrough !== null && state.run.vestsAt.getTime() <= now.getTime(),
           }
         : null,
+    runsTo: iso(runsTo(state, vestedThrough, now)),
     annualTerm: entitled && vested?.kind === 'annual_term' && vested.through.getTime() > now.getTime(),
   };
+}
+
+// A lapsed customer's paid time is stored only while it runs on and reaches 12 paid months (computeEntitlement). A
+// stored state still in grace is not one of them, though its grace has ended.
+function runsTo(state: StoredState | null, vestedThrough: Date | null, now: Date): Date | null {
+  const paidThrough = state?.access.status === 'lapsed' ? state.run?.paidThrough : undefined;
+  return paidThrough && paidThrough > now && (!vestedThrough || vestedThrough < paidThrough) ? paidThrough : null;
 }
 
 export async function getAccessView(): Promise<AccessView | NoSubscriptionView> {

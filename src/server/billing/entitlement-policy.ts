@@ -182,12 +182,17 @@ export function computeEntitlement(input: EntitlementInput): Entitlement {
         ]
       : [];
   const grants = [...paidGrants, ...ledger.annualTerms()].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+  // Paid time still to be served that reaches 12 paid months by its end (vestsAt is set only when it does), as after a
+  // cancel or pause with nothing returned: when it is served, the releases published up to its end are vested.
+  const paidUntil = paid ? new Date(paid.counted.at(-1)!.to) : null;
+  const runsTo = paidUntil && vestsAt && paidUntil.getTime() > now ? paidUntil : null;
 
   return {
     access,
-    run: isEntitled(access.status) && paid ? progress(paid, vestsAt, input.now) : null,
+    // Kept after access ends while paid time runs on (runsTo), so the dashboard can say when it ends.
+    run: (isEntitled(access.status) || runsTo) && paid ? progress(paid, vestsAt, input.now) : null,
     vestedThrough: latest(grants.filter((g) => g.status === 'confirmed').map((g) => g.vestedThrough)),
-    paidUntil: paid ? new Date(paid.counted.at(-1)!.to) : null,
+    runsTo,
     grants,
     paymentStatuses: Object.fromEntries(
       input.payments.map((payment) => [payment.transactionId, ledger.status(payment)]),
@@ -593,9 +598,10 @@ function credit(part: CountedPart, at: number): number {
 }
 
 /**
- * How far the customer is towards vesting, while they have access: their paid months (served or paid ahead), whole,
- * and when they reach 12; or, if they have not been paid that far, when they would if every month from the later of
- * the end of the latest billing period with money kept and now were paid in full, so the estimate is never in the past.
+ * How far the customer is towards vesting, while they have access or paid time running on: their paid months (served
+ * or paid ahead), whole, and when they reach 12; or, if they have not been paid that far, when they would if every
+ * month from the later of the end of the latest billing period with money kept and now were paid in full, so the
+ * estimate is never in the past.
  */
 function progress(paid: PaidTime, vestsAt: Date | null, now: Date): CurrentRun {
   const months = sum(paid.counted.map(({ from, to, part }) => credit(part, to) - credit(part, from)));

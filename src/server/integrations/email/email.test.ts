@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { VESTED_RELEASES } from '@/constants/vesting';
 import { testServerConfig } from '@/test/server-config';
 import { alertOperator } from './alerts';
 import { resendRequest, sendEmail } from './send';
@@ -74,17 +75,17 @@ describe('email templates', () => {
     expect(msg.html).toContain(`href="${SITE}/#pricing"`);
   });
 
-  it('says the patches served after a lapse are those of minor versions whose x.y.0 release is vested', () => {
+  it('describes the vested releases in the shared wording, and links the rules', () => {
     const vested = vestingConfirmedEmail('cust@example.com', new Date('2027-01-01T00:00:00Z'), false, SITE);
     for (const msg of [vested, accessRevokedEmail('cust@example.com', new Date('2027-01-01T00:00:00Z'), null, SITE)]) {
-      expect(msg.html).toContain('every patch release of a minor version whose x.y.0 release is vested');
-      expect(msg.html).not.toContain('patch release of their minor versions');
+      expect(msg.html).toContain(VESTED_RELEASES);
+      expect(msg.html).toContain('href="https://tenantry.dev/legal/eula#vesting"');
     }
   });
 
   it('tells a vested customer their date, and only an unvested one that their paid months still count', () => {
     const vested = accessRevokedEmail('cust@example.com', new Date('2027-01-01T00:00:00Z'), null, SITE).html;
-    expect(vested).toContain('those published on or before 1 January 2027, your vested-through date');
+    expect(vested).toContain('Your vested-through date is 1 January 2027.');
     expect(vested).not.toContain('still count');
 
     const unvested = accessRevokedEmail('cust@example.com', null, null, SITE).html;
@@ -92,22 +93,25 @@ describe('email templates', () => {
     expect(unvested).toContain('the paid months you have kept still count towards 12');
   });
 
-  it('says the vested-through date moves on, or vesting may come, while paid time is still being served', () => {
-    const paidUntil = new Date('2027-03-01T00:00:00Z');
-    const vested = accessRevokedEmail('cust@example.com', new Date('2027-02-10T00:00:00Z'), paidUntil, SITE).html;
+  it('says the vested-through date moves on, or vesting comes, while paid time is still being served', () => {
+    const runsTo = new Date('2027-03-01T00:00:00Z');
+    const vested = accessRevokedEmail('cust@example.com', new Date('2027-02-10T00:00:00Z'), runsTo, SITE).html;
     expect(vested).toContain(
-      'your vested-through date, which moves on as the time you have paid for is served, to 1 March 2027',
+      'Your vested-through date is 10 February 2027, and it moves on to 1 March 2027 as the time you have paid for is served.',
     );
-    expect(vested).not.toContain('10 February 2027');
 
-    const unvested = accessRevokedEmail('cust@example.com', null, paidUntil, SITE).html;
+    const unvested = accessRevokedEmail('cust@example.com', null, runsTo, SITE).html;
     expect(unvested).toContain('no releases are vested yet, so the package feed serves you none for now');
-    expect(unvested).toContain('The time you have paid for runs to 1 March 2027: if it brings your paid months to 12');
+    expect(unvested).toContain(
+      'You have paid for time up to 1 March 2027, which brings your paid time to 12 paid months. By that date, the releases published up to it become vested',
+    );
+    expect(unvested).not.toContain(' if it brings');
     expect(unvested).toContain('Until they do, the releases you downloaded are not licensed for use.');
 
     // An annual term already vested to the end of the time paid for names that date.
-    const term = accessRevokedEmail('cust@example.com', paidUntil, paidUntil, SITE).html;
-    expect(term).toContain('those published on or before 1 March 2027, your vested-through date');
+    const term = accessRevokedEmail('cust@example.com', runsTo, runsTo, SITE).html;
+    expect(term).toContain('Your vested-through date is 1 March 2027.');
+    expect(term).not.toContain('moves on');
   });
 
   it('promises only the package feed, not repository access', () => {

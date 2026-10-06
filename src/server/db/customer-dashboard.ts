@@ -45,8 +45,11 @@ export async function isTestCustomer(customerId: string): Promise<boolean> {
 /** The customer's access and the progress of their paid time, as last stored (active_subscriptions). */
 export interface StoredState {
   access: Access;
-  /** Their paid time, while they have access. */
-  run: { monthsPaid: number; vestsAt: Date } | null;
+  /**
+   * Their paid time, while they have access or paid time running on that reaches 12 paid months by its end, which
+   * `paidThrough` gives (billing-store.ts: Entitlement.runsTo).
+   */
+  run: { monthsPaid: number; vestsAt: Date; paidThrough: Date } | null;
 }
 
 /** The customer's stored state, or null if it was never recorded. */
@@ -54,7 +57,7 @@ export async function readCustomerState(customerId: string): Promise<StoredState
   const supabase = await createUserClient();
   const { data, error } = await supabase
     .from('active_subscriptions')
-    .select('access_status,grace_ends_at,months_paid,vests_at')
+    .select('access_status,grace_ends_at,months_paid,vests_at,paid_through')
     .eq('customer_id', customerId)
     .maybeSingle();
 
@@ -64,7 +67,14 @@ export async function readCustomerState(customerId: string): Promise<StoredState
     ? {
         // active_subscriptions' check constraint allows only these.
         access: { status: data.access_status as AccessStatus, graceEndsAt: date(data.grace_ends_at) },
-        run: data.vests_at ? { monthsPaid: data.months_paid, vestsAt: new Date(data.vests_at) } : null,
+        run:
+          data.vests_at && data.paid_through
+            ? {
+                monthsPaid: data.months_paid,
+                vestsAt: new Date(data.vests_at),
+                paidThrough: new Date(data.paid_through),
+              }
+            : null,
       }
     : null;
 }

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { NoSubscription } from '@/components/dashboard/pro/no-subscription';
 import { Snippet } from '@/components/dashboard/pro/snippet';
+import { VESTED_RELEASES, VESTING_RULES } from '@/constants/vesting';
 import type { InstallView, NoSubscriptionView } from '@/server/billing/pro-pages';
 import {
   FEED_TOKEN_VARIABLE,
@@ -109,7 +110,7 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
             <ul className={'flex list-disc flex-col gap-1 pl-5 text-sm text-muted-foreground'}>
               <li>
                 To replace a token, create a new one, update the environment variable or CI secret, then revoke the old
-                one on the Access page. Its other tokens keep working.
+                one on the Access page. Your other tokens keep working.
               </li>
               <li>If a token may have leaked, revoke it straight away, then create another.</li>
               <li>The licence key never needs rotating.</li>
@@ -118,10 +119,12 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
 
           <Step title={'After the subscription ends'}>
             <p className={'text-sm text-muted-foreground'}>
-              Your feed tokens keep working, and the package feed serves you only the vested releases: those published
-              on or before your vested-through date, and every patch release of a minor version whose x.y.0 release is
-              vested. If nothing is vested, it serves you nothing. A version the feed no longer serves you is left out
-              of its version lists, so a restore of a range such as <code>0.*</code> takes the newest vested release.
+              Your feed tokens keep working, and the package feed serves you only the vested releases: {VESTED_RELEASES}
+              . If nothing is vested, it serves you nothing. A version the feed no longer serves you is left out of its
+              version lists, so a restore of a range such as <code>0.*</code> takes the newest vested release.{' '}
+              <Link className={'text-link underline underline-offset-4'} href={VESTING_RULES}>
+                How vesting works
+              </Link>
             </p>
           </Step>
         </CardContent>

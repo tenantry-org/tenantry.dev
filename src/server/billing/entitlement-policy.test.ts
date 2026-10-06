@@ -860,6 +860,37 @@ describe('a subscription ending with its payment kept in full', () => {
     expect(vested(entitlement)).toBe('2028-01-01T00:00:00.000Z');
   });
 
+  it('gives the end of the time paid for, and keeps the paid time, only while it runs on to 12 paid months', () => {
+    // Cancelled at once on 10 December, nothing refunded: the paid time reaches 12 months on 1 January.
+    const twelve = compute({
+      payments: monthly('2027-01-01T00:00:00Z', 12),
+      now: '2027-12-15T00:00:00Z',
+      endedAt: '2027-12-10T00:00:00Z',
+    });
+    expect(twelve.access.status).toBe('lapsed');
+    expect(iso(twelve.runsTo)).toBe('2028-01-01T00:00:00.000Z');
+    expect(twelve.run).toMatchObject({ paidThrough: date('2028-01-01T00:00:00Z'), monthsPaid: 12 });
+
+    // Six months paid, cancelled the same way: the time paid for runs on, but vests nothing.
+    const six = compute({
+      payments: monthly('2027-07-01T00:00:00Z', 6),
+      now: '2027-12-15T00:00:00Z',
+      endedAt: '2027-12-10T00:00:00Z',
+    });
+    expect(six.runsTo).toBeNull();
+    expect(six.run).toBeNull();
+
+    // Once served, it is vested and nothing runs on.
+    const served = compute({
+      payments: monthly('2027-01-01T00:00:00Z', 12),
+      now: '2028-01-01T00:00:00Z',
+      endedAt: '2027-12-10T00:00:00Z',
+    });
+    expect(served.runsTo).toBeNull();
+    expect(served.run).toBeNull();
+    expect(vested(served)).toBe('2028-01-01T00:00:00.000Z');
+  });
+
   it('keeps an annual grant confirmed though the subscription ended mid-term, the money kept', () => {
     const term = annual('2027-01-01T00:00:00Z');
 

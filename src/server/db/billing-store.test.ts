@@ -401,7 +401,7 @@ describe('the payment ledger', () => {
           },
         ],
         paymentStatuses: { txn_0: 'refunded' },
-        paidUntil: null,
+        runsTo: null,
         ambiguousReversals: [],
       }),
     ).resolves.toBe('lapsed');

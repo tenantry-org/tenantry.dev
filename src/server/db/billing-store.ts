@@ -112,12 +112,18 @@ export interface CurrentRun {
 
 export interface Entitlement {
   access: Access;
-  /** Their paid time, or null when the customer has no access or no payment counts for any time. */
+  /**
+   * Their paid time, or null when no payment counts for any time, or when the customer has no access and no paid time
+   * running on (runsTo).
+   */
   run: CurrentRun | null;
   /** The latest confirmed grant's date, or null if none. */
   vestedThrough: Date | null;
-  /** The end of the time the money kept pays for, served or not, or null if no payment counts for any time. */
-  paidUntil: Date | null;
+  /**
+   * The end of the time the money kept pays for, when it is still to come and the paid time reaches 12 paid months by
+   * then: the releases published up to it are vested once it is served. Null otherwise.
+   */
+  runsTo: Date | null;
   grants: Grant[];
   /** Each payment's status now. */
   paymentStatuses: Record<string, PaymentStatus>;

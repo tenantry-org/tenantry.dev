@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDate } from '@/components/dashboard/pro/format-date';
+import { VESTED_RELEASES, VESTING_RULES } from '@/constants/vesting';
 import type { EntitlementView } from '@/server/billing/pro-pages';
 
 const link = 'text-link underline underline-offset-4';
@@ -23,19 +24,23 @@ export function EntitlementCard({ entitlement }: Readonly<{ entitlement: Entitle
         {entitlement.access !== 'lapsed' && entitlement.vestedThrough && (
           <p>
             Your vested-through date is{' '}
-            <span className={'font-medium text-foreground'}>{formatDate(entitlement.vestedThrough)}</span>. The releases
-            published on or before it are vested: they stay licensed to you after the subscription ends, and the package
-            feed keeps serving them to you, with every patch release of a minor version whose x.y.0 release is vested,
-            whenever it is published.
+            <span className={'font-medium text-foreground'}>{formatDate(entitlement.vestedThrough)}</span>. Your vested
+            releases are {VESTED_RELEASES}. They stay licensed to you after the subscription ends, and the package feed
+            keeps serving them.
           </p>
         )}
+        <p>
+          <Link className={link} href={VESTING_RULES}>
+            How vesting works
+          </Link>
+        </p>
       </CardContent>
     </Card>
   );
 }
 
 function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
-  const { access, graceEndsAt, vestedThrough } = entitlement;
+  const { access, graceEndsAt, vestedThrough, runsTo } = entitlement;
 
   if (access === 'active') {
     return <p>Your subscription is active, so the package feed serves you every Tenantry Pro release.</p>;
@@ -59,15 +64,19 @@ function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) 
     return (
       <>
         <p>
-          Your subscription has ended. The package feed serves you the vested releases: every release published on or
-          before your vested-through date,{' '}
-          <span className={'font-medium text-foreground'}>{formatDate(vestedThrough)}</span>, and every patch release of
-          a minor version whose x.y.0 release is vested, whenever it is published. They stay licensed to you. Your feed
-          tokens restore them as before.
+          Your subscription has ended. The package feed serves you the vested releases: {VESTED_RELEASES}. Your
+          vested-through date is <span className={'font-medium text-foreground'}>{formatDate(vestedThrough)}</span>
+          {runsTo && (
+            <>
+              , and it moves on to <span className={'font-medium text-foreground'}>{formatDate(runsTo)}</span> as the
+              time you have paid for is served
+            </>
+          )}
+          . The vested releases stay licensed to you, and your feed tokens restore them as before.
         </p>
         <p>
-          Subscribing again never takes away the vested releases, and the paid time you have kept still counts: your
-          vested-through date moves on again as further paid time is served.{' '}
+          If you subscribe again, the paid time you have kept still counts, and your vested-through date moves on as you
+          pay.{' '}
           <Link className={link} href={'/#pricing'}>
             Subscribe again
           </Link>{' '}
@@ -77,11 +86,23 @@ function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) 
     );
   }
 
+  if (runsTo) {
+    return (
+      <p>
+        Your subscription has ended, and no releases are vested yet. You have paid for time up to{' '}
+        <span className={'font-medium text-foreground'}>{formatDate(runsTo)}</span>, which brings your paid time to 12
+        paid months. By that date, the releases published up to it become vested, unless money for that time is
+        returned. Until they do, the package feed serves you nothing, and the releases you downloaded are not licensed
+        for use.
+      </p>
+    );
+  }
+
   return (
     <p className={'rounded-md bg-warning-surface px-3 py-2 text-warning'}>
       Your subscription has ended and no releases are vested, so the package feed serves you nothing and your feed
       tokens restore nothing. The releases you downloaded are no longer licensed to you. The paid time you have kept
-      still counts towards 12 months if you subscribe again.{' '}
+      still counts towards 12 paid months if you subscribe again.{' '}
       <Link className={link} href={'/#pricing'}>
         Subscribe again
       </Link>{' '}
@@ -120,13 +141,10 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
 
   return (
     <p>
-      Paid time: <span className={'font-medium text-foreground'}>{paidTime.monthsPaid} of 12</span> paid months. Each
-      monthly billing period you keep is a paid month, and an annual one twelve. If your subscription continues, 12 paid
-      months are reached on {formatDate(paidTime.vestsAt)}, and your releases then start to vest: those published up to
-      your vested-through date, the end of the paid time you have served. Paid months add up across subscriptions, with
-      or without a gap between them. A refund, credit or chargeback of a payment takes away the time that money paid
-      for, so 12 paid months are reached later; a full refund of your latest paid billing period, or a chargeback of any
-      payment, also cancels your subscription.
+      Paid time: <span className={'font-medium text-foreground'}>{paidTime.monthsPaid} of 12</span> paid months. Your
+      releases start to vest on {formatDate(paidTime.vestsAt)}
+      {paidTime.monthsPaid < 12 && ' if you keep paying'}. Paid months add up across subscriptions, gaps included; a
+      refund, credit or chargeback takes away the time its money paid for.
     </p>
   );
 }

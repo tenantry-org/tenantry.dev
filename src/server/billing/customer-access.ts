@@ -93,7 +93,7 @@ export async function syncCustomer(
   if (!entitled) {
     if (!wasEntitled) return { change: 'unchanged', licence: null, entitlement };
 
-    await endAccess(customerId, email, input, entitlement, vestedThrough, deps);
+    await endAccess(customerId, email, entitlement, vestedThrough, deps);
     return { change: 'ended', licence: null, entitlement };
   }
 
@@ -267,7 +267,6 @@ async function forgetLicenceFailures(customerId: string, deps: BillingDeps) {
 async function endAccess(
   customerId: string,
   email: string | null,
-  input: EntitlementInput,
   entitlement: Entitlement,
   vestedThrough: Date | null,
   deps: BillingDeps,
@@ -276,18 +275,9 @@ async function endAccess(
 
   if (email) {
     // Paid time still being served after a cancel or pause with nothing returned starts the vesting, or moves a
-    // vested-through date on, only if it reaches 12 paid months by its end, when the entitlement as of then has a paid
-    // time grant. Otherwise the email names no later date: a date from an operator grant or an annual term stays where
-    // it is.
-    const paidUntil = entitlement.paidUntil && entitlement.paidUntil > input.now ? entitlement.paidUntil : null;
-    const runsTo =
-      paidUntil &&
-      computeEntitlement({ ...input, now: paidUntil }).grants.some(
-        (grant) => grant.kind === 'paid_time' && grant.status === 'confirmed',
-      )
-        ? paidUntil
-        : null;
-    await deps.sendEmail(accessRevokedEmail(email, vestedThrough, runsTo, deps.config.siteUrl));
+    // vested-through date on, only if it reaches 12 paid months by its end (runsTo). Otherwise the email names no later
+    // date: a date from an operator grant or an annual term stays where it is.
+    await deps.sendEmail(accessRevokedEmail(email, vestedThrough, entitlement.runsTo, deps.config.siteUrl));
   } else {
     console.info(`Customer access: no email on file for customer ${customerId}; skipping the revocation email.`);
   }

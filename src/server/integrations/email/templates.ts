@@ -1,10 +1,14 @@
 import 'server-only';
 import { EmailMessage } from '@/server/integrations/email/send';
 import { feedUrl } from '@/lib/install-snippets';
+import { VESTED_RELEASES, VESTING_RULES } from '@/constants/vesting';
 
 // The public site, for the logo and the footer: the same in every environment, since mail clients cannot reach a
 // preview deployment behind Vercel Authentication. Links into the app go to the environment's own site (`siteUrl`).
 const PUBLIC_SITE = 'https://tenantry.dev';
+
+// The rules for vesting (EULA section 2), on the public site like the footer: they are the same in every environment.
+const HOW_VESTING_WORKS = `<a href="${PUBLIC_SITE}${VESTING_RULES}" style="color:#2563EB">How vesting works</a>`;
 
 // Brand colours (branding/tenantry-brand-sheet.svg): navy text, slate secondary text, blue actions. The logo is a
 // PNG served by the site, since mail clients do not reliably show SVG.
@@ -77,7 +81,7 @@ export function vestingConfirmedEmail(
     subject: 'Your Tenantry Pro releases are vested',
     html: layout(
       `<h1 style="font-size:20px">Your releases are vested</h1>
-<p>${what} Vested releases stay licensed to you after your subscription ends, and the package feed keeps serving them to you, with every patch release of a minor version whose x.y.0 release is vested, whenever it is published.</p>
+<p>${what} Your vested releases are ${VESTED_RELEASES}. They stay licensed to you after your subscription ends, and the package feed keeps serving them. ${HOW_VESTING_WORKS}.</p>
 <p>${next}</p>
 <p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">See your vested releases</a></p>`,
     ),
@@ -128,25 +132,28 @@ export function grantWithdrawnEmail(
   };
 }
 
-/** Sent when a customer's access ends: none of their subscriptions entitles them any more. */
+/**
+ * Sent when a customer's access ends: none of their subscriptions entitles them any more. `runsTo` is the end of the
+ * time they have paid for when it is still to come and brings their paid time to 12 paid months (Entitlement.runsTo).
+ */
 export function accessRevokedEmail(
   to: string,
   vestedThrough: Date | null,
-  paidUntil: Date | null,
+  runsTo: Date | null,
   siteUrl: string,
 ): EmailMessage {
-  const patches = 'and every patch release of a minor version whose x.y.0 release is vested';
-  const moving = paidUntil !== null && (vestedThrough === null || vestedThrough < paidUntil);
+  const moving = runsTo !== null && (vestedThrough === null || vestedThrough < runsTo);
+  const vested = `so the package feed now serves you only your vested releases: ${VESTED_RELEASES}.`;
   let what: string;
   if (vestedThrough && moving) {
-    what = `so the package feed now serves you only your vested releases: those published on or before your vested-through date, which moves on as the time you have paid for is served, to ${longDate(paidUntil)}, ${patches}, as the licence agreement sets out. They stay licensed to you.`;
+    what = `${vested} Your vested-through date is ${longDate(vestedThrough)}, and it moves on to ${longDate(runsTo)} as the time you have paid for is served. The vested releases stay licensed to you.`;
   } else if (vestedThrough) {
-    what = `so the package feed now serves you only your vested releases: those published on or before ${longDate(vestedThrough)}, your vested-through date, ${patches}, as the licence agreement sets out. They stay licensed to you.`;
+    what = `${vested} Your vested-through date is ${longDate(vestedThrough)}. The vested releases stay licensed to you.`;
   } else if (moving) {
-    what = `and no releases are vested yet, so the package feed serves you none for now. The time you have paid for runs to ${longDate(paidUntil)}: if it brings your paid months to 12 by then, the releases published up to then become vested, as the licence agreement sets out. Until they do, the releases you downloaded are not licensed for use.`;
+    what = `and no releases are vested yet, so the package feed serves you none for now. You have paid for time up to ${longDate(runsTo)}, which brings your paid time to 12 paid months. By that date, the releases published up to it become vested, unless money for that time is returned. Until they do, the releases you downloaded are not licensed for use.`;
   } else {
     what =
-      'and no releases are vested, so the package feed now serves you none, and the releases you downloaded are no longer licensed to you, as the licence agreement sets out.';
+      'and no releases are vested, so the package feed now serves you none, and the releases you downloaded are no longer licensed to you.';
   }
   const again = vestedThrough
     ? 'You can resubscribe any time:'
@@ -156,7 +163,7 @@ export function accessRevokedEmail(
     subject: 'Your Tenantry Pro subscription has ended',
     html: layout(
       `<h1 style="font-size:20px">Your Tenantry Pro access has ended</h1>
-<p>You no longer have an active Tenantry Pro subscription, ${what}</p>
+<p>You no longer have an active Tenantry Pro subscription, ${what} ${HOW_VESTING_WORKS}.</p>
 <p>Your licence key keeps working either way; it does not extend your licence. ${again}</p>
 <p><a href="${siteUrl}/#pricing" style="${BUTTON}">View pricing</a></p>`,
     ),
