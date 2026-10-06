@@ -9,8 +9,11 @@
 /** Where the feed is served on the site (src/app/feed/v3); its service index is `index.json` under it. */
 export const FEED_PATH = '/feed/v3';
 
-/** The package source's key in nuget.config, which its credentials element is named after. */
-export const FEED_SOURCE_KEY = 'tenantry-pro';
+/**
+ * The package source's key in nuget.config, which its credentials element is named after. It has no hyphen, so the
+ * variable NuGet reads credentials from for it, NuGetPackageSourceCredentials_TenantryPro, can be set from a shell.
+ */
+export const FEED_SOURCE_KEY = 'TenantryPro';
 
 /** The environment variable nuget.config reads the feed token from. */
 export const FEED_TOKEN_VARIABLE = 'TENANTRY_FEED_TOKEN';
@@ -82,11 +85,16 @@ export const ciWorkflow = `jobs:
         env:
           ${LICENCE_ENV_VARIABLE}: \${{ secrets.TENANTRY_LICENSE }}`;
 
-/** A Dockerfile's restore with the token as a build secret, so no image layer keeps it, and the build command. */
+/**
+ * A Dockerfile's restore with the token as a build secret, so no image layer keeps it, and the build command. The
+ * restore needs the solution's Directory.Build.props and Directory.Packages.props where they exist: they can set the
+ * target frameworks, the lock file property and the package versions.
+ */
 export const dockerRestore = `# syntax=docker/dockerfile:1
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY nuget.config ./
+# Leave out Directory.Build.props or Directory.Packages.props if your solution does not have it.
+COPY nuget.config Directory.Build.props Directory.Packages.props ./
 COPY src/MyApp/MyApp.csproj src/MyApp/packages.lock.json src/MyApp/
 RUN --mount=type=secret,id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE} \\
     dotnet restore src/MyApp --locked-mode

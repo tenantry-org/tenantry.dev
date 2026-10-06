@@ -22,6 +22,15 @@ describe('install snippets', () => {
     expect(config).not.toContain('nuget.pkg.github.com');
   });
 
+  it('name the source with a key a shell can set its credentials variable for', () => {
+    // NuGet reads the source's credentials from NuGetPackageSourceCredentials_<key>; a shell variable name is letters,
+    // digits and underscores.
+    expect(`NuGetPackageSourceCredentials_${FEED_SOURCE_KEY}`).toMatch(/^[A-Za-z_]\w*$/);
+    expect(nugetConfig('https://tenantry.dev')).toMatch(
+      new RegExp(`<${FEED_SOURCE_KEY}>\\s*<add key="Username"[^]*</${FEED_SOURCE_KEY}>`),
+    );
+  });
+
   it('send only Tenantry Pro’s packages to the feed, and nuget.org nothing else', () => {
     const sources = [...nugetConfig('https://tenantry.dev').matchAll(/<add key="([^"]+)" value="https/g)].map(
       (match) => match[1],
@@ -51,6 +60,7 @@ describe('install snippets', () => {
     expect(ciWorkflow).toContain('dotnet restore --locked-mode');
     expect(dockerRestore).toContain(`--mount=type=secret,id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE}`);
     expect(dockerRestore).toContain('--locked-mode');
+    expect(dockerRestore).toContain('COPY nuget.config Directory.Build.props Directory.Packages.props ./');
     expect(dockerBuild).toContain(`--secret id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE}`);
   });
 });

@@ -98,7 +98,8 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
           <Step title={'6. Docker'}>
             <p className={'text-sm text-muted-foreground'}>
               Pass the feed token as a build secret rather than a build argument, so no image layer keeps it. Restore
-              with the project files and lock files before copying the rest of the source:
+              with nuget.config, your Directory.Build.props and Directory.Packages.props, and the project and lock files
+              before copying the rest of the source:
             </p>
             <Snippet value={dockerRestore} label={'Copy'} />
             <Snippet value={dockerBuild} label={'Copy'} />
