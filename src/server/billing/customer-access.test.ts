@@ -577,23 +577,52 @@ describe('vesting emails', () => {
     expect(message.html).not.toContain('end of each paid month');
   });
 
-  it('tells a customer cancelled mid-month with nothing refunded that the time paid for still runs', async () => {
-    memory.subscribe('ctm_1');
-    for (let n = 0; n < 6; n++) await pay(`txn_${n}`, month(n), month(n + 1));
-    await syncCustomer('ctm_1', deps, new Date('2026-06-10T00:00:00Z'));
-    vi.clearAllMocks();
+  it.each([
+    [6, 'and no releases are vested, so the package feed now serves you none'],
+    [12, 'The time you have paid for runs to 1 January 2027: if it brings your paid months to 12'],
+  ])(
+    'tells a customer cancelled mid-month with nothing refunded that the time paid for still runs only if it reaches 12 months: %i paid',
+    async (paidMonths, wording) => {
+      memory.subscribe('ctm_1');
+      for (let n = 0; n < paidMonths; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+      const cancelledAt = new Date(Date.UTC(2026, paidMonths - 1, 15));
+      await syncCustomer('ctm_1', deps, cancelledAt);
+      vi.clearAllMocks();
 
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-06-15T00:00:00Z'));
-    memory.subscribe('ctm_1', { status: 'canceled' });
-    await syncCustomer('ctm_1', deps, new Date('2026-06-15T00:10:00Z'));
-    vi.useRealTimers();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(cancelledAt);
+      memory.subscribe('ctm_1', { status: 'canceled' });
+      await syncCustomer('ctm_1', deps, new Date(cancelledAt.getTime() + 10 * 60 * 1000));
+      vi.useRealTimers();
 
-    expect(subjects()).toEqual(['Your Tenantry Pro subscription has ended']);
-    expect(deps.sendEmail.mock.calls[0][0].html).toContain(
-      'The time you have paid for runs to 1 July 2026: if it brings your paid months to 12',
-    );
-  });
+      expect(subjects()).toEqual(['Your Tenantry Pro subscription has ended']);
+      expect(deps.sendEmail.mock.calls[0][0].html).toContain(wording);
+    },
+  );
+
+  it.each([
+    [6, 'those published on or before 1 March 2026, your vested-through date'],
+    [12, 'your vested-through date, which moves on as the time you have paid for is served, to 1 January 2027'],
+  ])(
+    'says the date of an operator grant moves on after a mid-month cancel only if paid time reaches 12 months: %i paid',
+    async (paidMonths, wording) => {
+      memory.state.operatorGrants.set('ctm_1', [new Date('2026-03-01T00:00:00Z')]);
+      memory.subscribe('ctm_1');
+      for (let n = 0; n < paidMonths; n++) await pay(`txn_${n}`, month(n), month(n + 1));
+      const cancelledAt = new Date(Date.UTC(2026, paidMonths - 1, 15));
+      await syncCustomer('ctm_1', deps, cancelledAt);
+      vi.clearAllMocks();
+
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(cancelledAt);
+      memory.subscribe('ctm_1', { status: 'canceled' });
+      await syncCustomer('ctm_1', deps, new Date(cancelledAt.getTime() + 10 * 60 * 1000));
+      vi.useRealTimers();
+
+      expect(subjects()).toEqual(['Your Tenantry Pro subscription has ended']);
+      expect(deps.sendEmail.mock.calls[0][0].html).toContain(wording);
+    },
+  );
 
   it('tells the customer an annual term is vested when it is paid, and not again at its end', async () => {
     memory.subscribe('ctm_1');

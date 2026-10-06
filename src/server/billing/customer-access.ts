@@ -8,7 +8,7 @@ import {
   welcomeProEmail,
 } from '@/server/integrations/email/templates';
 import { errorMessage } from '@/lib/errors';
-import { computeEntitlement, isEntitled } from '@/server/billing/entitlement-policy';
+import { computeEntitlement, type EntitlementInput, isEntitled } from '@/server/billing/entitlement-policy';
 import { type BillingDeps, defaultBillingDeps, offeredPriceIds } from '@/server/billing/deps';
 
 /**
@@ -70,14 +70,15 @@ export async function syncCustomer(
   // A test customer (customers.is_test) is kept by the operator for checks: nobody is emailed or alerted about it.
   if (isTest) deps = { ...deps, sendEmail: async () => false, alertOperator: async () => undefined };
   const { store } = deps;
-  const entitlement = computeEntitlement({
+  const input: EntitlementInput = {
     subscriptions,
     payments,
     adjustments,
     proProductId: deps.config.paddle.proProductId,
     offerPriceIds,
     now,
-  });
+  };
+  const entitlement = computeEntitlement(input);
   const entitled = isEntitled(entitlement.access.status);
 
   // The vested-through date as stored (vested_through()), operator grants included: the date the feed and the dashboard
@@ -92,7 +93,7 @@ export async function syncCustomer(
   if (!entitled) {
     if (!wasEntitled) return { change: 'unchanged', licence: null, entitlement };
 
-    await endAccess(customerId, email, entitlement, vestedThrough, now, deps);
+    await endAccess(customerId, email, input, entitlement, vestedThrough, deps);
     return { change: 'ended', licence: null, entitlement };
   }
 
@@ -266,17 +267,27 @@ async function forgetLicenceFailures(customerId: string, deps: BillingDeps) {
 async function endAccess(
   customerId: string,
   email: string | null,
+  input: EntitlementInput,
   entitlement: Entitlement,
   vestedThrough: Date | null,
-  now: Date,
   deps: BillingDeps,
 ) {
   await forgetLicenceFailures(customerId, deps);
 
   if (email) {
-    // Paid time still being served after a cancel or pause with nothing returned can move or start the vesting.
-    const paidUntil = entitlement.paidUntil && entitlement.paidUntil > now ? entitlement.paidUntil : null;
-    await deps.sendEmail(accessRevokedEmail(email, vestedThrough, paidUntil, deps.config.siteUrl));
+    // Paid time still being served after a cancel or pause with nothing returned starts the vesting, or moves a
+    // vested-through date on, only if it reaches 12 paid months by its end, when the entitlement as of then has a paid
+    // time grant. Otherwise the email names no later date: a date from an operator grant or an annual term stays where
+    // it is.
+    const paidUntil = entitlement.paidUntil && entitlement.paidUntil > input.now ? entitlement.paidUntil : null;
+    const runsTo =
+      paidUntil &&
+      computeEntitlement({ ...input, now: paidUntil }).grants.some(
+        (grant) => grant.kind === 'paid_time' && grant.status === 'confirmed',
+      )
+        ? paidUntil
+        : null;
+    await deps.sendEmail(accessRevokedEmail(email, vestedThrough, runsTo, deps.config.siteUrl));
   } else {
     console.info(`Customer access: no email on file for customer ${customerId}; skipping the revocation email.`);
   }
