@@ -48,24 +48,33 @@ describe('listFeedPackages', () => {
       [0, MAX_ROWS - 1],
       [MAX_ROWS, 2 * MAX_ROWS - 1],
       [2 * MAX_ROWS, 3 * MAX_ROWS - 1],
+      [2 * MAX_ROWS + 1, 3 * MAX_ROWS],
     ]);
-    expect(state.calls.filter((call) => call.method === 'order').map((call) => call.args[0])).toEqual([
-      'lower_id',
-      'version',
-      'lower_id',
-      'version',
-      'lower_id',
-      'version',
+    expect(state.calls.filter((call) => call.method === 'order').map((call) => call.args[0])).toEqual(
+      Array.from({ length: 4 }, () => ['lower_id', 'version']).flat(),
+    );
+  });
+
+  it('reads every package when the API returns fewer rows a request than a page asks for', async () => {
+    state.tables.pro_packages = { list: Array.from({ length: 1200 }, (_, index) => packageRow(index)), maxRows: 500 };
+
+    const packages = await listFeedPackages();
+
+    expect(packages.map((pkg) => pkg.lowerId)).toEqual(
+      Array.from({ length: 1200 }, (_, index) => `tenantry.pro.p${index}`),
+    );
+    expect(state.calls.filter((call) => call.method === 'range').map((call) => call.args[0])).toEqual([
+      0, 500, 1000, 1200,
     ]);
   });
 
-  it('reads one package id in one request when it has fewer versions than a page', async () => {
+  it('reads one package id, then finds no more', async () => {
     state.tables.pro_packages = { list: [packageRow(1)] };
 
     await expect(listFeedPackages('tenantry.pro.p1')).resolves.toEqual([
       expect.objectContaining({ packageId: 'Tenantry.Pro.P1', version: '1.4.0', rc: null }),
     ]);
-    expect(state.calls.filter((call) => call.method === 'range')).toHaveLength(1);
+    expect(state.calls.filter((call) => call.method === 'range')).toHaveLength(2);
     expect(state.calls).toContainEqual({ table: 'pro_packages', method: 'eq', args: ['lower_id', 'tenantry.pro.p1'] });
   });
 });

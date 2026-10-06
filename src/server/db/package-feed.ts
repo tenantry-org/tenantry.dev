@@ -68,8 +68,8 @@ export async function findFeedCustomer(tokenHash: string): Promise<FeedCustomer 
 }
 
 /**
- * The rows a page of packages asks for: the API's max_rows (supabase/config.toml), which a request returns at most, so
- * a shorter page is the last.
+ * The rows a page of packages asks for: the local stack's max_rows (supabase/config.toml). A hosted project's limit may
+ * be lower, so a page may come back shorter without being the last.
  */
 const PACKAGE_PAGE_ROWS = 1000;
 
@@ -77,8 +77,9 @@ const PACKAGE_PAGE_ROWS = 1000;
 export async function listFeedPackages(lowerId?: string): Promise<FeedPackage[]> {
   const supabase = createServiceRoleClient();
   const rows = [];
-  // One request is cut off at max_rows without an error, so the packages are read in pages, in the primary key's order.
-  for (let from = 0; ; from += PACKAGE_PAGE_ROWS) {
+  // One request is cut off at max_rows without an error, so the packages are read in pages, in the primary key's order,
+  // each from where the last one ended, until one comes back empty.
+  for (let from = 0; ;) {
     let query = supabase
       .from('pro_packages')
       .select(
@@ -93,8 +94,9 @@ export async function listFeedPackages(lowerId?: string): Promise<FeedPackage[]>
     if (error) throw error;
 
     const page = data ?? [];
+    if (page.length === 0) break;
     rows.push(...page);
-    if (page.length < PACKAGE_PAGE_ROWS) break;
+    from += page.length;
   }
 
   return rows.flatMap((row) => {

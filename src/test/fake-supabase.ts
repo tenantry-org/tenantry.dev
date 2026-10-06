@@ -11,6 +11,8 @@ export interface FakeTable {
   single?: unknown;
   /** The error a write (update, upsert, insert, delete) on this table resolves with. */
   writeError?: { code: string; message: string };
+  /** The most rows a request returns, when lower than MAX_ROWS, as a hosted project's limit may be. */
+  maxRows?: number;
 }
 
 /** A builder call, recorded when `fakeSupabase` is given a `calls` array. */
@@ -52,7 +54,10 @@ export function fakeSupabase(
         const writeError = wrote ? (tables[table]?.writeError ?? null) : null;
         if (writeError) return { data: null, error: writeError };
         const list = tables[table]?.list ?? [];
-        return { data: (range ? list.slice(range[0], range[1] + 1) : list).slice(0, MAX_ROWS), error: null };
+        return {
+          data: (range ? list.slice(range[0], range[1] + 1) : list).slice(0, tables[table]?.maxRows ?? MAX_ROWS),
+          error: null,
+        };
       });
       const chain = settled as Promise<Result> & Record<string, unknown>;
       for (const method of [
