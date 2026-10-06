@@ -67,20 +67,37 @@ export async function findFeedCustomer(tokenHash: string): Promise<FeedCustomer 
     : null;
 }
 
+/**
+ * The rows a page of packages asks for: the API's max_rows (supabase/config.toml), which a request returns at most, so
+ * a shorter page is the last.
+ */
+const PACKAGE_PAGE_ROWS = 1000;
+
 /** Every package of every release, or only those with this lowercased id. */
 export async function listFeedPackages(lowerId?: string): Promise<FeedPackage[]> {
   const supabase = createServiceRoleClient();
-  let query = supabase
-    .from('pro_packages')
-    .select(
-      'package_id,lower_id,version,storage_path,description,authors,dependency_groups,pro_releases(major,minor,patch,rc,published_at,entitlement_at)',
-    );
-  if (lowerId !== undefined) query = query.eq('lower_id', lowerId);
+  const rows = [];
+  // One request is cut off at max_rows without an error, so the packages are read in pages, in the primary key's order.
+  for (let from = 0; ; from += PACKAGE_PAGE_ROWS) {
+    let query = supabase
+      .from('pro_packages')
+      .select(
+        'package_id,lower_id,version,storage_path,description,authors,dependency_groups,pro_releases(major,minor,patch,rc,published_at,entitlement_at)',
+      )
+      .order('lower_id')
+      .order('version')
+      .range(from, from + PACKAGE_PAGE_ROWS - 1);
+    if (lowerId !== undefined) query = query.eq('lower_id', lowerId);
 
-  const { data, error } = await query;
-  if (error) throw error;
+    const { data, error } = await query;
+    if (error) throw error;
 
-  return (data ?? []).flatMap((row) => {
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PACKAGE_PAGE_ROWS) break;
+  }
+
+  return rows.flatMap((row) => {
     const release = row.pro_releases;
     if (!release) return [];
     return [
