@@ -7,8 +7,9 @@ import type { Access, AccessStatus } from '@/server/db/billing-store';
 /**
  * Reads for the customer's dashboard, with the signed-in user's session: RLS lets a customer read only their own
  * customer, access (active_subscriptions), vested entitlements, feed tokens (without their hashes), licence and
- * subscriptions. Each Pro page reads only the rows it shows;
- * its read model (billing/pro-pages.ts) maps them. Rows the session may not read come back empty.
+ * subscriptions. Each Pro page reads only the rows it shows; its read model (billing/pro-pages.ts) maps them. Rows the
+ * session may not read come back empty. A read that fails throws, so the page or action reports a failure instead of
+ * telling the customer they have no account or no access.
  */
 
 /**
@@ -20,7 +21,9 @@ export async function getCustomerId(): Promise<string | null> {
   if (!email) return null;
 
   const supabase = await createUserClient();
-  const { data } = await supabase.from('customers').select('customer_id').eq('email', email).maybeSingle();
+  const { data, error } = await supabase.from('customers').select('customer_id').eq('email', email).maybeSingle();
+
+  if (error) throw error;
 
   return data?.customer_id ?? null;
 }
@@ -28,7 +31,13 @@ export async function getCustomerId(): Promise<string | null> {
 /** Whether the signed-in user's customer is a test customer (customers.is_test), which is sent no emails. */
 export async function isTestCustomer(customerId: string): Promise<boolean> {
   const supabase = await createUserClient();
-  const { data } = await supabase.from('customers').select('is_test').eq('customer_id', customerId).maybeSingle();
+  const { data, error } = await supabase
+    .from('customers')
+    .select('is_test')
+    .eq('customer_id', customerId)
+    .maybeSingle();
+
+  if (error) throw error;
 
   return data?.is_test ?? false;
 }
@@ -43,11 +52,13 @@ export interface StoredState {
 /** The customer's stored state, or null if it was never recorded. */
 export async function readCustomerState(customerId: string): Promise<StoredState | null> {
   const supabase = await createUserClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('active_subscriptions')
     .select('access_status,grace_ends_at,months_paid,vests_at')
     .eq('customer_id', customerId)
     .maybeSingle();
+
+  if (error) throw error;
 
   return data
     ? {
@@ -71,7 +82,7 @@ export interface Vested {
  */
 export async function readVested(customerId: string): Promise<Vested | null> {
   const supabase = await createUserClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('vested_entitlements')
     .select('vested_through,kind')
     .eq('customer_id', customerId)
@@ -79,6 +90,8 @@ export async function readVested(customerId: string): Promise<Vested | null> {
     .order('vested_through', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (error) throw error;
 
   return data ? { through: new Date(data.vested_through), kind: data.kind } : null;
 }
@@ -96,12 +109,14 @@ export interface FeedTokenRow {
 /** The customer's feed tokens that are not revoked, newest first. */
 export async function readFeedTokens(customerId: string): Promise<FeedTokenRow[]> {
   const supabase = await createUserClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('feed_tokens')
     .select('id,name,prefix,created_at,last_used_at')
     .eq('customer_id', customerId)
     .is('revoked_at', null)
     .order('created_at', { ascending: false });
+
+  if (error) throw error;
 
   return (data ?? []).map((row) => ({
     id: row.id,
@@ -115,7 +130,7 @@ export async function readFeedTokens(customerId: string): Promise<FeedTokenRow[]
 /** The customer's licence key: the newest one. Keys are kept for good, so a former customer still has theirs. */
 export async function readLicenceKey(customerId: string): Promise<string | null> {
   const supabase = await createUserClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('licences')
     .select('jwt')
     .eq('customer_id', customerId)
@@ -123,18 +138,22 @@ export async function readLicenceKey(customerId: string): Promise<string | null>
     .limit(1)
     .maybeSingle();
 
+  if (error) throw error;
+
   return data?.jwt ?? null;
 }
 
 /** The customer's subscriptions, as Paddle last reported them. */
 export async function readSubscriptions(customerId: string) {
   const supabase = await createUserClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('subscriptions')
     .select(
       'subscription_id,status,price_id,product_id,scheduled_change_at,scheduled_change_action,current_period_ends_at',
     )
     .eq('customer_id', customerId);
+
+  if (error) throw error;
 
   return data ?? [];
 }

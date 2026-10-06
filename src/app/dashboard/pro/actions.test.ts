@@ -126,6 +126,15 @@ describe('createFeedToken', () => {
 
     await expect(createFeedToken('CI')).resolves.toEqual({ error: 'Something went wrong. Try again in a moment.' });
   });
+
+  it('says something went wrong, not that the subscription has ended, when the access cannot be read', async () => {
+    const { readEntitlement } = await import('@/server/billing/pro-pages');
+    vi.mocked(readEntitlement).mockRejectedValueOnce({ code: '57014', message: 'statement timeout' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(createFeedToken('CI')).resolves.toEqual({ error: 'Something went wrong. Try again in a moment.' });
+    expect(mocks.tokens.size).toBe(1);
+  });
 });
 
 describe('revokeFeedToken', () => {

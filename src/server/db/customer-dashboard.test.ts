@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall, FakeTable } from '@/test/fake-supabase';
-import { getCustomerId } from './customer-dashboard';
+import {
+  getCustomerId,
+  isTestCustomer,
+  readCustomerState,
+  readFeedTokens,
+  readLicenceKey,
+  readSubscriptions,
+  readVested,
+} from './customer-dashboard';
 
 const state = vi.hoisted(() => ({
   user: null as Record<string, unknown> | null,
@@ -46,5 +54,29 @@ describe('getCustomerId', () => {
     state.tables.customers = {};
 
     await expect(getCustomerId()).resolves.toBeNull();
+  });
+});
+
+describe('a read that fails', () => {
+  const failure = { code: '57014', message: 'canceling statement due to statement timeout' };
+
+  beforeEach(() => {
+    state.user = BUYER;
+    state.calls.length = 0;
+    state.tables = Object.fromEntries(
+      ['customers', 'active_subscriptions', 'vested_entitlements', 'feed_tokens', 'licences', 'subscriptions'].map(
+        (table) => [table, { readError: failure }],
+      ),
+    );
+  });
+
+  it('throws, rather than reading as no account, no access or nothing held', async () => {
+    await expect(getCustomerId()).rejects.toEqual(failure);
+    await expect(isTestCustomer('ctm_1')).rejects.toEqual(failure);
+    await expect(readCustomerState('ctm_1')).rejects.toEqual(failure);
+    await expect(readVested('ctm_1')).rejects.toEqual(failure);
+    await expect(readFeedTokens('ctm_1')).rejects.toEqual(failure);
+    await expect(readLicenceKey('ctm_1')).rejects.toEqual(failure);
+    await expect(readSubscriptions('ctm_1')).rejects.toEqual(failure);
   });
 });

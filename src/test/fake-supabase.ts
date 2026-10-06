@@ -2,14 +2,16 @@
  * Minimal stand-in for the Supabase query builder in unit tests. Every builder method returns the same
  * chain; `maybeSingle()` resolves to the table's `single` row and awaiting the chain resolves to its
  * `list`, cut to the chain's `range` if it has one and to at most MAX_ROWS rows, as the API cuts it, with the
- * whole list's length as `count` if `select` asked for one. Writes resolve with the table's `writeError`, if
- * any. `rpc(name)` resolves to what the matching `rpcs` handler returns, or with the error it throws, as a
- * failed database function does.
+ * whole list's length as `count` if `select` asked for one. Reads resolve with the table's `readError`, and writes
+ * with its `writeError`, if any. `rpc(name)` resolves to what the matching `rpcs` handler returns, or with the error
+ * it throws, as a failed database function does.
  */
 export interface FakeTable {
   list?: unknown[];
   /** The row `maybeSingle()` gives, or a function of the chain's `eq` filters (column → value). */
   single?: unknown;
+  /** The error a read (awaiting a select, or `maybeSingle()`) of this table resolves with. */
+  readError?: { code: string; message: string };
   /** The error a write (update, upsert, insert, delete) on this table resolves with. */
   writeError?: { code: string; message: string };
   /** The most rows a request returns, when lower than MAX_ROWS, as a hosted project's limit may be. */
@@ -49,12 +51,12 @@ export function fakeSupabase(
       let wrote = false;
       let range: [number, number] | null = null;
       let counted = false;
-      // A promise carrying the builder's methods, so awaiting the chain gives the table's list (or, after a
-      // write, the table's write error). It settles in a later microtask, after the synchronous chain of
+      // A promise carrying the builder's methods, so awaiting the chain gives the table's list (or its read
+      // error, or after a write its write error). It settles in a later microtask, after the synchronous chain of
       // builder calls has recorded any write.
       const settled: Promise<Result> = Promise.resolve().then(() => {
-        const writeError = wrote ? (tables[table]?.writeError ?? null) : null;
-        if (writeError) return { data: null, error: writeError };
+        const error = (wrote ? tables[table]?.writeError : tables[table]?.readError) ?? null;
+        if (error) return { data: null, error };
         const list = tables[table]?.list ?? [];
         return {
           data: (range ? list.slice(range[0], range[1] + 1) : list).slice(0, tables[table]?.maxRows ?? MAX_ROWS),
@@ -88,6 +90,8 @@ export function fakeSupabase(
         };
       }
       chain.maybeSingle = async (): Promise<Result> => {
+        const readError = tables[table]?.readError;
+        if (readError) return { data: null, error: readError };
         const single = tables[table]?.single;
         return { data: (typeof single === 'function' ? single(filters) : single) ?? null, error: null };
       };
