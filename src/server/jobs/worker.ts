@@ -74,10 +74,11 @@ async function handleJob(job: Job, handlers: JobHandlers): Promise<keyof DrainRe
         `Job ${job.id} failed for good`,
         `Job ${job.id} (${describe(job)}, customer ${job.customerId ?? 'none'}) failed on every attempt and will ` +
           `not be retried: ${errorMessage(error)}. Its effect is missing until someone handles it. The next ` +
-          "reconcile recomputes the customer's access and entitlement from what is recorded, and records a completed " +
-          'Pro payment, refund, credit or chargeback Paddle lists that is missing. It does not cancel a subscription ' +
-          'that an approved full refund or chargeback should end, and does not recover a lost customer or ' +
-          'subscription event: for those, replay the notification from Paddle.',
+          "reconcile recomputes the customer's access and entitlement from what is recorded, records a completed " +
+          'Pro payment, refund, credit or chargeback Paddle lists that is missing, acting on it as the webhook ' +
+          'would, and records the current status of each Pro subscription recorded as active, trialing or past due. ' +
+          'It does not recover a lost customer event, or an event for a subscription recorded with another status or ' +
+          'not recorded at all: for those, replay the notification from Paddle.',
       );
     }
 

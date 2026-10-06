@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import type { BillingDeps } from '@/server/billing/deps';
+import type { PaddleSubscription } from '@/server/integrations/paddle/get-subscription';
 import { memory } from '@/test/memory-billing-store';
 import { testServerConfig } from '@/test/server-config';
 
@@ -22,6 +23,8 @@ export function fakeBillingDeps() {
     sendEmail: vi.fn<BillingDeps['sendEmail']>(async () => true),
     alertOperator: vi.fn<BillingDeps['alertOperator']>(async () => undefined),
     cancelSubscriptionNow: vi.fn<BillingDeps['cancelSubscriptionNow']>(async () => true),
+    // Paddle holds each subscription as it is recorded unless a test says otherwise.
+    getSubscription: vi.fn<BillingDeps['getSubscription']>(async (subscriptionId) => recorded(subscriptionId)),
     // Paddle lists nothing unless a test says otherwise; tests never call Paddle.
     listCompletedTransactions: vi.fn<BillingDeps['listCompletedTransactions']>(async () => []),
     listAdjustments: vi.fn<BillingDeps['listAdjustments']>(async () => []),
@@ -29,3 +32,23 @@ export function fakeBillingDeps() {
 }
 
 export type FakeBillingDeps = ReturnType<typeof fakeBillingDeps>;
+
+// The subscription as the in-memory store records it, in the shape Paddle's API returns, as of its last event.
+function recorded(subscriptionId: string): PaddleSubscription {
+  const subscription = memory.state.subscriptions.get(subscriptionId);
+  if (!subscription) throw new Error(`Paddle has no subscription ${subscriptionId}`);
+
+  return {
+    id: subscription.subscriptionId,
+    status: subscription.status,
+    customerId: subscription.customerId,
+    items: [{ price: { id: subscription.priceId, productId: subscription.productId } }],
+    currentBillingPeriod: subscription.currentPeriodEndsAt ? { endsAt: subscription.currentPeriodEndsAt } : null,
+    scheduledChange: subscription.scheduledChangeAt
+      ? { action: subscription.scheduledChangeAction ?? undefined, effectiveAt: subscription.scheduledChangeAt }
+      : null,
+    canceledAt: subscription.status === 'canceled' ? subscription.endedAt : null,
+    pausedAt: subscription.status === 'paused' ? subscription.endedAt : null,
+    updatedAt: subscription.occurredAt,
+  };
+}

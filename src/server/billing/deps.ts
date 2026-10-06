@@ -4,6 +4,7 @@ import { issueLicence, type LicenceClaims } from '@/server/integrations/licensin
 import { type EmailMessage, sendEmail } from '@/server/integrations/email/send';
 import { alertOperator } from '@/server/integrations/email/alerts';
 import { cancelSubscriptionNow } from '@/server/integrations/paddle/cancel-subscription';
+import { getSubscription, type PaddleSubscription } from '@/server/integrations/paddle/get-subscription';
 import { listCompletedTransactions, type PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import { listAdjustments, type PaddleAdjustment } from '@/server/integrations/paddle/list-adjustments';
 import { type ServerConfig, serverConfig } from '@/server/config/server-config';
@@ -27,6 +28,8 @@ export interface BillingDeps {
   /** Never throws (alerts.ts). */
   alertOperator: (subject: string, detail: string) => Promise<void>;
   cancelSubscriptionNow: (subscriptionId: string) => Promise<boolean>;
+  /** The subscription as Paddle holds it now, from Paddle's API. */
+  getSubscription: (subscriptionId: string) => Promise<PaddleSubscription>;
   /** The completed transactions of these subscriptions billed since the date, from Paddle's API. */
   listCompletedTransactions: (subscriptionIds: string[], billedSince: Date) => Promise<PaddleTransaction[]>;
   /** Every adjustment of these subscriptions, from Paddle's API. */
@@ -43,6 +46,7 @@ export const defaultBillingDeps: BillingDeps = {
   sendEmail,
   alertOperator,
   cancelSubscriptionNow,
+  getSubscription: (subscriptionId) => getSubscription(subscriptionId),
   listCompletedTransactions: (subscriptionIds, billedSince) => listCompletedTransactions(subscriptionIds, billedSince),
   listAdjustments: (subscriptionIds) => listAdjustments(subscriptionIds),
 };

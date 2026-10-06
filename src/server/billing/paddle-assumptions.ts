@@ -101,3 +101,12 @@ export function adjustmentAmount(totals: { subtotal: string } | null | undefined
  * taken as a second record, restoring nothing, and the operator is alerted (entitlement-policy.ts: reversalsOf).
  */
 export const REVERSAL_RECORD_WINDOW_MS = HOUR_MS;
+
+/**
+ * Assumption 9: a subscription read through Paddle's API (subscriptions.get) is the entity its subscription
+ * notifications carried, with the same status, items, current_billing_period, scheduled_change, canceled_at and
+ * paused_at; and its updated_at, the time of its latest change, is later than the occurred_at of the notification of
+ * any earlier change. Reconcile records it as of updated_at (reconcile-customer.ts), so a notification of an earlier
+ * change is replaced and one of the same change or a later one is kept. The SDK's types say the fields match; neither
+ * has been compared in the sandbox.
+ */

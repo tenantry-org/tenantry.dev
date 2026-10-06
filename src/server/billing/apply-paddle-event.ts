@@ -1,49 +1,15 @@
 import 'server-only';
-import {
-  AdjustmentAction,
-  AdjustmentActionType,
-  AdjustmentStatus,
-  CustomerCreatedEvent,
-  CustomerUpdatedEvent,
-  EventEntity,
-  EventName,
-  SubscriptionStatus,
-} from '@paddle/paddle-node-sdk';
+import { CustomerCreatedEvent, CustomerUpdatedEvent, EventEntity, EventName } from '@paddle/paddle-node-sdk';
 import { syncCustomer } from '@/server/billing/customer-access';
 import { latestBillingPeriods } from '@/server/billing/entitlement-policy';
 import { adjustmentAmount } from '@/server/billing/paddle-assumptions';
 import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import type { PaddleAdjustment } from '@/server/integrations/paddle/list-adjustments';
+import type { PaddleSubscription } from '@/server/integrations/paddle/get-subscription';
 import { subscriptionEndedAt } from '@/server/billing/paddle-assumptions';
+import type { Entitlement } from '@/server/db/billing-store';
 import { normaliseEmail } from '@/server/db/customer-email';
 import { type BillingDeps, defaultBillingDeps, offeredPriceIds } from '@/server/billing/deps';
-
-// Structural view of the bits of SubscriptionNotification this handler needs.
-interface SubscriptionEventData {
-  id: string;
-  status: SubscriptionStatus;
-  customerId: string;
-  items: { price?: { id?: string | null; productId?: string | null } | null }[];
-  currentBillingPeriod: { endsAt: string } | null;
-  scheduledChange: { action?: string; effectiveAt?: string } | null;
-  canceledAt: string | null;
-  pausedAt: string | null;
-}
-
-// Structural view of the bits of AdjustmentNotification this handler needs.
-interface AdjustmentEventData {
-  id: string;
-  action: AdjustmentAction;
-  type: AdjustmentActionType;
-  status: AdjustmentStatus;
-  transactionId: string;
-  subscriptionId: string | null;
-  customerId: string;
-  items: { type: string }[];
-  totals: { subtotal: string; currencyCode: string } | null;
-  createdAt: string;
-  updatedAt: string;
-}
 
 /**
  * Applies one Paddle notification. Called by the job worker, one customer's jobs at a time and oldest first; a
@@ -60,7 +26,7 @@ export async function applyPaddleEvent(eventData: EventEntity, deps: BillingDeps
     case EventName.SubscriptionPaused:
     case EventName.SubscriptionResumed:
     case EventName.SubscriptionTrialing:
-      await handleSubscription(eventData.data as unknown as SubscriptionEventData, eventData.occurredAt, deps);
+      await handleSubscription(eventData.data as unknown as PaddleSubscription, eventData.occurredAt, deps);
       break;
     case EventName.CustomerCreated:
     case EventName.CustomerUpdated:
@@ -68,7 +34,7 @@ export async function applyPaddleEvent(eventData: EventEntity, deps: BillingDeps
       break;
     case EventName.AdjustmentCreated:
     case EventName.AdjustmentUpdated:
-      await handleAdjustment(eventData.data as unknown as AdjustmentEventData, eventData.occurredAt, deps);
+      await handleAdjustment(eventData.data as unknown as PaddleAdjustment, eventData.occurredAt, deps);
       break;
     // The only transaction event that records anything: a payment is final once its transaction is completed. The
     // others (created, ready, billed, paid, past_due, payment_failed, canceled, revised, updated) come before that or
@@ -83,20 +49,8 @@ export async function applyPaddleEvent(eventData: EventEntity, deps: BillingDeps
 // follows all their subscriptions, and a subscription that ends ends its paid period. Changes nothing if a newer event
 // for this subscription has already been applied (Paddle does not guarantee delivery order). Recording throws a
 // foreign-key error if the customer has not been recorded yet, so the worker retries once customer.created arrives.
-async function handleSubscription(data: SubscriptionEventData, occurredAt: string, deps: BillingDeps) {
-  const { store } = deps;
-  const applied = await store.recordSubscriptionEvent({
-    subscriptionId: data.id,
-    customerId: data.customerId,
-    status: data.status,
-    priceId: data.items[0]?.price?.id ?? '',
-    productId: data.items[0]?.price?.productId ?? '',
-    scheduledChangeAt: data.scheduledChange?.effectiveAt ?? null,
-    scheduledChangeAction: data.scheduledChange?.action ?? null,
-    currentPeriodEndsAt: data.currentBillingPeriod?.endsAt ?? null,
-    endedAt: subscriptionEndedAt(data),
-    occurredAt,
-  });
+async function handleSubscription(data: PaddleSubscription, occurredAt: string, deps: BillingDeps) {
+  const applied = await recordSubscription(data, occurredAt, deps);
 
   if (!applied) {
     console.info(`Paddle webhook: ignoring a ${data.status} event for ${data.id} older than the last one applied.`);
@@ -112,6 +66,30 @@ async function handleSubscription(data: SubscriptionEventData, occurredAt: strin
   }
 
   await syncCustomer(data.customerId, deps);
+}
+
+/**
+ * Records a subscription as one of its events, or Paddle's API, describes it as of `occurredAt`, unless a newer event
+ * for it has been recorded (record_subscription_event), and returns whether it was. The webhook records each
+ * subscription event this way, and reconcile each running Pro subscription as Paddle holds it now.
+ */
+export async function recordSubscription(
+  data: PaddleSubscription,
+  occurredAt: string,
+  deps: BillingDeps = defaultBillingDeps,
+): Promise<boolean> {
+  return deps.store.recordSubscriptionEvent({
+    subscriptionId: data.id,
+    customerId: data.customerId,
+    status: data.status,
+    priceId: data.items[0]?.price?.id ?? '',
+    productId: data.items[0]?.price?.productId ?? '',
+    scheduledChangeAt: data.scheduledChange?.effectiveAt ?? null,
+    scheduledChangeAction: data.scheduledChange?.action ?? null,
+    currentPeriodEndsAt: data.currentBillingPeriod?.endsAt ?? null,
+    endedAt: subscriptionEndedAt(data),
+    occurredAt,
+  });
 }
 
 /**
@@ -188,22 +166,35 @@ function amount(value: string): number {
 }
 
 /**
- * Refunds, credits and chargebacks (Paddle adjustments). Each is recorded in the payment ledger, and the customer
- * brought in line (syncCustomer): what an adjustment does to a payment, and so to the paid time and any annual grant, is
- * decided there (entitlement-policy.ts). Paddle does not cancel a subscription whose payment is refunded, so an
- * approved chargeback of any payment, or an approved full refund that leaves nothing kept of the subscription's latest
- * paid billing period, cancels it at once: the subscription.canceled event that follows ends access as any
- * cancellation does. A full refund of an earlier paid billing period (a goodwill refund), or of one payment of the
- * latest while money is still kept from it (a prorated top-up, or one of two charges for the period), cancels nothing
- * (the period counts only for the money kept) and tells the operator. Every chargeback cancels, so charging back each
- * month once the next has renewed cannot keep access going. A partial refund, and a chargeback warning (which can
- * still be reversed), change no access but tell the operator. Credits and reversals change no access. Throwing (Paddle
- * unavailable) makes the worker retry; recording the adjustment again changes nothing.
+ * Refunds, credits and chargebacks (Paddle adjustments). Each is recorded in the payment ledger, the customer brought
+ * in line (syncCustomer), and then acted on (applyAdjustmentConsequences). Throwing (Paddle unavailable) makes the
+ * worker retry; recording the adjustment again changes nothing.
  */
-async function handleAdjustment(data: AdjustmentEventData, occurredAt: string, deps: BillingDeps) {
+async function handleAdjustment(data: PaddleAdjustment, occurredAt: string, deps: BillingDeps) {
   await recordAdjustment(data, occurredAt, deps);
   const { entitlement } = await syncCustomer(data.customerId, deps);
+  await applyAdjustmentConsequences(data, entitlement, deps);
+}
 
+/**
+ * What follows a recorded adjustment beyond the entitlement: what an adjustment does to a payment, and so to the paid
+ * time and any annual grant, is decided when the customer is brought in line (syncCustomer, entitlement-policy.ts),
+ * whose result is `entitlement`. Paddle does not cancel a subscription whose payment is refunded, so an approved
+ * chargeback of any payment, or an approved full refund that leaves nothing kept of the subscription's latest paid
+ * billing period, cancels it at once: the subscription.canceled event that follows ends access as any cancellation
+ * does. A full refund of an earlier paid billing period (a goodwill refund), or of one payment of the latest while
+ * money is still kept from it (a prorated top-up, or one of two charges for the period), cancels nothing (the period
+ * counts only for the money kept) and tells the operator. Every chargeback cancels, so charging back each month once
+ * the next has renewed cannot keep access going. A partial refund, and a chargeback warning (which can still be
+ * reversed), change no access but tell the operator. Credits and reversals change no access. The webhook runs it for
+ * each adjustment event, and reconcile for each adjustment it recovers. Running it again cancels nothing more: a
+ * cancelled subscription is not cancelled again (cancelSubscriptionNow).
+ */
+export async function applyAdjustmentConsequences(
+  data: PaddleAdjustment,
+  entitlement: Entitlement,
+  deps: BillingDeps = defaultBillingDeps,
+): Promise<void> {
   if (entitlement.ambiguousReversals.includes(data.id)) {
     await deps.alertOperator(
       `Paddle reversal to check for customer ${data.customerId}`,
