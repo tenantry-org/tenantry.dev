@@ -34,7 +34,7 @@ const NOTES: { title: string; text: string | string[] }[] = [
   },
   {
     title: 'What Tenantry does not do',
-    text: 'Tenantry is a library, not an application framework: there is no tenant management UI, as ABP’s Tenant Management module has. It ships no tenant stores: ITenantStore is two methods over whatever already holds your tenants. It adds TenantId to no key or index, where Finbuckle can, with AdjustUniqueIndexes(), so declare per-tenant unique indexes yourself. When a resolver’s identifier names no tenant, Tenantry does not try the next resolver, as Finbuckle does. The isolation is in EF Core, not the database: FromSql on a tenant entity is filtered like any other query on it; SQL sent with SqlQuery or ExecuteSql, and queries with IgnoreQueryFilters(), are not isolated.',
+    text: 'Tenantry is a library, not an application framework: there is no tenant management UI, as ABP’s Tenant Management module has. It ships no database or configuration store: you implement ITenantStore’s two methods over whatever already holds your tenants. Core provides what surrounds them: caching, invalidation across instances through a channel you choose, the store’s lifetime and suspension checks. It adds TenantId to no key or index, where Finbuckle can, with AdjustUniqueIndexes(), so declare per-tenant unique indexes yourself. When a resolver’s identifier names no tenant, Tenantry does not try the next resolver, as Finbuckle does. The isolation is in EF Core, not the database: FromSql on a tenant entity is filtered like any other query on it; SQL sent with SqlQuery or ExecuteSql, and queries with IgnoreQueryFilters(), are not isolated.',
   },
   {
     title: 'Versions',
@@ -83,7 +83,7 @@ export default function ComparePage() {
         </p>
         <p className={'mt-12 text-sm text-muted-foreground'}>
           Checked in October 2026 against Finbuckle.MultiTenant 10.1.4 and ABP 10.6.1, their documentation, source and
-          packages. To report something out of date, email{' '}
+          packages, and on 7 October 2026 against Finbuckle’s Sponsors page. To report something out of date, email{' '}
           <Link href={'mailto:support@tenantry.dev'} className={'text-link hover:underline'}>
             support@tenantry.dev
           </Link>

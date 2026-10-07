@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { publishedSince } from '@/lib/docs-versions';
 
 // Checked in October 2026 against Finbuckle.MultiTenant 10.1.4 and ABP 10.6.1 (the documents in SOURCES, their source
-// and their packages) and against Tenantry Core and Pro 0.8. Check them again when any of them releases a major
-// version. A row whose Finbuckle or ABP cell the sources do not support is left out, not filled in.
+// and their packages), Finbuckle's Sponsors page on 7 October 2026, and Tenantry Core and Pro 0.8. Check them again
+// when any of them releases a major version. A row whose Finbuckle or ABP cell the sources do not support is left out,
+// not filled in.
 const PROJECTS = ['Your own query filters', 'Finbuckle.MultiTenant', 'ABP', 'Tenantry'] as const;
 
 // The rules analyzers.md lists as warnings by default, worded as in features.tsx: Core 0.8.0 adds TNY1004 and widens
@@ -79,7 +80,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
       'Yours',
       'In-memory, configuration, EF Core, distributed cache, HTTP remote and echo',
       'Configuration, and a database store with a management UI in the Tenant Management module',
-      'One ITenantStore interface, two methods, over whatever already holds your tenants',
+      'An ITenantStore of two methods over whatever holds your tenants, cached by Core; an in-memory store for tests and demos',
     ],
     fullOnly: true,
   },
@@ -98,7 +99,17 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
           README
         </a>{' '}
         says that from 10 November 2026, use of its official releases in revenue-generating work falls under an Open
-        Source Maintenance Fee.
+        Source Maintenance Fee. Its{' '}
+        <a
+          href={'https://github.com/sponsors/Finbuckle'}
+          target={'_blank'}
+          rel={'noopener noreferrer'}
+          className={'text-link hover:underline'}
+        >
+          Sponsors page
+        </a>{' '}
+        sets the fee at $10 to $60 a month by number of employees, for organisations with annual gross revenue of at
+        least US$10,000.
       </>,
       'LGPL-3.0; the SaaS module needs a commercial ABP licence (Team or higher)',
       <>
@@ -132,6 +143,7 @@ const SOURCES: { project: string; links: { label: string; href: string }[] }[] =
         href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/src/Finbuckle.MultiTenant.Abstractions/TenantInfo.cs',
       },
       { label: 'README', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/README.md' },
+      { label: 'Sponsors page', href: 'https://github.com/sponsors/Finbuckle' },
       { label: 'Issue #375', href: 'https://github.com/Finbuckle/Finbuckle.MultiTenant/issues/375' },
       { label: 'NuGet', href: 'https://www.nuget.org/packages/Finbuckle.MultiTenant.EntityFrameworkCore' },
     ],
