@@ -20,6 +20,14 @@ describe('InstallPanel', () => {
     expect(html).not.toContain('dotnet user-secrets');
   });
 
+  it('says what a restore needs while the package feed is unreachable', () => {
+    const html = render();
+
+    expect(html).toContain('so it fails while the feed cannot be reached');
+    expect(html).toContain('<code>NUGET_PACKAGES</code> names another; keep it between CI runs');
+    expect(html).toContain('warns NU1900 when it cannot');
+  });
+
   it('numbers the steps in order', () => {
     const steps = [...render().matchAll(/<h3[^>]*>(\d+)\. /g)].map((match) => Number(match[1]));
 

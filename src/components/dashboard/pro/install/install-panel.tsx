@@ -97,6 +97,15 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
             </p>
             <Snippet value={lockFileProperty} label={'Copy'} />
             <Snippet value={lockedRestore} />
+            <p className={'text-sm text-muted-foreground'}>
+              A restore downloads from the package feed each Pro package that is not already in NuGet&apos;s global
+              packages folder, so it fails while the feed cannot be reached. With lock files, a restore downloads
+              nothing from the feed when every package they name is already in that folder. The folder is{' '}
+              <code>~/.nuget/packages</code> unless <code>NUGET_PACKAGES</code> names another; keep it between CI runs.
+              NuGet&apos;s vulnerability audit still reads the feed and warns NU1900 when it cannot, which fails the
+              restore when warnings are errors. The feed publishes no vulnerability data, so an{' '}
+              <code>auditSources</code> list in nuget.config that names only nuget.org stops that.
+            </p>
           </Step>
 
           <Step title={'6. CI'}>
