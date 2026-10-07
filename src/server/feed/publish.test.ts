@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createLocalJWKSet, exportJWK, generateKeyPair, type JWK, type JWTPayload, SignJWT } from 'jose';
+import { createLocalJWKSet, errors, exportJWK, generateKeyPair, type JWK, type JWTPayload, SignJWT } from 'jose';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listReleases } from '@/server/db/package-feed';
 import type { FakeTable } from '@/test/fake-supabase';
@@ -623,6 +623,15 @@ describe('publishing from the release workflow with a GitHub OIDC token', () => 
     };
 
     await expect(push(efCore, null, await github.sign(release))).rejects.toThrow('fetch failed');
+    expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
+  });
+
+  it('fails, rather than refuses, when GitHub answers for its keys with an error', async () => {
+    deps.githubOidcKeys = async () => {
+      throw new errors.JOSEError('Expected 200 OK from the JSON Web Key Set HTTP response');
+    };
+
+    await expect(push(efCore, null, await github.sign(release))).rejects.toThrow('Expected 200 OK');
     expect(deps.storage.storePackageFile).not.toHaveBeenCalled();
   });
 

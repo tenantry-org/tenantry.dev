@@ -38,9 +38,16 @@ export async function releaseTokenRefusal(
       algorithms: ['RS256'],
     }));
   } catch (error) {
-    // GitHub's keys out of reach (a network failure or a timeout) is an outage, not a refusal: it becomes a 500, and
-    // the release can be run again.
-    if (!(error instanceof errors.JOSEError) || error instanceof errors.JWKSTimeout) throw error;
+    // GitHub's keys out of reach is an outage, not a refusal: it becomes a 500, and the release can be run again. That
+    // is a network failure, a timeout, or an answer that is not 200 or not JSON, the only case where jose throws its
+    // base JOSEError (ERR_JOSE_GENERIC).
+    if (
+      !(error instanceof errors.JOSEError) ||
+      error instanceof errors.JWKSTimeout ||
+      error.code === errors.JOSEError.code
+    ) {
+      throw error;
+    }
     return `The GitHub OIDC token is not valid for ${publishAudience(siteUrl)}: ${error.message}`;
   }
 
