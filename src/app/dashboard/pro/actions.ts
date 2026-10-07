@@ -46,6 +46,11 @@ export async function createFeedToken(name: unknown): Promise<Result<{ token: st
       };
     }
 
+    // Every read that can fail runs before the token is stored, so a failure never leaves a live token that was not
+    // shown. A test customer, such as the release check's, is sent no emails.
+    const email = confirmedEmail(await getCurrentUser());
+    const notify = email !== null && !(await isTestCustomer(customerId));
+
     let created: Awaited<ReturnType<typeof recordFeedToken>>;
     try {
       created = await recordFeedToken(customerId, trimmed);
@@ -60,9 +65,7 @@ export async function createFeedToken(name: unknown): Promise<Result<{ token: st
     }
 
     console.info(`Feed token ${created.id} created for customer ${customerId}.`);
-    const email = confirmedEmail(await getCurrentUser());
-    // A test customer, such as the release check's, is sent no emails.
-    if (email && !(await isTestCustomer(customerId))) {
+    if (notify) {
       // Never throws (send.ts). Tells the customer, so a token they did not create is noticed.
       await sendEmail(feedTokenCreatedEmail(email, { name: trimmed, prefix: created.prefix }, serverConfig().siteUrl));
     }

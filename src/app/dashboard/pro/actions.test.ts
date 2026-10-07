@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/server/db/customer-dashboard', () => ({
   getCustomerId: async () => mocks.customerId,
-  isTestCustomer: async () => mocks.isTest,
+  isTestCustomer: vi.fn(async () => mocks.isTest),
 }));
 vi.mock('@/server/db/current-user', () => ({ getCurrentUser: async () => mocks.user }));
 vi.mock('@/server/billing/pro-pages', () => ({
@@ -134,6 +134,16 @@ describe('createFeedToken', () => {
 
     await expect(createFeedToken('CI')).resolves.toEqual({ error: 'Something went wrong. Try again in a moment.' });
     expect(mocks.tokens.size).toBe(1);
+  });
+
+  it('stores no token when whether to email the customer cannot be read', async () => {
+    const { isTestCustomer } = await import('@/server/db/customer-dashboard');
+    vi.mocked(isTestCustomer).mockRejectedValueOnce({ code: '57014', message: 'statement timeout' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(createFeedToken('CI')).resolves.toEqual({ error: 'Something went wrong. Try again in a moment.' });
+    expect(mocks.tokens.size).toBe(1);
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
 });
 
