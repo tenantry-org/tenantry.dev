@@ -10,7 +10,7 @@ body:
 
         Remember to remove sensitive information from screenshots, videos, or code samples before submitting.
 
-        **Do not create issues for potential security vulnerabilities.** Please report them privately via [GitHub Security Advisories](https://github.com/tenantry-org/site/security/advisories/new).
+        **Do not create issues for potential security vulnerabilities.** Please report them privately via [GitHub Security Advisories](https://github.com/tenantry-org/tenantry.dev/security/advisories/new).
   - type: textarea
     id: description
     attributes:
