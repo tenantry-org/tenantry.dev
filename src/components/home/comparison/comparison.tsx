@@ -74,12 +74,12 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
     cells: ['You write it', 'Yes, both', 'Per-tenant settings and features', 'Yes, both'],
   },
   {
-    label: 'Built-in tenant stores',
+    label: 'Tenant stores',
     cells: [
       'Yours',
       'In-memory, configuration, EF Core, distributed cache, HTTP remote and echo',
       'Configuration, and a database store with a management UI in the Tenant Management module',
-      'In-memory only; any other store is an ITenantStore you write',
+      'One ITenantStore interface, two methods, over whatever already holds your tenants',
     ],
     fullOnly: true,
   },
