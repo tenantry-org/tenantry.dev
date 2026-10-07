@@ -8,7 +8,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(27);
+select plan(32);
 
 insert into public.customers (customer_id, email) values ('ctm_1', 'buyer@example.com');
 
@@ -109,6 +109,30 @@ select is(
   true, 'an event without the amount');
 select is((select subtotal from public.payment_adjustments where adjustment_id = 'adj_3'), 1000::bigint,
   'does not forget it');
+
+-- Acting on an adjustment: marked once acted on, and cleared only when a newer event changes its status.
+select is(
+  public.record_payment_adjustment('adj_4', 'txn_1', 'ctm_1', 'sub_1', 'refund', 'full', '{full}', 'pending_approval',
+    3900, 'GBP', '2027-01-10 00:00+00', '2027-01-10 00:00+00', '2027-01-10 00:00:01+00'),
+  true, 'a new adjustment is recorded');
+select is((select consequences_applied_at from public.payment_adjustments where adjustment_id = 'adj_4'), null,
+  'and is still to be acted on');
+update public.payment_adjustments set consequences_applied_at = '2027-01-10 00:01+00' where adjustment_id = 'adj_4';
+select public.record_payment_adjustment('adj_4', 'txn_1', 'ctm_1', 'sub_1', 'refund', 'full', '{full}',
+  'pending_approval', 3900, 'GBP', '2027-01-10 00:00+00', '2027-01-10 00:00+00', '2027-01-10 00:00:02+00');
+select is((select consequences_applied_at from public.payment_adjustments where adjustment_id = 'adj_4'),
+  '2027-01-10 00:01+00'::timestamptz, 'an event in the same status leaves it acted on');
+select public.record_payment_adjustment('adj_4', 'txn_1', 'ctm_1', 'sub_1', 'refund', 'full', '{full}', 'approved',
+  3900, 'GBP', '2027-01-10 00:00+00', '2027-01-11 00:00+00', '2027-01-11 00:00:01+00');
+select is((select consequences_applied_at from public.payment_adjustments where adjustment_id = 'adj_4'), null,
+  'its approval is to be acted on');
+update public.payment_adjustments set consequences_applied_at = '2027-01-11 00:01+00' where adjustment_id = 'adj_4';
+select public.record_payment_adjustment('adj_4', 'txn_1', 'ctm_1', 'sub_1', 'refund', 'full', '{full}',
+  'pending_approval', 3900, 'GBP', '2027-01-10 00:00+00', '2027-01-10 00:00+00', '2027-01-10 00:00:01+00');
+select results_eq(
+  $$select status, consequences_applied_at from public.payment_adjustments where adjustment_id = 'adj_4'$$,
+  $$values ('approved'::text, '2027-01-11 00:01+00'::timestamptz)$$,
+  'an older event delivered late leaves it approved and acted on');
 
 select ok(
   has_function_privilege('service_role',

@@ -92,20 +92,20 @@ describe('drainJobs', () => {
     expect(queue.releaseWaitingJobs).toHaveBeenCalledWith('ctm_1');
   });
 
-  it('stops claiming when its time budget is spent', async () => {
-    let clock = 0;
+  it('stops claiming 30 seconds after it starts when given no deadline', async () => {
+    let clock = 100_000;
     queue.claimJobs.mockImplementation(async () => {
       clock += 20_000;
       return [paddleEvent(`evt_${clock}`, 'subscription.updated', 'ctm_1')];
     });
 
-    const result = await drainJobs(handlers, { budgetMs: 30_000, now: () => clock });
+    const result = await drainJobs(handlers, { now: () => clock });
 
     expect(result.processed).toBe(2);
     expect(queue.claimJobs).toHaveBeenCalledTimes(2);
   });
 
-  it('starts no job once its time budget is spent, however many are due', async () => {
+  it('starts no job after its deadline, however many are due', async () => {
     let clock = 0;
     // Each claim hands over as many jobs as asked for.
     queue.claimJobs.mockImplementation(async (limit: number) =>
@@ -115,7 +115,7 @@ describe('drainJobs', () => {
       clock += 20_000;
     });
 
-    const result = await drainJobs(handlers, { budgetMs: 45_000, now: () => clock });
+    const result = await drainJobs(handlers, { deadline: 45_000, now: () => clock });
 
     expect(result.processed).toBe(3);
     expect(queue.claimJobs.mock.calls).toEqual([

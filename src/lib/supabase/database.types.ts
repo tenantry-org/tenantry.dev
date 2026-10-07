@@ -283,6 +283,7 @@ export type Database = {
           action: string;
           adjustment_id: string;
           approved_at: string | null;
+          consequences_applied_at: string | null;
           created_at: string;
           currency_code: string | null;
           customer_id: string;
@@ -300,6 +301,7 @@ export type Database = {
           action: string;
           adjustment_id: string;
           approved_at?: string | null;
+          consequences_applied_at?: string | null;
           created_at?: string;
           currency_code?: string | null;
           customer_id: string;
@@ -317,6 +319,7 @@ export type Database = {
           action?: string;
           adjustment_id?: string;
           approved_at?: string | null;
+          consequences_applied_at?: string | null;
           created_at?: string;
           currency_code?: string | null;
           customer_id?: string;

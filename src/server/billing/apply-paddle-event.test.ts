@@ -640,12 +640,44 @@ describe('applyPaddleEvent', () => {
       expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
-    it('fails the event when Paddle cannot be reached, so the worker retries it', async () => {
-      deps.cancelSubscriptionNow.mockRejectedValue(new Error('Paddle unavailable'));
+    it('fails the event when Paddle cannot be reached, so the worker retries it and then cancels', async () => {
+      deps.cancelSubscriptionNow.mockRejectedValueOnce(new Error('Paddle unavailable'));
 
       await expect(adjusted({ eventId: 'evt_down', action: 'refund', status: 'approved' })).rejects.toThrow(
         'Paddle unavailable',
       );
+
+      await adjusted({ eventId: 'evt_down', action: 'refund', status: 'approved' });
+      expect(deps.cancelSubscriptionNow).toHaveBeenCalledTimes(2);
+      expect(deps.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Subscription sub_01 cancelled after a refund',
+        expect.any(String),
+      );
+    });
+
+    it('acts on each status of an adjustment once, however often its events are delivered', async () => {
+      await adjusted({ eventId: 'evt_warn', action: 'chargeback_warning', status: 'approved' });
+      await adjusted({
+        eventId: 'evt_warn',
+        action: 'chargeback_warning',
+        status: 'approved',
+        occurredAt: '2026-09-11T00:00:00Z',
+      });
+      expect(deps.alertOperator).toHaveBeenCalledOnce();
+
+      await adjusted({
+        eventId: 'evt_warn',
+        action: 'chargeback_warning',
+        status: 'reversed',
+        occurredAt: '2026-09-12T00:00:00Z',
+      });
+      await adjusted({
+        eventId: 'evt_warn',
+        action: 'chargeback_warning',
+        status: 'approved',
+        occurredAt: '2026-09-13T00:00:00Z',
+      });
+      expect(deps.alertOperator).toHaveBeenCalledTimes(2);
     });
   });
 

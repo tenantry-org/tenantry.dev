@@ -7,12 +7,12 @@ const worker = vi.hoisted(() => ({ drainJobs: vi.fn(async () => ({ processed: 1,
 vi.mock('@/server/jobs/worker', () => worker);
 
 describe('processJobs', () => {
-  it("runs the due jobs with the billing services' handlers, within the time budget", async () => {
-    await expect(processJobs({ budgetMs: 45_000 })).resolves.toEqual({ processed: 1, retrying: 0, failed: 0 });
+  it("runs the due jobs with the billing services' handlers, until the deadline", async () => {
+    await expect(processJobs({ deadline: 45_000 })).resolves.toEqual({ processed: 1, retrying: 0, failed: 0 });
 
     expect(worker.drainJobs).toHaveBeenCalledExactlyOnceWith(
       { applyPaddleEvent, reconcileCustomer },
-      { budgetMs: 45_000 },
+      { deadline: 45_000 },
     );
   });
 });

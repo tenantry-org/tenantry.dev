@@ -7,7 +7,7 @@ import type { PaddleTransaction } from '@/server/integrations/paddle/list-transa
 import type { PaddleAdjustment } from '@/server/integrations/paddle/list-adjustments';
 import type { PaddleSubscription } from '@/server/integrations/paddle/get-subscription';
 import { subscriptionEndedAt } from '@/server/billing/paddle-assumptions';
-import type { Entitlement } from '@/server/db/billing-store';
+import type { AdjustmentToActOn, Entitlement } from '@/server/db/billing-store';
 import { normaliseEmail } from '@/server/db/customer-email';
 import { type BillingDeps, defaultBillingDeps, offeredPriceIds } from '@/server/billing/deps';
 
@@ -167,13 +167,33 @@ function amount(value: string): number {
 
 /**
  * Refunds, credits and chargebacks (Paddle adjustments). Each is recorded in the payment ledger, the customer brought
- * in line (syncCustomer), and then acted on (applyAdjustmentConsequences). Throwing (Paddle unavailable) makes the
- * worker retry; recording the adjustment again changes nothing.
+ * in line (syncCustomer), and then the customer's adjustments not yet acted on are acted on (actOnRecordedAdjustments).
+ * Throwing (Paddle unavailable) makes the worker retry; recording the adjustment again changes nothing, and one already
+ * acted on in its recorded status, by an earlier attempt or by reconcile, is not acted on again.
  */
 async function handleAdjustment(data: PaddleAdjustment, occurredAt: string, deps: BillingDeps) {
   await recordAdjustment(data, occurredAt, deps);
   const { entitlement } = await syncCustomer(data.customerId, deps);
-  await applyAdjustmentConsequences(data, entitlement, deps);
+  await actOnRecordedAdjustments(data.customerId, entitlement, deps);
+}
+
+/**
+ * Acts on each of the customer's recorded adjustments not yet acted on in its recorded status
+ * (applyAdjustmentConsequences), and marks it acted on once that succeeds. An event that changes an adjustment's status
+ * makes it due again (record_payment_adjustment). The webhook runs it after each adjustment event, and reconcile after
+ * recovering adjustments, each once the customer is in line (`entitlement` is syncCustomer's). So each status of an
+ * adjustment is acted on once, by whichever runs first, and a job that throws before an adjustment is marked acts on it
+ * when it is retried.
+ */
+export async function actOnRecordedAdjustments(
+  customerId: string,
+  entitlement: Entitlement,
+  deps: BillingDeps = defaultBillingDeps,
+): Promise<void> {
+  for (const adjustment of await deps.store.listAdjustmentsToActOn(customerId)) {
+    await applyAdjustmentConsequences(adjustment, entitlement, deps);
+    await deps.store.markAdjustmentActedOn(adjustment.adjustmentId, adjustment.status);
+  }
 }
 
 /**
@@ -186,23 +206,18 @@ async function handleAdjustment(data: PaddleAdjustment, occurredAt: string, deps
  * money is still kept from it (a prorated top-up, or one of two charges for the period), cancels nothing (the period
  * counts only for the money kept) and tells the operator. Every chargeback cancels, so charging back each month once
  * the next has renewed cannot keep access going. A partial refund, and a chargeback warning (which can still be
- * reversed), change no access but tell the operator. Credits and reversals change no access. The webhook runs it for
- * each adjustment event, and reconcile for each adjustment it recovers. Running it again cancels nothing more: a
- * cancelled subscription is not cancelled again (cancelSubscriptionNow).
+ * reversed), change no access but tell the operator. Credits and reversals change no access. Running it again cancels
+ * nothing more: a cancelled subscription is not cancelled again (cancelSubscriptionNow).
  */
-export async function applyAdjustmentConsequences(
-  data: PaddleAdjustment,
-  entitlement: Entitlement,
-  deps: BillingDeps = defaultBillingDeps,
-): Promise<void> {
-  if (entitlement.ambiguousReversals.includes(data.id)) {
+async function applyAdjustmentConsequences(data: AdjustmentToActOn, entitlement: Entitlement, deps: BillingDeps) {
+  if (entitlement.ambiguousReversals.includes(data.adjustmentId)) {
     await deps.alertOperator(
       `Paddle reversal to check for customer ${data.customerId}`,
-      `Adjustment ${data.id} (${data.action}) on transaction ${data.transactionId} could be a second record of a ` +
-        'reversal already recorded, or the reversal of another adjustment of the same kind still in force: Paddle ' +
-        'does not say which (paddle-assumptions.ts, assumption 8). It is counted as the first, restoring nothing. ' +
-        "If it reverses another, the customer is owed that time: add an operator grant once you have checked Paddle's " +
-        'records.',
+      `Adjustment ${data.adjustmentId} (${data.action}) on transaction ${data.transactionId} could be a second ` +
+        'record of a reversal already recorded, or the reversal of another adjustment of the same kind still in ' +
+        'force: Paddle does not say which (paddle-assumptions.ts, assumption 8). It is counted as the first, ' +
+        'restoring nothing. If it reverses another, the customer is owed that time: add an operator grant once you ' +
+        "have checked Paddle's records.",
     );
   }
 
@@ -213,7 +228,7 @@ export async function applyAdjustmentConsequences(
     if (data.status === 'approved' && ['refund', 'chargeback_warning'].includes(data.action)) {
       await deps.alertOperator(
         `Paddle ${data.action.replace('_', ' ')} for customer ${data.customerId}`,
-        `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId}` +
+        `Adjustment ${data.adjustmentId} (${data.type} ${data.action}) on transaction ${data.transactionId}` +
           `${data.subscriptionId ? `, subscription ${data.subscriptionId}` : ''}. Access is unchanged; ` +
           'cancel the subscription in Paddle if it should end.',
       );
@@ -224,7 +239,8 @@ export async function applyAdjustmentConsequences(
   if (!data.subscriptionId) {
     await deps.alertOperator(
       `Paddle ${data.action} without a subscription for customer ${data.customerId}`,
-      `Adjustment ${data.id} on transaction ${data.transactionId} names no subscription, so no access was changed.`,
+      `Adjustment ${data.adjustmentId} on transaction ${data.transactionId} names no subscription, so no access ` +
+        'was changed.',
     );
     return;
   }
@@ -234,19 +250,20 @@ export async function applyAdjustmentConsequences(
     if (!latest.some((period) => period.transactionIds.includes(data.transactionId))) {
       await deps.alertOperator(
         `Paddle ${data.action} of an earlier paid billing period for customer ${data.customerId}`,
-        `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId}, which is not the ` +
-          `latest paid billing period recorded for subscription ${data.subscriptionId}, so the subscription was not ` +
-          'cancelled: the period counts only for the money kept. Cancel the ' +
-          'subscription in Paddle if it should end.',
+        `Adjustment ${data.adjustmentId} (${data.type} ${data.action}) on transaction ${data.transactionId}, which ` +
+          `is not the latest paid billing period recorded for subscription ${data.subscriptionId}, so the ` +
+          'subscription was not cancelled: the period counts only for the money kept. Cancel the subscription in ' +
+          'Paddle if it should end.',
       );
       return;
     }
     if (latest.some((period) => period.keptShare > 0)) {
       await deps.alertOperator(
         `Paddle ${data.action} of part of the latest paid billing period for customer ${data.customerId}`,
-        `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId} leaves money kept ` +
-          `from the latest paid billing period of subscription ${data.subscriptionId}, so the subscription was not ` +
-          'cancelled: the period counts only for the money kept. Cancel the subscription in Paddle if it should end.',
+        `Adjustment ${data.adjustmentId} (${data.type} ${data.action}) on transaction ${data.transactionId} leaves ` +
+          `money kept from the latest paid billing period of subscription ${data.subscriptionId}, so the ` +
+          'subscription was not cancelled: the period counts only for the money kept. Cancel the subscription in ' +
+          'Paddle if it should end.',
       );
       return;
     }
@@ -255,8 +272,9 @@ export async function applyAdjustmentConsequences(
   if (await deps.cancelSubscriptionNow(data.subscriptionId)) {
     await deps.alertOperator(
       `Subscription ${data.subscriptionId} cancelled after a ${data.action}`,
-      `Adjustment ${data.id} (${data.type} ${data.action}) on transaction ${data.transactionId} for customer ` +
-        `${data.customerId}. The subscription was cancelled immediately; its access ends when Paddle confirms.`,
+      `Adjustment ${data.adjustmentId} (${data.type} ${data.action}) on transaction ${data.transactionId} for ` +
+        `customer ${data.customerId}. The subscription was cancelled immediately; its access ends when Paddle ` +
+        'confirms.',
     );
   }
 }

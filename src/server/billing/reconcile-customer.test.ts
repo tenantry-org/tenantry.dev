@@ -144,6 +144,21 @@ describe('reconcileCustomer', () => {
       expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
+    it('tells the operator about a subscription Paddle holds under another customer, and leaves it as recorded', async () => {
+      await startAccess();
+      deps.getSubscription.mockResolvedValue({ ...inPaddle('canceled', '2026-10-02T09:00:00Z'), customerId: 'ctm_2' });
+
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({
+        access: 'unchanged',
+        subscriptionsRecovered: 0,
+      });
+      expect(memory.state.subscriptions.get('sub_1')).toMatchObject({ customerId: 'ctm_1', status: 'active' });
+      expect(deps.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Subscription sub_1 is under another customer in Paddle',
+        expect.stringMatching(/recorded for customer ctm_1, but Paddle holds it under customer ctm_2/),
+      );
+    });
+
     it('carries on when Paddle cannot be asked about subscriptions', async () => {
       await startAccess();
       deps.getSubscription.mockRejectedValue(new Error('Paddle unavailable'));
@@ -317,7 +332,7 @@ describe('reconcileCustomer', () => {
         expect.not.stringContaining('cancelled'),
       );
 
-      // Recorded now, so a later reconcile does not act on it again.
+      // Acted on now, so a later reconcile does not act on it again.
       vi.clearAllMocks();
       await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ adjustmentsRecovered: 0 });
       expect(deps.cancelSubscriptionNow).not.toHaveBeenCalled();
@@ -333,18 +348,55 @@ describe('reconcileCustomer', () => {
       expect(deps.alertOperator).toHaveBeenCalledWith('Paddle refund for customer ctm_1', expect.any(String));
     });
 
-    it('finishes, and tells the operator, when acting on a recovered chargeback fails', async () => {
+    it('fails when acting on a recovered chargeback fails, and acts on it when the job is retried', async () => {
       await startAccess();
       deps.listAdjustments.mockResolvedValue([listedAdjustment('chargeback', { action: 'chargeback' })]);
-      deps.cancelSubscriptionNow.mockRejectedValue(new Error('Paddle unavailable'));
-      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      deps.cancelSubscriptionNow.mockRejectedValueOnce(new Error('Paddle unavailable'));
 
-      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ adjustmentsRecovered: 1 });
+      await expect(reconcileCustomer('ctm_1', deps)).rejects.toThrow('Paddle unavailable');
       expect(memory.state.adjustments.get('adj_chargeback')).toMatchObject({ status: 'approved' });
-      expect(deps.alertOperator).toHaveBeenCalledWith(
-        'Reconcile could not act on adjustment adj_chargeback for customer ctm_1',
-        expect.stringContaining('cancel its subscription in Paddle'),
+
+      // Recorded by the failed attempt, so the retry does not recover it, but still acts on it.
+      vi.clearAllMocks();
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ adjustmentsRecovered: 0 });
+      expect(deps.cancelSubscriptionNow).toHaveBeenCalledExactlyOnceWith('sub_1');
+      expect(deps.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Subscription sub_1 cancelled after a chargeback',
+        expect.any(String),
       );
+    });
+
+    it('acts on an adjustment once, whether reconcile or its notification gets to it first', async () => {
+      await startAccess();
+      const partial = listedAdjustment('partial', { subtotal: '1950', type: 'partial' });
+      deps.listAdjustments.mockResolvedValue([partial]);
+
+      await reconcileCustomer('ctm_1', deps);
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Recovered 1 adjustment for customer ctm_1',
+        expect.stringContaining('or are still on their way'),
+      );
+      expect(deps.alertOperator).toHaveBeenCalledWith('Paddle refund for customer ctm_1', expect.any(String));
+
+      // Its notification, queued behind the reconcile, arrives with the same status.
+      vi.clearAllMocks();
+      await applyPaddleEvent(
+        Webhooks.fromJson(
+          adjustmentEvent({
+            eventId: 'partial',
+            action: 'refund',
+            type: 'partial',
+            subtotal: '1950',
+            status: 'approved',
+            customerId: 'ctm_1',
+            subscriptionId: 'sub_1',
+            transactionId: 'txn_kept',
+            occurredAt: '2026-09-20T00:00:01Z',
+          }) as unknown as Parameters<typeof Webhooks.fromJson>[0],
+        ),
+        deps,
+      );
+      expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
     it('carries on when Paddle cannot list adjustments', async () => {

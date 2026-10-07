@@ -20,10 +20,11 @@ interface Licence {
   jwt: string;
 }
 
-/** A recorded adjustment, with the times record_payment_adjustment derives. */
+/** A recorded adjustment, with the times record_payment_adjustment derives, and when it was acted on. */
 interface StoredAdjustment extends PaymentAdjustmentEvent {
   approvedAt: string | null;
   reversedAt: string | null;
+  consequencesAppliedAt: string | null;
 }
 
 const state = {
@@ -195,8 +196,31 @@ export const memory = {
         currencyCode: existing?.currencyCode ?? event.currencyCode,
         approvedAt: existing?.approvedAt ?? approvedAt,
         reversedAt: existing?.reversedAt ?? reversedAt,
+        // As record_payment_adjustment does: a newer event that changes the status is to be acted on again.
+        consequencesAppliedAt:
+          newer && existing?.status !== event.status ? null : (existing?.consequencesAppliedAt ?? null),
       });
       return true;
+    },
+
+    async listAdjustmentsToActOn(customerId: string) {
+      return [...state.adjustments.values()]
+        .filter((adjustment) => adjustment.customerId === customerId && adjustment.consequencesAppliedAt === null)
+        .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
+        .map((adjustment) => ({
+          adjustmentId: adjustment.adjustmentId,
+          transactionId: adjustment.transactionId,
+          customerId: adjustment.customerId,
+          subscriptionId: adjustment.subscriptionId,
+          action: adjustment.action,
+          type: adjustment.type,
+          status: adjustment.status,
+        }));
+    },
+
+    async markAdjustmentActedOn(adjustmentId: string, status: string) {
+      const adjustment = state.adjustments.get(adjustmentId);
+      if (adjustment?.status === status) adjustment.consequencesAppliedAt = new Date().toISOString();
     },
 
     async listPayments(customerId: string) {

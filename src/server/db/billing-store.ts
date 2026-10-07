@@ -457,6 +457,51 @@ export async function listPaymentAdjustments(customerId: string): Promise<Paymen
   }));
 }
 
+/** A recorded adjustment, with what acting on it reads (`payment_adjustments`). */
+export type AdjustmentToActOn = Pick<
+  PaymentAdjustmentEvent,
+  'adjustmentId' | 'transactionId' | 'customerId' | 'subscriptionId' | 'action' | 'type' | 'status'
+>;
+
+/**
+ * The customer's recorded adjustments not yet acted on in their recorded status (`consequences_applied_at` is null;
+ * record_payment_adjustment clears it when an event changes the status), oldest event first.
+ */
+export async function listAdjustmentsToActOn(customerId: string): Promise<AdjustmentToActOn[]> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('payment_adjustments')
+    .select('adjustment_id,transaction_id,customer_id,subscription_id,action,type,status')
+    .eq('customer_id', customerId)
+    .is('consequences_applied_at', null)
+    .order('last_event_at')
+    .order('adjustment_id');
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    adjustmentId: row.adjustment_id,
+    transactionId: row.transaction_id,
+    customerId: row.customer_id,
+    subscriptionId: row.subscription_id,
+    action: row.action,
+    type: row.type,
+    status: row.status,
+  }));
+}
+
+/** Marks an adjustment acted on in this status. If another status has been recorded since, it stays to be acted on. */
+export async function markAdjustmentActedOn(adjustmentId: string, status: string): Promise<void> {
+  const supabase = createServiceRoleClient();
+  const { error } = await supabase
+    .from('payment_adjustments')
+    .update({ consequences_applied_at: new Date().toISOString() })
+    .eq('adjustment_id', adjustmentId)
+    .eq('status', status);
+
+  if (error) throw error;
+}
+
 /** The customer's subscriptions, as the access and entitlement rules read them. */
 export async function listSubscriptions(customerId: string): Promise<SubscriptionState[]> {
   const supabase = createServiceRoleClient();

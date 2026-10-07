@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeCall, FakeTable } from '@/test/fake-supabase';
 import {
   customersToReconcile,
+  listAdjustmentsToActOn,
   listGrants,
   listPaymentAdjustments,
   listPayments,
   listSubscriptions,
+  markAdjustmentActedOn,
   readOperatorVestedThrough,
   recordCustomerEvent,
   recordPayment,
@@ -231,6 +233,50 @@ describe('the payment ledger', () => {
 
     state.rpcError = { code: '23503', message: 'violates foreign key constraint' };
     await expect(recordPaymentAdjustment(adjustment)).rejects.toMatchObject({ code: '23503' });
+  });
+
+  it('reads the adjustments not yet acted on, and marks one acted on only in the status it was acted on in', async () => {
+    state.tables.payment_adjustments = {
+      list: [
+        {
+          adjustment_id: 'adj_1',
+          transaction_id: 'txn_1',
+          customer_id: 'ctm_1',
+          subscription_id: null,
+          action: 'refund',
+          type: 'full',
+          status: 'approved',
+        },
+      ],
+    };
+
+    await expect(listAdjustmentsToActOn('ctm_1')).resolves.toEqual([
+      {
+        adjustmentId: 'adj_1',
+        transactionId: 'txn_1',
+        customerId: 'ctm_1',
+        subscriptionId: null,
+        action: 'refund',
+        type: 'full',
+        status: 'approved',
+      },
+    ]);
+    expect(state.calls).toContainEqual({
+      table: 'payment_adjustments',
+      method: 'is',
+      args: ['consequences_applied_at', null],
+    });
+
+    await markAdjustmentActedOn('adj_1', 'approved');
+    const writes = state.calls.filter((call) => call.method === 'update' || call.method === 'eq').slice(-3);
+    expect(writes).toEqual([
+      { table: 'payment_adjustments', method: 'update', args: [{ consequences_applied_at: expect.any(String) }] },
+      { table: 'payment_adjustments', method: 'eq', args: ['adjustment_id', 'adj_1'] },
+      { table: 'payment_adjustments', method: 'eq', args: ['status', 'approved'] },
+    ]);
+
+    state.tables.payment_adjustments.writeError = { code: '42501', message: 'permission denied' };
+    await expect(markAdjustmentActedOn('adj_1', 'approved')).rejects.toMatchObject({ code: '42501' });
   });
 
   it('reads payments, adjustments and subscriptions as the rules take them', async () => {

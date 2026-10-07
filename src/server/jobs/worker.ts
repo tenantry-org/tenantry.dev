@@ -26,19 +26,20 @@ export interface JobHandlers {
 }
 
 /**
- * Runs due customer jobs (db/customer-jobs.ts) until none are left or the time budget is spent. Runs after each
- * webhook response and from the reconcile cron, so a failed job is retried even if no further notification arrives.
- * Several drains can run at once: the claim hands each customer's jobs to one of them, in order. It claims one job at
- * a time, so it starts no job once the budget is spent, and every job it claims it runs.
+ * Runs due customer jobs (db/customer-jobs.ts) until none are left or the `deadline` (a time in milliseconds, by
+ * default 30 seconds from the start of the drain) has passed. Runs after each webhook response and from the reconcile
+ * cron, so a failed job is retried even if no further notification arrives. Several drains can run at once: the claim
+ * hands each customer's jobs to one of them, in order. It claims one job at a time, so it starts no job after the
+ * deadline, and every job it claims it runs.
  */
 export async function drainJobs(
   handlers: JobHandlers,
-  { budgetMs = 30_000, now = () => Date.now() }: { budgetMs?: number; now?: () => number } = {},
+  { deadline, now = () => Date.now() }: { deadline?: number; now?: () => number } = {},
 ): Promise<DrainResult> {
   const result: DrainResult = { processed: 0, retrying: 0, failed: 0 };
-  const deadline = now() + budgetMs;
+  const end = deadline ?? now() + 30_000;
 
-  while (now() < deadline) {
+  while (now() < end) {
     const [job] = await claimJobs(1, LOCK_SECONDS);
     if (!job) break;
 
@@ -73,10 +74,11 @@ async function handleJob(job: Job, handlers: JobHandlers): Promise<keyof DrainRe
         `Job ${job.id} (${describe(job)}, customer ${job.customerId ?? 'none'}) failed on every attempt and will ` +
           `not be retried: ${errorMessage(error)}. Its effect is missing until someone handles it. The next ` +
           "reconcile recomputes the customer's access and entitlement from what is recorded, records a completed " +
-          'Pro payment, refund, credit or chargeback Paddle lists that is missing, acting on it as the webhook ' +
-          'would, and records the current status of each Pro subscription recorded as active, trialing or past due. ' +
-          'It does not recover a lost customer event, or an event for a subscription recorded with another status or ' +
-          'not recorded at all: for those, replay the notification from Paddle.',
+          'Pro payment, refund, credit or chargeback Paddle lists that is missing, acts as the webhook would on any ' +
+          'recorded refund, credit or chargeback not yet acted on, and records the current status of each Pro ' +
+          'subscription recorded as active, trialing or past due. It does not recover a lost customer event, or an ' +
+          'event for a subscription recorded with another status or not recorded at all: for those, replay the ' +
+          'notification from Paddle.',
       );
     }
 

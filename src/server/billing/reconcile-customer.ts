@@ -1,13 +1,13 @@
 import 'server-only';
 import { type AccessChange, type LicenceOutcome, syncCustomer } from '@/server/billing/customer-access';
 import {
-  applyAdjustmentConsequences,
+  actOnRecordedAdjustments,
   recordAdjustment,
   recordCompletedTransaction,
   recordSubscription,
 } from '@/server/billing/apply-paddle-event';
 import { PAYMENT_RECOVERY_DAYS } from '@/server/billing/paddle-assumptions';
-import type { Entitlement, SubscriptionState } from '@/server/db/billing-store';
+import type { SubscriptionState } from '@/server/db/billing-store';
 import type { PaddleTransaction } from '@/server/integrations/paddle/list-transactions';
 import type { PaddleAdjustment } from '@/server/integrations/paddle/list-adjustments';
 import type { PaddleSubscription } from '@/server/integrations/paddle/get-subscription';
@@ -46,7 +46,9 @@ const RUNNING_STATUSES = ['active', 'trialing', 'past_due'];
  *     completed transactions of the customer's Pro subscriptions are listed, and any missing is recorded,
  *   - a refund, credit or chargeback whose adjustment notification never arrived or failed: the adjustments of the
  *     same subscriptions created in the same window are listed, and any missing, or recorded in an older state, is
- *     recorded and acted on as the webhook would (an approved full refund or chargeback cancels the subscription),
+ *     recorded. Then every recorded adjustment not yet acted on, including one an earlier attempt recorded, is acted
+ *     on as the webhook would (actOnRecordedAdjustments: an approved full refund or chargeback cancels the
+ *     subscription),
  *   - entitlement that changes with time alone: paid time served that reaches 12 paid months or serves another period
  *     (syncCustomer recomputes it, and tells the customer about a grant confirmed or withdrawn).
  *
@@ -62,17 +64,11 @@ export async function reconcileCustomer(
   const subscriptionIds = subscriptions.map((subscription) => subscription.subscriptionId);
   const subscriptionsRecovered = await recoverSubscriptions(customerId, subscriptions, deps);
   const paymentsRecovered = await recoverPayments(customerId, subscriptionIds, deps);
-  const adjustments = await recoverAdjustments(customerId, subscriptionIds, deps);
+  const adjustmentsRecovered = await recoverAdjustments(customerId, subscriptionIds, deps);
   const { change, licence, entitlement } = await syncCustomer(customerId, deps);
-  for (const adjustment of adjustments ?? []) await actOnAdjustment(customerId, adjustment, entitlement, deps);
+  await actOnRecordedAdjustments(customerId, entitlement, deps);
 
-  return {
-    access: change,
-    licence,
-    subscriptionsRecovered,
-    paymentsRecovered,
-    adjustmentsRecovered: adjustments === null ? null : adjustments.length,
-  };
+  return { access: change, licence, subscriptionsRecovered, paymentsRecovered, adjustmentsRecovered };
 }
 
 /** How often a reconcile process alerts that Paddle cannot be reached: once per outage, not once per customer. */
@@ -87,7 +83,8 @@ export function resetRecoveryAlerts() {
 // Records each of the customer's running Pro subscriptions as Paddle holds it now, through the webhook's own path
 // (recordSubscription, as of Paddle's updatedAt, so a newer recorded event is kept: paddle-assumptions.ts, assumption
 // 9), and returns how many changed status. The operator is told of each change: it means a notification was lost.
-// Paddle unreachable is handled as in recoverPayments.
+// A subscription Paddle now holds under another customer is left as recorded, and the operator is told, since only
+// its notification can move it. Paddle unreachable is handled as in recoverPayments.
 async function recoverSubscriptions(
   customerId: string,
   subscriptions: SubscriptionState[],
@@ -109,7 +106,16 @@ async function recoverSubscriptions(
   let pastDue = false;
   for (const [i, subscription] of current.entries()) {
     const recordedStatus = running[i].status;
-    if (subscription.customerId !== customerId) continue;
+    if (subscription.customerId !== customerId) {
+      await deps.alertOperator(
+        `Subscription ${subscription.id} is under another customer in Paddle`,
+        `Subscription ${subscription.id} is recorded for customer ${customerId}, but Paddle holds it under customer ` +
+          `${subscription.customerId}. Reconcile leaves it as recorded, so ${customerId} keeps any access it gives. ` +
+          'Its subscription notification was lost or failed, or is still on its way; check customer_jobs, or replay ' +
+          'the notification from Paddle.',
+      );
+      continue;
+    }
     if (!(await recordSubscription(subscription, subscription.updatedAt, deps))) continue;
     if (subscription.status === recordedStatus) continue;
     changed.push(`${subscription.id} (recorded ${recordedStatus}, now ${subscription.status})`);
@@ -169,8 +175,8 @@ async function recoverPayments(
     await deps.alertOperator(
       `Recovered ${recovered.length} payment${recovered.length === 1 ? '' : 's'} for customer ${customerId}`,
       `Reconcile found completed Pro transactions in Paddle that the payment ledger was missing, and recorded them: ` +
-        `${recovered.join(', ')}. Their transaction.completed notifications were lost or failed; check the ` +
-        'notification destination and customer_jobs.',
+        `${recovered.join(', ')}. Their transaction.completed notifications were lost or failed, or are still on ` +
+        'their way; check the notification destination and customer_jobs.',
     );
   }
 
@@ -179,14 +185,14 @@ async function recoverPayments(
 
 // Records the adjustments of the customer's Pro subscriptions, created in the recovery window, that Paddle lists and
 // the ledger is missing or holds in another state, through the webhook's own path (recordAdjustment, whose ordering
-// guard keeps a newer recorded state), and returns those it recorded, for reconcile to act on once the customer is in
-// line. Paddle unreachable is handled as for payments.
+// guard keeps a newer recorded state), and returns how many it recorded. Reconcile acts on them once the customer is
+// in line. Paddle unreachable is handled as for payments.
 async function recoverAdjustments(
   customerId: string,
   subscriptionIds: string[],
   deps: BillingDeps,
-): Promise<PaddleAdjustment[] | null> {
-  if (subscriptionIds.length === 0) return [];
+): Promise<number | null> {
+  if (subscriptionIds.length === 0) return 0;
 
   let listed: PaddleAdjustment[];
   try {
@@ -200,47 +206,26 @@ async function recoverAdjustments(
   const since = recoveryWindowStart().getTime();
   const recorded = new Map((await deps.store.listPaymentAdjustments(customerId)).map((a) => [a.adjustmentId, a]));
   const seen = new Set<string>();
-  const recovered: PaddleAdjustment[] = [];
+  const recovered: string[] = [];
   for (const adjustment of listed) {
     if (adjustment.customerId !== customerId || seen.has(adjustment.id)) continue;
     seen.add(adjustment.id);
     if (new Date(adjustment.createdAt).getTime() < since) continue;
     const existing = recorded.get(adjustment.id);
     if (existing && existing.status === adjustment.status && existing.amount !== null) continue;
-    if (await recordAdjustment(adjustment, adjustment.updatedAt, deps)) recovered.push(adjustment);
+    if (await recordAdjustment(adjustment, adjustment.updatedAt, deps)) recovered.push(adjustment.id);
   }
 
   if (recovered.length > 0) {
     await deps.alertOperator(
       `Recovered ${recovered.length} adjustment${recovered.length === 1 ? '' : 's'} for customer ${customerId}`,
       `Reconcile found refunds, credits or chargebacks in Paddle that the payment ledger was missing or held in an ` +
-        `older state, and recorded them: ${recovered.map((adjustment) => adjustment.id).join(', ')}. Their ` +
-        'adjustment notifications were lost or failed; check the notification destination and customer_jobs.',
+        `older state, and recorded them: ${recovered.join(', ')}. Their adjustment notifications were lost or ` +
+        'failed, or are still on their way; check the notification destination and customer_jobs.',
     );
   }
 
-  return recovered;
-}
-
-// Acts on a recovered adjustment as the webhook would (applyAdjustmentConsequences), once the customer is in line. It
-// is recorded already, so a later reconcile would not act on it again: a failure is alerted on rather than thrown.
-async function actOnAdjustment(
-  customerId: string,
-  adjustment: PaddleAdjustment,
-  entitlement: Entitlement,
-  deps: BillingDeps,
-) {
-  try {
-    await applyAdjustmentConsequences(adjustment, entitlement, deps);
-  } catch (error) {
-    console.error(`Reconcile: acting on adjustment ${adjustment.id} for customer ${customerId} failed:`, error);
-    await deps.alertOperator(
-      `Reconcile could not act on adjustment ${adjustment.id} for customer ${customerId}`,
-      `Adjustment ${adjustment.id} (${adjustment.type} ${adjustment.action}, ${adjustment.status}) on transaction ` +
-        `${adjustment.transactionId} is recorded, but acting on it failed: ${errorMessage(error)}. It is not tried ` +
-        'again. If it is an approved full refund or chargeback, cancel its subscription in Paddle.',
-    );
-  }
+  return recovered.length;
 }
 
 function recoveryWindowStart(): Date {

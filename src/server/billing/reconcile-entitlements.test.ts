@@ -10,6 +10,7 @@ function fakeDeps(customers: string[]) {
     enqueueReconcileJobs: vi.fn<ReconcileDeps['enqueueReconcileJobs']>(async () => undefined),
     processJobs: vi.fn<ReconcileDeps['processJobs']>(async () => ({ processed: 3, retrying: 0, failed: 0 })),
     deleteFeedDownloadsBefore: vi.fn<ReconcileDeps['deleteFeedDownloadsBefore']>(async () => 2),
+    alertOperator: vi.fn<ReconcileDeps['alertOperator']>(async () => undefined),
   } satisfies ReconcileDeps;
 }
 
@@ -27,7 +28,8 @@ describe('reconcileEntitlements', () => {
       ['ctm_entitled', 'ctm_linked', 'ctm_revoked_by_mistake'],
       NOW,
     );
-    expect(deps.processJobs).toHaveBeenCalledWith({ budgetMs: 45_000 });
+    // The time budget counts from the start of the run, not of the drain.
+    expect(deps.processJobs).toHaveBeenCalledWith({ deadline: NOW.getTime() + 45_000 });
     expect(deps.enqueueReconcileJobs.mock.invocationCallOrder[0]).toBeLessThan(
       deps.processJobs.mock.invocationCallOrder[0],
     );
@@ -41,6 +43,25 @@ describe('reconcileEntitlements', () => {
     expect(deps.deleteFeedDownloadsBefore).toHaveBeenCalledExactlyOnceWith(new Date('2026-08-02T04:00:00Z'));
     expect(deps.deleteFeedDownloadsBefore.mock.invocationCallOrder[0]).toBeLessThan(
       deps.processJobs.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('still queues and runs the jobs when the deletion fails, and tells the operator', async () => {
+    const deps = fakeDeps(['ctm_entitled']);
+    deps.deleteFeedDownloadsBefore.mockRejectedValue({ code: '57014', message: 'canceling statement due to timeout' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(reconcileEntitlements({ now: NOW, budgetMs: 45_000 }, deps)).resolves.toEqual({
+      customers: 1,
+      jobs: { processed: 3, retrying: 0, failed: 0 },
+      feedDownloadsDeleted: null,
+    });
+
+    expect(deps.enqueueReconcileJobs).toHaveBeenCalledExactlyOnceWith(['ctm_entitled'], NOW);
+    expect(deps.processJobs).toHaveBeenCalledOnce();
+    expect(deps.alertOperator).toHaveBeenCalledExactlyOnceWith(
+      'Old feed download records were not deleted',
+      expect.stringContaining('canceling statement due to timeout'),
     );
   });
 

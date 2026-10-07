@@ -18,8 +18,8 @@ async function handle(request: Request) {
   }
 
   try {
-    // The drain starts no job after 45 seconds, so the one it is running has the rest of maxDuration to finish. Jobs
-    // it does not reach run in later drains.
+    // The run starts no job once 45 seconds have passed since it began, so the one it is running has the rest of
+    // maxDuration to finish. Jobs it does not reach run in later drains.
     const result = await reconcileEntitlements({ budgetMs: 45_000 });
     return Response.json({ status: 'ok', ...result });
   } catch (error) {

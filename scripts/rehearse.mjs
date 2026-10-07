@@ -163,7 +163,8 @@ async function insertPeriods(anchor, periods, interval) {
 }
 
 // An approved refund or chargeback of `share` (0 to 1) of the newest rehearsal payment's charge, with its amount
-// before tax and currency, as the webhook records Paddle's (record_payment_adjustment).
+// before tax and currency, as the webhook records Paddle's (record_payment_adjustment). It is marked acted on, so
+// reconcile does not cancel the customer's subscription in Paddle or alert the operator over it.
 async function adjust(action, share = 1) {
   const payment = await newestRehearsalPayment();
   const now = new Date().toISOString();
@@ -184,6 +185,7 @@ async function adjust(action, share = 1) {
       currency_code: payment.currency_code,
       approved_at: now,
       last_event_at: now,
+      consequences_applied_at: now,
     }),
   );
   return [
