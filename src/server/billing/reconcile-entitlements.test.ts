@@ -33,14 +33,14 @@ describe('reconcileEntitlements', () => {
     );
   });
 
-  it('deletes the feed download records older than 90 days, after the jobs', async () => {
+  it('deletes the feed download records older than 90 days before the jobs, which can run to the time limit', async () => {
     const deps = fakeDeps([]);
 
     await reconcileEntitlements({ now: NOW }, deps);
 
     expect(deps.deleteFeedDownloadsBefore).toHaveBeenCalledExactlyOnceWith(new Date('2026-08-02T04:00:00Z'));
-    expect(deps.processJobs.mock.invocationCallOrder[0]).toBeLessThan(
-      deps.deleteFeedDownloadsBefore.mock.invocationCallOrder[0],
+    expect(deps.deleteFeedDownloadsBefore.mock.invocationCallOrder[0]).toBeLessThan(
+      deps.processJobs.mock.invocationCallOrder[0],
     );
   });
 

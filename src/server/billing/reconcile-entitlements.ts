@@ -6,12 +6,12 @@ import type { DrainResult } from '@/server/jobs/worker';
 import { processJobs } from '@/server/billing/process-jobs';
 
 /**
- * The reconcile run (the daily cron, /api/reconcile): queues a reconcile job for every customer whose state may need
- * correcting (customers_to_reconcile), then runs the due jobs. The worker runs each reconcile (reconcile-customer.ts)
- * in order with that customer's Paddle events and never alongside one, so reconciling cannot race a webhook: it sees
- * the customer's entitlements as the events before it left them. Jobs the run does not reach, or that fail and back
- * off, are picked up by later runs and webhooks. Last, it deletes the package feed's download records older than
- * FEED_DOWNLOAD_RETENTION_DAYS.
+ * The reconcile run (the daily cron, /api/reconcile): deletes the package feed's download records older than
+ * FEED_DOWNLOAD_RETENTION_DAYS, queues a reconcile job for every customer whose state may need correcting
+ * (customers_to_reconcile), then runs the due jobs. The deletion comes first, so a run stopped at its time limit has
+ * still done it. The worker runs each reconcile (reconcile-customer.ts) in order with that customer's Paddle events and
+ * never alongside one, so reconciling cannot race a webhook: it sees the customer's entitlements as the events before
+ * it left them. Jobs the run does not reach, or that fail and back off, are picked up by later runs and webhooks.
  */
 export interface ReconcileResult {
   customers: number;
@@ -42,13 +42,13 @@ export async function reconcileEntitlements(
   { now = new Date(), budgetMs }: { now?: Date; budgetMs?: number } = {},
   deps: ReconcileDeps = defaultReconcileDeps,
 ): Promise<ReconcileResult> {
-  const customerIds = await deps.customersToReconcile();
-  await deps.enqueueReconcileJobs(customerIds, now);
-
-  const jobs = await deps.processJobs({ budgetMs });
   const feedDownloadsDeleted = await deps.deleteFeedDownloadsBefore(
     new Date(now.getTime() - FEED_DOWNLOAD_RETENTION_DAYS * DAY_MS),
   );
+
+  const customerIds = await deps.customersToReconcile();
+  await deps.enqueueReconcileJobs(customerIds, now);
+  const jobs = await deps.processJobs({ budgetMs });
 
   return { customers: customerIds.length, jobs, feedDownloadsDeleted };
 }

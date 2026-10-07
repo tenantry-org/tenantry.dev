@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Job } from '@/server/db/customer-jobs';
-import { drainJobs } from './worker';
+import { drainJobs, LOCK_SECONDS } from './worker';
 import { customerEvent, subscriptionEvent } from '@/test/paddle-events';
 
 const queue = vi.hoisted(() => ({
@@ -103,6 +103,26 @@ describe('drainJobs', () => {
 
     expect(result.processed).toBe(2);
     expect(queue.claimJobs).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts no job once its time budget is spent, however many are due', async () => {
+    let clock = 0;
+    // Each claim hands over as many jobs as asked for.
+    queue.claimJobs.mockImplementation(async (limit: number) =>
+      Array.from({ length: limit }, (_, n) => paddleEvent(`evt_${clock}_${n}`, 'subscription.updated', `ctm_${n}`)),
+    );
+    handlers.applyPaddleEvent.mockImplementation(async () => {
+      clock += 20_000;
+    });
+
+    const result = await drainJobs(handlers, { budgetMs: 45_000, now: () => clock });
+
+    expect(result.processed).toBe(3);
+    expect(queue.claimJobs.mock.calls).toEqual([
+      [1, LOCK_SECONDS],
+      [1, LOCK_SECONDS],
+      [1, LOCK_SECONDS],
+    ]);
   });
 
   it('runs a reconcile job as a reconcile, not as a Paddle event', async () => {

@@ -6,10 +6,9 @@ import { errorMessage } from '@/lib/errors';
 
 /**
  * How long a claimed job stays locked: longer than running one job can take, since every route that runs jobs stops
- * at its `maxDuration`, which is shorter (lease-deadlines.test.ts).
+ * at its `maxDuration`, which is shorter (claim-deadlines.test.ts).
  */
 export const LOCK_SECONDS = 120;
-const BATCH_SIZE = 5;
 
 export interface DrainResult {
   processed: number;
@@ -29,7 +28,8 @@ export interface JobHandlers {
 /**
  * Runs due customer jobs (db/customer-jobs.ts) until none are left or the time budget is spent. Runs after each
  * webhook response and from the reconcile cron, so a failed job is retried even if no further notification arrives.
- * Several drains can run at once: the claim hands each customer's jobs to one of them, in order.
+ * Several drains can run at once: the claim hands each customer's jobs to one of them, in order. It claims one job at
+ * a time, so it starts no job once the budget is spent, and every job it claims it runs.
  */
 export async function drainJobs(
   handlers: JobHandlers,
@@ -39,12 +39,10 @@ export async function drainJobs(
   const deadline = now() + budgetMs;
 
   while (now() < deadline) {
-    const jobs = await claimJobs(BATCH_SIZE, LOCK_SECONDS);
-    if (jobs.length === 0) break;
+    const [job] = await claimJobs(1, LOCK_SECONDS);
+    if (!job) break;
 
-    for (const job of jobs) {
-      result[await handleJob(job, handlers)]++;
-    }
+    result[await handleJob(job, handlers)]++;
   }
 
   return result;
