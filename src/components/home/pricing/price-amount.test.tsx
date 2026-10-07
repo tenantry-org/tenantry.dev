@@ -9,13 +9,14 @@ const render = (prices: PricesState, basePrice: string | null = null) =>
   );
 
 describe('PriceAmount', () => {
-  it("shows the price's localised total, without a zero fraction, in place of the base price", () => {
+  it("shows the price's localised total, without a zero fraction, in place of the base price, and that it includes tax", () => {
     const html = render({ status: 'ready', prices: { pri_01month: '€30.00', pri_01year: '€300.00' } }, '£15');
 
     expect(html).toContain('€30<');
     expect(html).not.toContain('€300');
     expect(html).not.toContain('£15');
     expect(html).not.toContain('your currency');
+    expect(html).toContain('per month. Includes any tax for your country.');
   });
 
   it('shows the base price, and that the checkout shows the visitor’s own, until Paddle.js does or if it cannot', () => {

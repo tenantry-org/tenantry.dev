@@ -10,7 +10,10 @@ interface Props {
   priceSuffix: string;
 }
 
-/** The visitor's price once Paddle.js has localised it, and until then, or if it cannot, the base price. */
+/**
+ * The visitor's price once Paddle.js has localised it, and until then, or if it cannot, the base price. The localised
+ * price is the checkout's total for the visitor's country, tax included, so it says so.
+ */
 export function PriceAmount({ prices, basePrice, priceId, priceSuffix }: Props) {
   const localised = prices.status === 'ready';
   const amount = localised ? prices.prices[priceId] : basePrice;
@@ -27,7 +30,7 @@ export function PriceAmount({ prices, basePrice, priceId, priceSuffix }: Props) 
       )}
       <div className={'text-sm text-muted-foreground'}>
         {priceSuffix}
-        {!localised && basePrice && `. ${CHECKOUT_PRICE_NOTE}`}
+        {localised ? '. Includes any tax for your country.' : basePrice && `. ${CHECKOUT_PRICE_NOTE}`}
       </div>
     </div>
   );

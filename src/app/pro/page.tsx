@@ -190,6 +190,8 @@ const QUESTIONS = [
   },
   {
     question: 'What happens when the subscription ends?',
+    // The price cards link here.
+    id: 'subscription-ends',
     answer: `You keep ${VESTED_RELEASES}. That date is set once you reach 12 paid months, which need not be consecutive, and keeps moving while you pay. An annual term sets it to the end of the term as soon as you pay for it. The package feed keeps serving those releases, and your licence key keeps working. Releases published after that date are no longer licensed to you; if nothing is vested, none are. Only a refund, credit or chargeback can take vested releases away. If you subscribe again, the paid time you kept still counts. A vested Pro minor stays on the Core minor of the same number (Pro ${latestDocsVersion.version} on Core ${latestDocsVersion.version}.x).`,
     link: [
       { label: 'EULA', href: VESTING_RULES },
@@ -307,7 +309,7 @@ export default function ProPage() {
             <h2 className={'text-2xl font-bold tracking-tight md:text-3xl'}>Before you buy</h2>
             <dl className={'mt-8 flex flex-col gap-8'}>
               {QUESTIONS.map((item) => (
-                <div key={item.question}>
+                <div key={item.question} id={item.id} className={'scroll-mt-16'}>
                   <dt className={'font-semibold'}>{item.question}</dt>
                   <dd className={'mt-2 leading-relaxed text-muted-foreground'}>
                     {item.answer}

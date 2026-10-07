@@ -16,6 +16,9 @@ interface Props {
   proLink: boolean;
 }
 
+// The Pro page's answer to what a subscriber keeps when the subscription ends.
+const SUBSCRIPTION_ENDS = '/pro#subscription-ends';
+
 const CARD = 'flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm';
 
 export function PriceCards({ option, prices, basePrice, proLink }: Props) {
@@ -59,7 +62,10 @@ export function PriceCards({ option, prices, basePrice, proLink }: Props) {
             <Link href={'/legal/refunds'} className={'hover:underline'}>
               14-day refund
             </Link>{' '}
-            · Cancel any time · Keep vested releases after 12 paid months
+            · Cancel any time ·{' '}
+            <Link href={SUBSCRIPTION_ENDS} className={'hover:underline'}>
+              Keep vested releases after 12 paid months or a paid year
+            </Link>
           </p>
         </div>
         {proLink && (

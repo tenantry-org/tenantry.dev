@@ -3,6 +3,7 @@
 import { PriceSection } from '@/components/checkout/price-section';
 import type { CheckoutEventsData } from '@paddle/paddle-js/types/checkout/events';
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { track } from '@vercel/analytics';
 import { usePaddle } from '@/hooks/use-paddle';
 
@@ -11,6 +12,8 @@ interface Props {
   /** The signed-in buyer's email: the checkout is opened with it, and it cannot be changed there. */
   userEmail: string;
 }
+
+const LINK = 'text-link underline underline-offset-4';
 
 export function CheckoutContents({ priceId, userEmail }: Props) {
   const [checkoutData, setCheckoutData] = useState<CheckoutEventsData | null>(null);
@@ -62,6 +65,21 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
           <PriceSection checkoutData={checkoutData} />
           <p className={'mt-6 text-sm text-muted-foreground'}>
             Tenantry is in beta until 1.0, so a minor release can change the API. Each release says how to update.
+          </p>
+          <p className={'mt-3 text-sm text-muted-foreground'}>
+            Subscribing accepts the{' '}
+            <Link className={LINK} href={'/legal/terms'}>
+              Terms
+            </Link>{' '}
+            and the{' '}
+            <Link className={LINK} href={'/legal/eula'}>
+              Tenantry Pro EULA
+            </Link>
+            . You can ask for a full refund within 14 days (
+            <Link className={LINK} href={'/legal/refunds'}>
+              refund policy
+            </Link>
+            ).
           </p>
         </div>
         <div className={'min-w-0 flex-1'}>

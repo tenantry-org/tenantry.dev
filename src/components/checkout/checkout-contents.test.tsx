@@ -24,4 +24,14 @@ describe('CheckoutContents', () => {
       successUrl: 'https://example.com/checkout/success',
     });
   });
+
+  it('says that subscribing accepts the Terms and the EULA, and links the refund policy', () => {
+    usePaddle.mockReturnValue({ status: 'loading' });
+
+    const html = renderToStaticMarkup(<CheckoutContents priceId={'pri_01month'} userEmail={'buyer@example.com'} />);
+
+    expect(html).toMatch(/Subscribing accepts the <a [^>]*href="\/legal\/terms"/);
+    expect(html).toMatch(/href="\/legal\/eula"[^>]*>Tenantry Pro EULA</);
+    expect(html).toMatch(/full refund within 14 days \(<a [^>]*href="\/legal\/refunds"[^>]*>refund policy</);
+  });
 });
