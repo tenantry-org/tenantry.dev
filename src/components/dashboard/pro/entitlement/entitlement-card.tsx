@@ -80,7 +80,7 @@ function AccessNow({ entitlement }: Readonly<{ entitlement: EntitlementView }>) 
           <Link className={link} href={'/#pricing'}>
             Subscribe again
           </Link>{' '}
-          to use later releases.
+          to use other releases.
         </p>
       </>
     );
@@ -119,9 +119,8 @@ function Progress({ entitlement }: Readonly<{ entitlement: EntitlementView }>) {
   if (annualTerm) {
     return (
       <p>
-        Your annual term is paid, so every release published up to the end of the term is vested, including those
-        published later in the term. A refund, credit or chargeback of any of the term&apos;s payments withdraws them,
-        even after the term.
+        Your annual term is paid. A refund, credit or chargeback of any of its payments withdraws its vesting, even
+        after the term.
       </p>
     );
   }

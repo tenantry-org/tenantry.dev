@@ -488,7 +488,7 @@ describe('vesting emails', () => {
     expect(memory.state.entitlementStates.get('ctm_1')?.vestedThrough).toEqual(new Date('2027-01-01T00:00:00Z'));
     expect(subjects()).toEqual(['Your Tenantry Pro releases are vested']);
     expect(deps.sendEmail.mock.calls[0][0].html).toContain('Your paid time has reached 12 paid months');
-    expect(deps.sendEmail.mock.calls[0][0].html).toContain('on or before 1 July 2027, your vested-through date');
+    expect(deps.sendEmail.mock.calls[0][0].html).toContain('Your vested-through date is 1 July 2027.');
   });
 
   async function refund(adjustmentId: string, transactionId: string, at: string, amount = 3900) {
@@ -632,10 +632,11 @@ describe('vesting emails', () => {
     expect(vested).toHaveLength(1);
     const [[message]] = vested;
     expect(message.html).toContain(
-      'Your annual term is paid, so every Tenantry Pro release published on or before 1 January 2027',
+      'Your annual term is paid. Your vested-through date is 1 January 2027, the end of the term. Your vested releases are',
     );
-    expect(message.html).toContain('including those published later in the term');
-    expect(message.html).toContain("A refund, credit or chargeback of any of the term's payments withdraws them");
+    expect(message.html).toContain(
+      "A refund, credit or chargeback of any of the term's payments withdraws its vesting",
+    );
     expect(message.html).not.toContain('moves forward as your paid time is served');
     vi.clearAllMocks();
 

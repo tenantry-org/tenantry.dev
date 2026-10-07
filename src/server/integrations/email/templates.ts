@@ -71,10 +71,10 @@ export function vestingConfirmedEmail(
   siteUrl: string,
 ): EmailMessage {
   const what = annualTerm
-    ? `Your annual term is paid, so every Tenantry Pro release published on or before ${longDate(vestedThrough)}, the end of the term and your vested-through date, is vested, including those published later in the term.`
-    : `Your paid time has reached 12 paid months, so every Tenantry Pro release published on or before ${longDate(vestedThrough)}, your vested-through date, is now vested.`;
+    ? `Your annual term is paid. Your vested-through date is ${longDate(vestedThrough)}, the end of the term.`
+    : `Your paid time has reached 12 paid months. Your vested-through date is ${longDate(vestedThrough)}.`;
   const next = annualTerm
-    ? "A refund, credit or chargeback of any of the term's payments withdraws them, even after the term. Paying for another year vests that year's releases in the same way."
+    ? "A refund, credit or chargeback of any of the term's payments withdraws its vesting, even after the term. Paying for another year vests that year's releases in the same way."
     : 'Your vested-through date moves forward as further paid time is served, now or in a later subscription; between subscriptions it stays where your last paid period ended. A refund, credit or chargeback takes away the time its money paid for.';
   return {
     to,
@@ -124,9 +124,9 @@ export function grantWithdrawnEmail(
 <p>${what} no longer vests the releases published up to ${longDate(grant.vestedThrough)}${because}.</p>
 <p>${
         vestedThrough
-          ? `Your vested-through date is now ${longDate(vestedThrough)}: the releases published on or before it stay vested.`
+          ? `Your vested-through date is now ${longDate(vestedThrough)}. Your vested releases are ${VESTED_RELEASES}.`
           : 'No releases are vested now.'
-      } While your subscription is active, the package feed still serves you every release.</p>
+      } While your subscription is active, the package feed still serves you every release. ${HOW_VESTING_WORKS}.</p>
 <p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">See your vested releases</a></p>`,
     ),
   };

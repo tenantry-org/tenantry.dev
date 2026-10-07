@@ -46,7 +46,7 @@ export interface EntitlementView {
   graceEndsAt: string | null;
   /** Whether the package feed serves them anything: access, or vested releases (entitlement-policy.ts: canRestore). */
   canRestore: boolean;
-  /** The vested-through date: every release published on or before it is vested. Null when nothing is vested. */
+  /** The vested-through date (VESTED_RELEASES says what it vests). Null when nothing is vested. */
   vestedThrough: string | null;
   /**
    * Their paid time, while they have access: its whole months (the time the money kept pays for, across every

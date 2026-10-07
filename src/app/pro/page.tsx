@@ -128,14 +128,15 @@ const QUESTIONS = [
         <Suspense fallback={null}>
           <ProPriceSentence />
         </Suspense>
-        {`Every Tenantry Pro release while you subscribe, a licence key, and email support with a reply within ${SUPPORT_REPLY_WITHIN}. Releases come from the package feed, Tenantry’s private NuGet feed. After 12 paid months, which need not be consecutive, or as soon as you pay for a year, the releases published up to your vested-through date stay licensed to you after the subscription ends. That date keeps moving while you pay; for a paid year it is the end of that year.`}
+        {`Every Tenantry Pro release while you subscribe, a licence key, and email support with a reply within ${SUPPORT_REPLY_WITHIN}. Releases come from the package feed, Tenantry’s private NuGet feed. Once you have paid for 12 months in total, or for a year up front, ${VESTED_RELEASES} stay licensed to you after the subscription ends. Your vested-through date is the end of your paid time.`}
       </>
     ),
+    link: { label: 'EULA', href: VESTING_RULES },
   },
   {
     question: 'How does my team install it, locally and in CI?',
     answer:
-      'Create a feed token on your Pro access page and add the package feed to your nuget.config, which reads the token from an environment variable. NuGet then restores Tenantry Pro from the package feed and everything else from nuget.org. Up to 10 feed tokens can exist at once, and how you use them is up to you: one for each developer machine and CI system, so you can revoke each on its own, or fewer, shared. They are for your company’s use only, or yours if you are a single developer. No GitHub account is needed, and everyone in your company may use Pro. The guide covers CI and Docker builds.',
+      'Create a feed token on your Pro access page and add the package feed to your nuget.config, which reads the token from an environment variable. NuGet then restores Tenantry Pro from the package feed and everything else from nuget.org. Up to 10 feed tokens can exist at once; one per developer machine and CI system lets you revoke each on its own. No GitHub account is needed, and everyone in your company may use Pro. The guide covers CI and Docker builds.',
     link: { label: 'Installation', href: '/docs/pro/installation' },
   },
   {
@@ -198,7 +199,7 @@ const QUESTIONS = [
     question: 'What happens when the subscription ends?',
     // The price cards link here.
     id: 'subscription-ends',
-    answer: `You keep ${VESTED_RELEASES}. That date is set once you reach 12 paid months, which need not be consecutive, and keeps moving while you pay. An annual term sets it to the end of the term as soon as you pay for it. The package feed keeps serving those releases, and your licence key keeps working. Releases published after that date are no longer licensed to you; if nothing is vested, none are. Only a refund, credit or chargeback can take vested releases away. If you subscribe again, the paid time you kept still counts. A vested Pro minor stays on the Core minor of the same number (Pro ${latestDocsVersion.version} on Core ${latestDocsVersion.version}.x).`,
+    answer: `With 12 paid months in total, gaps allowed, or a paid year, you keep every release published up to the end of the time you paid for, and its later patches. The package feed keeps serving them and your licence key keeps working. Other releases are no longer licensed to you; if nothing is vested, none are. With less paid time, your licence to Pro ends with the subscription and you stop using it. Only a refund, credit or chargeback takes kept releases away. If you subscribe again, the paid time you kept still counts. A vested Pro minor stays on the Core minor of the same number (Pro ${latestDocsVersion.version} on Core ${latestDocsVersion.version}.x).`,
     link: [
       { label: 'EULA', href: VESTING_RULES },
       { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },

@@ -3,7 +3,13 @@ import { VESTED_RELEASES } from '@/constants/vesting';
 import { testServerConfig } from '@/test/server-config';
 import { alertOperator } from './alerts';
 import { resendRequest, sendEmail } from './send';
-import { accessRevokedEmail, feedTokenCreatedEmail, vestingConfirmedEmail, welcomeProEmail } from './templates';
+import {
+  accessRevokedEmail,
+  feedTokenCreatedEmail,
+  grantWithdrawnEmail,
+  vestingConfirmedEmail,
+  welcomeProEmail,
+} from './templates';
 
 const SITE = 'https://sandbox.example.com';
 const email = { resendApiKey: 're_test', from: 'Tenantry <noreply@tenantry.dev>', replyTo: 'support@tenantry.dev' };
@@ -76,8 +82,18 @@ describe('email templates', () => {
   });
 
   it('describes the vested releases in the shared wording, and links the rules', () => {
-    const vested = vestingConfirmedEmail('cust@example.com', new Date('2027-01-01T00:00:00Z'), false, SITE);
-    for (const msg of [vested, accessRevokedEmail('cust@example.com', new Date('2027-01-01T00:00:00Z'), null, SITE)]) {
+    const date = new Date('2027-01-01T00:00:00Z');
+    const withdrawn = grantWithdrawnEmail(
+      'cust@example.com',
+      { kind: 'annual_term', vestedThrough: new Date('2027-06-01T00:00:00Z'), withdrawnReason: 'refund' },
+      date,
+      SITE,
+    );
+    for (const msg of [
+      vestingConfirmedEmail('cust@example.com', date, false, SITE),
+      accessRevokedEmail('cust@example.com', date, null, SITE),
+      withdrawn,
+    ]) {
       expect(msg.html).toContain(VESTED_RELEASES);
       expect(msg.html).toContain('href="https://tenantry.dev/legal/eula#vesting"');
     }

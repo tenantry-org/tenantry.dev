@@ -41,11 +41,10 @@ describe('EntitlementCard', () => {
   it('shows an annual subscriber that the term is vested since it was paid, and what withdraws it', () => {
     const html = render(ENTITLEMENT.annual);
 
-    expect(html).toContain('Your annual term is paid, so every release published up to the end of the term is vested');
-    expect(html).toContain('including those published later in the term');
+    expect(html).toContain('Your annual term is paid.');
     expect(html).toContain('vested-through date is <span class="font-medium text-foreground">1 October 2027</span>');
     expect(html).toContain(
-      'A refund, credit or chargeback of any of the term&#x27;s payments withdraws them, even after the term',
+      'A refund, credit or chargeback of any of its payments withdraws its vesting, even after the term',
     );
     expect(html).not.toContain('end of the term, on that date');
     expect(html).not.toContain('paid months');
