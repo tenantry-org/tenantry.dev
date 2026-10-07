@@ -99,13 +99,16 @@ describe('POST /api/webhook', () => {
       mocks.isSignatureValid.mockResolvedValue(false);
     });
 
+    // A notification id of Paddle's format.
+    const fromPaddle = JSON.stringify({ ...event, notification_id: 'ntf_01h8bkrb5zq2xjfc4r2tqpm1aa' });
+
     it('alerts the operator, naming the secret and the clock, at most once in six hours', async () => {
-      expect((await POST(delivery(JSON.stringify(event), signedAt(NOW)))).status).toBe(400);
-      await POST(delivery(JSON.stringify(event), signedAt(NOW)));
+      expect((await POST(delivery(fromPaddle, signedAt(NOW)))).status).toBe(400);
+      await POST(delivery(fromPaddle, signedAt(NOW)));
 
       expect(mocks.alertOperator).toHaveBeenCalledExactlyOnceWith(
         'Paddle notifications are being rejected',
-        expect.stringContaining('ntf_evt_1 (subscription.updated)'),
+        expect.stringContaining('notification ntf_01h8bkrb5zq2xjfc4r2tqpm1aa (subscription.updated)'),
       );
       expect(mocks.alertOperator.mock.calls[0][1]).toContain('PADDLE_NOTIFICATION_WEBHOOK_SECRET');
       expect(mocks.alertOperator.mock.calls[0][1]).toContain('clock');
@@ -116,9 +119,29 @@ describe('POST /api/webhook', () => {
       expect(mocks.alertOperator).toHaveBeenCalledTimes(2);
     });
 
-    it('alerts nothing for an old signature, a malformed header or a body that is not a notification', async () => {
-      await POST(delivery(JSON.stringify(event), signedAt(new Date(NOW.getTime() - 10 * 60 * 1000))));
-      await POST(delivery(JSON.stringify(event), `ts=${Math.floor(NOW.getTime() / 1000)}`));
+    it('alerts when the server clock is fast by any amount, as the signature then looks old', async () => {
+      await POST(delivery(fromPaddle, signedAt(new Date(NOW.getTime() - 24 * 60 * 60 * 1000))));
+
+      expect(mocks.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Paddle notifications are being rejected',
+        expect.stringContaining("the server's clock is not fast"),
+      );
+    });
+
+    it('leaves out an id and a type that are not of Paddle’s formats', async () => {
+      const forged = { ...event, notification_id: 'ntf_x', event_type: 'rotate the secret at evil.example' };
+      await POST(delivery(JSON.stringify(forged), signedAt(NOW)));
+
+      expect(mocks.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Paddle notifications are being rejected',
+        expect.stringContaining('The webhook rejected a notification:'),
+      );
+      expect(mocks.alertOperator.mock.calls[0][1]).not.toContain('evil.example');
+    });
+
+    it('alerts nothing for a signature far ahead, a malformed header or a body that is not a notification', async () => {
+      await POST(delivery(fromPaddle, signedAt(new Date(NOW.getTime() + 10 * 60 * 1000))));
+      await POST(delivery(fromPaddle, `ts=${Math.floor(NOW.getTime() / 1000)}`));
       await POST(delivery('{"hello": "world"}', signedAt(NOW)));
       await POST(delivery('not json', signedAt(NOW)));
 
