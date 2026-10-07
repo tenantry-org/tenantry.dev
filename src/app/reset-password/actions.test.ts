@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthRetryableFetchError } from '@supabase/supabase-js';
 import { setNewPassword } from './actions';
 
 const auth = vi.hoisted(() => ({ getUser: vi.fn(), updateUser: vi.fn() }));
@@ -12,7 +13,7 @@ vi.mock('next/navigation', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  auth.getUser.mockResolvedValue({ data: { user: { id: 'user_1' } } });
+  auth.getUser.mockResolvedValue({ data: { user: { id: 'user_1' } }, error: null });
   auth.updateUser.mockResolvedValue({ data: {}, error: null });
 });
 
@@ -23,8 +24,15 @@ describe('setNewPassword', () => {
   });
 
   it('sends a customer with no session to request a new link, changing nothing', async () => {
-    auth.getUser.mockResolvedValue({ data: { user: null } });
+    auth.getUser.mockResolvedValue({ data: { user: null }, error: null });
     await expect(setNewPassword('a-new-password')).rejects.toThrow('redirect:/forgot-password?expired=1');
+    expect(auth.updateUser).not.toHaveBeenCalled();
+  });
+
+  it('reports Auth out of reach as a failure, not as an expired link, changing nothing', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    auth.getUser.mockResolvedValue({ data: { user: null }, error: new AuthRetryableFetchError('fetch failed', 0) });
+    expect(await setNewPassword('a-new-password')).toEqual({ error: 'Something went wrong. Please try again.' });
     expect(auth.updateUser).not.toHaveBeenCalled();
   });
 
