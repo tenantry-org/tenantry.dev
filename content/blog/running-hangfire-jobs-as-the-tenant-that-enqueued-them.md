@@ -78,7 +78,7 @@ public class OrderTotalsForTenantJob(ITenantScopeFactory<string> scopes)
 ```csharp
 app.MapPost("/totals-core", (IBackgroundJobClient jobs, ITenantContext<string> tenants) =>
 {
-    var tenantId = tenants.CurrentTenantId!;
+    var tenantId = tenants.RequiredTenant.TenantId;
     return jobs.Enqueue<OrderTotalsForTenantJob>(job => job.RunAsync(tenantId, CancellationToken.None));
 });
 ```
