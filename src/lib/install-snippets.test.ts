@@ -54,13 +54,18 @@ describe('install snippets', () => {
     expect(feedTokenPowerShell).toContain(`'${FEED_TOKEN_VARIABLE}', 'tpf_your_feed_token', 'User'`);
   });
 
+  it('use the action versions the site’s own workflows use', () => {
+    expect(ciWorkflow).toContain('uses: actions/checkout@v7');
+    expect(ciWorkflow).toContain('uses: actions/setup-dotnet@v6');
+  });
+
   it('take the token from CI secrets and Docker build secrets, and restore in locked mode', () => {
     expect(ciWorkflow).toContain(`${FEED_TOKEN_VARIABLE}: \${{ secrets.${FEED_TOKEN_VARIABLE} }}`);
     expect(ciWorkflow).toContain(`${LICENCE_ENV_VARIABLE}: \${{ secrets.TENANTRY_LICENSE }}`);
     expect(ciWorkflow).toContain('dotnet restore --locked-mode');
     expect(dockerRestore).toContain(`--mount=type=secret,id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE}`);
     expect(dockerRestore).toContain('--locked-mode');
-    expect(dockerRestore).toContain('COPY nuget.config Directory.Build.props Directory.Packages.props ./');
+    expect(dockerRestore).toContain('COPY nuget.config Directory.*.props ./');
     expect(dockerBuild).toContain(`--secret id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE}`);
   });
 });

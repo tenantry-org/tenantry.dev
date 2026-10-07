@@ -79,8 +79,8 @@ export const ciWorkflow = `jobs:
     env:
       ${FEED_TOKEN_VARIABLE}: \${{ secrets.${FEED_TOKEN_VARIABLE} }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - run: dotnet restore --locked-mode
@@ -92,13 +92,13 @@ export const ciWorkflow = `jobs:
 /**
  * A Dockerfile's restore with the token as a build secret, so no image layer keeps it, and the build command. The
  * restore needs the solution's Directory.Build.props and Directory.Packages.props where they exist: they can set the
- * target frameworks, the lock file property and the package versions.
+ * target frameworks, the lock file property and the package versions. The wildcard copies whichever of them exist, and
+ * nuget.config keeps the COPY valid when neither does.
  */
 export const dockerRestore = `# syntax=docker/dockerfile:1
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-# Leave out Directory.Build.props or Directory.Packages.props if your solution does not have it.
-COPY nuget.config Directory.Build.props Directory.Packages.props ./
+COPY nuget.config Directory.*.props ./
 COPY src/MyApp/MyApp.csproj src/MyApp/packages.lock.json src/MyApp/
 RUN --mount=type=secret,id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE} \\
     dotnet restore src/MyApp --locked-mode
