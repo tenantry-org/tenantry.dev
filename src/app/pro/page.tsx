@@ -49,9 +49,15 @@ return 0;`,
     .AddDatabaseProvisioning<AppDbContext>()      // creates the database, first
     .AddMigrations<AppDbContext>());              // then migrates it
 
-var result = await provisioner.ProvisionAsync(descriptor, ct);
+${
+  publishedSince('pro', 'v0.8.0')
+    ? `// Once every step has succeeded, activates the tenant and invalidates its cached copy:
+var result = await provisioner.ProvisionAsync(
+    descriptor, token => tenants.ActivateAsync(descriptor.TenantId, token), ct);`
+    : `var result = await provisioner.ProvisionAsync(descriptor, ct);
 if (result.Succeeded)
-    await tenants.ActivateAsync(descriptor.TenantId, ct);`,
+    await tenants.ActivateAsync(descriptor.TenantId, ct);`
+}`,
     link: { label: 'Tenant lifecycle', href: '/docs/pro/tenant-lifecycle' },
   },
   {

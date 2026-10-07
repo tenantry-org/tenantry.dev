@@ -3,7 +3,8 @@ import { ArrowRight } from 'lucide-react';
 import { CodeFigure } from '@/components/shared/code-figure';
 
 // Tenantry Core's tenant stores guide (docs/tenant-stores.md), whose code blocks Core's CI builds: its store and its
-// caching, wrapped to fit.
+// caching, wrapped to fit. It adds the access check that docs/access-control.md asks for in production, as the hero
+// does: a subdomain alone lets any caller name any tenant.
 const SNIPPET = `public sealed class TenantStore(AppDbContext db) : ITenantStore<string>
 {
     public async ValueTask<ITenantDescriptor<string>?> GetTenantAsync(
@@ -19,6 +20,7 @@ const SNIPPET = `public sealed class TenantStore(AppDbContext db) : ITenantStore
 
 builder.Services.AddTenantry<string>(tenant => tenant
     .ResolveFromSubdomain(o => o.BaseDomains.Add("example.com"))
+    .ValidateTenantAccessByClaim("tenant_id")
     .UseStore<TenantStore>()
     .CacheTenants());`;
 
