@@ -7,8 +7,8 @@ const getCurrentUser = vi.hoisted(() => vi.fn());
 vi.mock('@/server/db/current-user', () => ({ getCurrentUser }));
 vi.mock('@/components/home/footer/footer', () => ({ Footer: () => null }));
 
-async function render(): Promise<string> {
-  const { prelude } = await prerender(<SuccessPage searchParams={Promise.resolve({})} />);
+async function render(from?: string): Promise<string> {
+  const { prelude } = await prerender(<SuccessPage searchParams={Promise.resolve({ from })} />);
   return new Response(prelude).text();
 }
 
@@ -26,5 +26,13 @@ describe('SuccessPage', () => {
 
     expect(html).toContain('Thanks for subscribing');
     expect(html).toContain('Log in to create a feed token');
+  });
+
+  it('tells an existing subscriber who came through /pay that their billing was updated, not that they subscribed', async () => {
+    const html = await render('pay');
+
+    expect(html).toContain('Billing updated');
+    expect(html).toContain('Changes can take a minute to show on your Pro access page.');
+    expect(html).not.toContain('Thanks for subscribing');
   });
 });

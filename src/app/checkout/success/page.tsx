@@ -38,9 +38,9 @@ async function Message({ searchParams }: Props) {
     // An existing subscriber: a card update takes no payment, so this does not say one was received.
     return (
       <>
-        <h1 className={'mt-8 text-3xl font-bold tracking-tight md:text-4xl'}>Done</h1>
+        <h1 className={'mt-8 text-3xl font-bold tracking-tight md:text-4xl'}>Billing updated</h1>
         <p className={'mt-4 text-lg text-muted-foreground'}>
-          It can take a minute to show on your Pro access page. Your feed tokens and licence key are unchanged.
+          Changes can take a minute to show on your Pro access page. Your feed tokens and licence key are unchanged.
         </p>
         <div className={'mt-10'}>
           <Button size={'lg'} asChild={true}>
