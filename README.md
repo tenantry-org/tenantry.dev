@@ -70,10 +70,10 @@ pnpm install
 pnpm dev        # runs sync:docs, then next dev
 ```
 
-`pnpm test` runs lint + Prettier + `tsc` + Vitest. CI (`.github/workflows/test.yml`) runs it, ShellCheck on
-`scripts/*.sh`, `pnpm build`, the database tests and the package feed's end-to-end test on every push to master or
-staging and every pull request; production deployments wait for those jobs (Vercel Deployment Checks). Copy
-[`.env.example`](.env.example) to `.env.local` and fill in the values for the services you need.
+`pnpm test` runs lint + Prettier + `tsc` + Vitest. CI (`.github/workflows/test.yml`) runs it, actionlint on the
+workflows, ShellCheck on `scripts/*.sh`, `pnpm build`, the database tests and the package feed's end-to-end test on
+every push to master or staging and every pull request; production deployments wait for those jobs (Vercel Deployment
+Checks). Copy [`.env.example`](.env.example) to `.env.local` and fill in the values for the services you need.
 
 **TypeScript is installed twice, under aliases.** `@typescript/native` is TypeScript 7 (`npm:typescript@^7`): its
 `tsc` is what `pnpm typecheck` runs, in `pnpm test` and CI. `typescript` is TypeScript 6
@@ -229,7 +229,7 @@ deploying, and production keeps the last deployment, if a listed tag cannot be r
 on the site are not release data. The code samples on the home and Pro pages are updated by hand when a minor release
 changes the API they show. The instructions for restoring from the package feed (the Install page and the emails) are
 written by the site, which serves the feed, with its own address (`src/lib/install-snippets.ts`); Pro's installation
-guide uses the same source key and variable (`tenantry-pro`, `TENANTRY_FEED_TOKEN`), so the two agree whatever a
+guide uses the same source key and variable (`TenantryPro`, `TENANTRY_FEED_TOKEN`), so the two agree whatever a
 release's guide says.
 
 If a release has not reached the site after an hour, check in this order: NuGet lists the Core version
