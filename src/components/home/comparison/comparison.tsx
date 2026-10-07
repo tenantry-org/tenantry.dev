@@ -7,6 +7,15 @@ import { publishedSince } from '@/lib/docs-versions';
 // version. A row whose Finbuckle or ABP cell the sources do not support is left out, not filled in.
 const PROJECTS = ['Your own query filters', 'Finbuckle.MultiTenant', 'ABP', 'Tenantry'] as const;
 
+// The rules analyzers.md lists as warnings by default, worded as in features.tsx: Core 0.8.0 adds TNY1004 and widens
+// TNY1002 to any query that reads a tenant-owned entity. Kept behind the gate: a withdrawn release leaves the site
+// (README, Docs pipeline).
+function buildWarnings(): string {
+  return publishedSince('core', 'v0.8.0')
+    ? 'Build warnings for a DbContext registered without UseTenantry(), an entity with a TenantId that is not tenant-owned, a query that ignores the tenant filter, and a tenant read from the request with no access validator'
+    : 'Build warnings for an entity with a TenantId that is not tenant-owned, IgnoreQueryFilters() on a tenant-owned entity, and a tenant read from the request with no access validator';
+}
+
 const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]; fullOnly?: boolean }[] = [
   {
     label: 'What your DbContext needs',
@@ -47,8 +56,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
       'None, unless you write analyzers',
       'None: its packages have no analyzers',
       'None: its EF Core package has no analyzers',
-      // Core 0.8.0 adds TNY1004. Kept behind the gate: a withdrawn release leaves the site (README, Docs pipeline).
-      `Analyzers ${publishedSince('core', 'v0.8.0') ? 'TNY1001 to TNY1004' : 'TNY1001 to TNY1003'}, TNY2001, TNY3001 and TNY3002`,
+      buildWarnings(),
     ],
     fullOnly: true,
   },
