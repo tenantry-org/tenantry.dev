@@ -159,7 +159,7 @@ describe('readEntitlement', () => {
     );
   });
 
-  it('gives a lapsed customer whose paid time runs on to 12 months the end of it, until it passes', async () => {
+  it('gives a lapsed customer whose paid time runs on to 12 months the end of it, until its grant is stored', async () => {
     // Cancelled mid-month in the twelfth paid month, with nothing refunded (computeEntitlement keeps the paid time).
     state.tables.active_subscriptions = stored('lapsed', {
       months_paid: 12,
@@ -173,7 +173,18 @@ describe('readEntitlement', () => {
       paidTime: null,
       runsTo: '2027-01-01T00:00:00.000Z',
     });
-    await expect(readEntitlement('ctm_1', new Date('2027-01-01T00:00:00Z'))).resolves.toMatchObject({ runsTo: null });
+    // Once it has passed, until the reconcile stores the grant, it is still the date to show: nothing is vested yet.
+    await expect(readEntitlement('ctm_1', new Date('2027-01-02T00:00:00Z'))).resolves.toMatchObject({
+      canRestore: false,
+      vestedThrough: null,
+      runsTo: '2027-01-01T00:00:00.000Z',
+    });
+    state.tables.vested_entitlements = vested('2027-01-01T00:00:00Z', 'paid_time');
+    await expect(readEntitlement('ctm_1', new Date('2027-01-02T00:00:00Z'))).resolves.toMatchObject({
+      canRestore: true,
+      vestedThrough: '2027-01-01T00:00:00.000Z',
+      runsTo: null,
+    });
 
     // Nor for an annual term cancelled mid-term, already vested to the end of the time paid for.
     state.tables.vested_entitlements = vested('2027-01-01T00:00:00Z', 'annual_term');

@@ -54,9 +54,10 @@ export interface EntitlementView {
    */
   paidTime: { monthsPaid: number; vestsAt: string; reached: boolean } | null;
   /**
-   * After access ends, the end of the time they have paid for, when it is still to come, brings their paid time to 12
-   * paid months and is later than the vested-through date: the releases published up to it are vested once it is
-   * served (billing-store.ts: Entitlement.runsTo). Null for an annual term already vested to its end.
+   * After access ends, the end of the time they have paid for, when it brings their paid time to 12 paid months and is
+   * later than the vested-through date: the releases published up to it are vested once it is served (billing-store.ts:
+   * Entitlement.runsTo). Still given once it has passed, until the reconcile stores the grant. Null for an annual term
+   * already vested to its end.
    */
   runsTo: string | null;
   /**
@@ -138,16 +139,17 @@ export async function readEntitlement(customerId: string, now: Date = new Date()
             reached: vestedThrough !== null && state.run.vestsAt.getTime() <= now.getTime(),
           }
         : null,
-    runsTo: iso(runsTo(state, vestedThrough, now)),
+    runsTo: iso(runsTo(state, vestedThrough)),
     annualTerm: entitled && vested?.kind === 'annual_term' && vested.through.getTime() > now.getTime(),
   };
 }
 
-// A lapsed customer's paid time is stored only while it runs on and reaches 12 paid months (computeEntitlement). A
-// stored state still in grace is not one of them, though its grace has ended.
-function runsTo(state: StoredState | null, vestedThrough: Date | null, now: Date): Date | null {
+// A lapsed customer's paid time is stored only while it runs on and reaches 12 paid months (computeEntitlement). Once
+// it has passed, the next reconcile stores its grant and clears it; until then it is still the date to show, not a
+// warning that nothing is vested. A stored state still in grace is not one of them, though its grace has ended.
+function runsTo(state: StoredState | null, vestedThrough: Date | null): Date | null {
   const paidThrough = state?.access.status === 'lapsed' ? state.run?.paidThrough : undefined;
-  return paidThrough && paidThrough > now && (!vestedThrough || vestedThrough < paidThrough) ? paidThrough : null;
+  return paidThrough && (!vestedThrough || vestedThrough < paidThrough) ? paidThrough : null;
 }
 
 export async function getAccessView(): Promise<AccessView | NoSubscriptionView> {
