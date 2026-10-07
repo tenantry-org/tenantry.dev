@@ -35,7 +35,8 @@ async function Checkout({ params }: Props) {
 
   // Buyers sign in first, so the subscription is theirs from the start: the checkout uses their account's email,
   // which is what purchases are matched by, and the success page can send them straight to create a feed token.
-  const user = await getCurrentUser();
+  // Auth out of reach reads as signed out, rather than failing the page.
+  const user = await getCurrentUser().catch(() => null);
   if (!user?.email) redirect(`/signup?next=${encodeURIComponent(`/checkout/${priceId}`)}`);
 
   // Keyed by price, so another price gets a checkout of its own.

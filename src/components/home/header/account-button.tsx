@@ -12,7 +12,8 @@ export function SignInButton() {
 
 /** Dashboard for a signed-in user, otherwise Sign in. Reads the session, so it streams in. */
 export async function AccountButton() {
-  const user = await getCurrentUser();
+  // Auth out of reach shows Sign in, rather than failing the page.
+  const user = await getCurrentUser().catch(() => null);
   if (!user) return <SignInButton />;
 
   return (

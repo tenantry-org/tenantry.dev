@@ -59,7 +59,8 @@ async function Message({ searchParams }: Props) {
         Your licence key is on the same page. The subscription can take a minute to show there.
       </p>
       <div className={'mt-10'}>
-        <NextStepButton signedIn={Boolean(await getCurrentUser())} />
+        {/* Auth out of reach shows the signed-out step, rather than failing the page. */}
+        <NextStepButton signedIn={Boolean(await getCurrentUser().catch(() => null))} />
       </div>
     </>
   );
