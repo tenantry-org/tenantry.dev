@@ -8,6 +8,7 @@ import type { InstallView, NoSubscriptionView } from '@/server/billing/pro-pages
 import {
   FEED_TOKEN_VARIABLE,
   LICENCE_ENV_VARIABLE,
+  addProPackages,
   ciWorkflow,
   dockerBuild,
   dockerRestore,
@@ -75,7 +76,20 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
             <Snippet value={feedTokenPowerShell} label={'Copy'} />
           </Step>
 
-          <Step title={'4. Restore from a lock file'}>
+          <Step title={'4. Add the packages'}>
+            <p className={'text-sm text-muted-foreground'}>
+              From your project&apos;s directory. Add <code>Tenantry.Pro.Hangfire</code>, <code>.Quartz</code>,{' '}
+              <code>.MassTransit</code> or <code>.Rebus</code> for your job or message library. The application does not
+              start without your licence key: the{' '}
+              <Link className={'text-link underline underline-offset-4'} href={ACCESS_PAGE}>
+                Access page
+              </Link>{' '}
+              shows it and how to store it.
+            </p>
+            <Snippet value={addProPackages} label={'Copy'} />
+          </Step>
+
+          <Step title={'5. Restore from a lock file'}>
             <p className={'text-sm text-muted-foreground'}>
               With this property in your Directory.Build.props, a restore writes packages.lock.json next to each
               project. Commit those files. In CI and Docker builds, restore in locked mode, which fails instead of
@@ -85,7 +99,7 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
             <Snippet value={lockedRestore} />
           </Step>
 
-          <Step title={'5. CI'}>
+          <Step title={'6. CI'}>
             <p className={'text-sm text-muted-foreground'}>
               Store a feed token of its own and the licence key as secrets. In GitHub Actions:
             </p>
@@ -96,7 +110,7 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
             </p>
           </Step>
 
-          <Step title={'6. Docker'}>
+          <Step title={'7. Docker'}>
             <p className={'text-sm text-muted-foreground'}>
               Pass the feed token as a build secret rather than a build argument, so no image layer keeps it. Restore
               with nuget.config, your Directory.Build.props and Directory.Packages.props, and the project and lock files
