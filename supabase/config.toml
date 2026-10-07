@@ -101,6 +101,8 @@ enable_anonymous_sign_ins = false
 # Allow/disallow manual linking of accounts. Nothing links an identity to a login any more (GitHub is only a way to
 # sign in), so it is off.
 enable_manual_linking = false
+# The sign-up and reset-password messages ask for at least 8 characters. Supabase's default is 6.
+minimum_password_length = 8
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.

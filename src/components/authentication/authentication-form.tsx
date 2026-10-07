@@ -6,9 +6,11 @@ interface Props {
   password: string;
   onEmailChange: (email: string) => void;
   onPasswordChange: (password: string) => void;
+  /** Whether this is a new password, as on sign-up: the field then takes at least 8 characters, as Supabase Auth requires. */
+  newPassword?: boolean;
 }
 
-export function AuthenticationForm({ email, onEmailChange, onPasswordChange, password }: Props) {
+export function AuthenticationForm({ email, onEmailChange, onPasswordChange, password, newPassword }: Props) {
   return (
     <>
       <div className="grid w-full items-center gap-1.5">
@@ -30,7 +32,8 @@ export function AuthenticationForm({ email, onEmailChange, onPasswordChange, pas
         <Input
           type="password"
           id="password"
-          autoComplete="current-password"
+          autoComplete={newPassword ? 'new-password' : 'current-password'}
+          minLength={newPassword ? 8 : undefined}
           value={password}
           onChange={(e) => onPasswordChange(e.target.value)}
         />

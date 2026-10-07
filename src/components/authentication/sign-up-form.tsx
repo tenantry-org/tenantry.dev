@@ -51,6 +51,7 @@ export function SignupForm({ next }: Props) {
         onEmailChange={(email) => setEmail(email)}
         password={password}
         onPasswordChange={(password) => setPassword(password)}
+        newPassword={true}
       />
       <Button type={'submit'} className={'w-full'} disabled={pending} aria-busy={pending}>
         {pending ? 'Creating your account…' : 'Sign up'}
