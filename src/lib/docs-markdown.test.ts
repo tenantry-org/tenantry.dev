@@ -42,7 +42,7 @@ describe('docs as Markdown', () => {
       [
         '# Tenantry',
         '> Tenantry adds multi-tenancy, with tenant isolation, to ASP.NET Core and EF Core applications. Tenantry ' +
-          'Core is open source (Apache-2.0) and free for commercial use; Tenantry Pro, a subscription, adds ' +
+          'Core is open source (Apache-2.0) and free for commercial use; Tenantry Pro, a paid subscription, adds ' +
           'provisioning and offboarding, migrations across tenant databases, schema per tenant and mixed mode, the ' +
           'tenant in background jobs and messages, and audit logging.',
         'These are the docs of the newest release, Tenantry 0.6 (Core v0.6.2, Pro v0.6.1), as Markdown. Each page is ' +
@@ -85,9 +85,14 @@ describe('docs as Markdown', () => {
     );
   });
 
-  it("puts the newest guides in one file, without the API references or another version's pages", () => {
+  it("puts llms.txt's summary, then the newest guides, in one file, without the API references or another version's pages", () => {
     const full = llmsFullTxt(pages);
+    expect(full).toMatch(
+      /^# Tenantry\n\n> Tenantry adds .*Apache-2\.0.*Tenantry Pro, a paid subscription, .*\n\n# AI agents\n/,
+    );
+    expect(llmsTxt(pages, posts, null).startsWith(full.slice(0, full.indexOf('\n\n# AI agents')))).toBe(true);
     expect([...full.matchAll(/^# (.+)$/gm)].map((match) => match[1])).toEqual([
+      'Tenantry',
       'AI agents',
       'Tenantry Core',
       'Getting started',

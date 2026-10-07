@@ -106,6 +106,14 @@ export interface LinkedPost {
   description: string;
 }
 
+// What Tenantry is and what each part costs, at the top of llms.txt and llms-full.txt.
+const SUMMARY =
+  '# Tenantry\n\n' +
+  '> Tenantry adds multi-tenancy, with tenant isolation, to ASP.NET Core and EF Core applications. Tenantry Core ' +
+  'is open source (Apache-2.0) and free for commercial use; Tenantry Pro, a paid subscription, adds provisioning ' +
+  'and offboarding, migrations across tenant databases, schema per tenant and mixed mode, the tenant in background ' +
+  'jobs and messages, and audit logging.';
+
 /**
  * /llms.txt: the pages about Tenantry and Pro, the newest docs' pages, as links to their Markdown, with each page's
  * description, and the published posts. `prices` adds Pro's price, when it could be read.
@@ -116,11 +124,7 @@ export function llmsTxt(pages: MarkdownPage[], posts: LinkedPost[], prices: Base
   const older = docsVersions.filter((entry) => !entry.latest);
   return (
     [
-      '# Tenantry',
-      '> Tenantry adds multi-tenancy, with tenant isolation, to ASP.NET Core and EF Core applications. Tenantry Core ' +
-        'is open source (Apache-2.0) and free for commercial use; Tenantry Pro, a subscription, adds provisioning and ' +
-        'offboarding, migrations across tenant databases, schema per tenant and mixed mode, the tenant in background ' +
-        'jobs and messages, and audit logging.',
+      SUMMARY,
       `These are the docs of the newest release, Tenantry ${version} (Core ${coreTag}, Pro ${proTag}), as Markdown. ` +
         'Each page is also a web page at the same address without `.md`. Tenantry is in beta until 1.0.' +
         (older.length > 0
@@ -144,8 +148,11 @@ export function llmsTxt(pages: MarkdownPage[], posts: LinkedPost[], prices: Base
   );
 }
 
-/** /llms-full.txt: every guide of the newest docs, Core's then Pro's, as one Markdown file; not the API references. */
+/**
+ * /llms-full.txt: the summary llms.txt starts with, then every guide of the newest docs, Core's then Pro's, as one
+ * Markdown file; not the API references.
+ */
 export function llmsFullTxt(pages: MarkdownPage[]): string {
   const { core, pro } = groups(pages);
-  return [...core, ...pro].map(markdownDocument).join('\n');
+  return [`${SUMMARY}\n`, ...[...core, ...pro].map(markdownDocument)].join('\n');
 }

@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
   title: 'Tenantry: multi-tenancy for ASP.NET Core and EF Core',
   description:
-    'Multi-tenancy for existing ASP.NET Core and EF Core apps: one call on your DbContext scopes queries and saves to the current tenant, and fails closed.',
+    'Multi-tenancy for existing ASP.NET Core and EF Core apps: one call on your DbContext scopes queries and saves to the current tenant. Core is Apache-2.0 and free for commercial use; Pro is a paid subscription.',
 };
 
 export const viewport: Viewport = {
