@@ -34,7 +34,7 @@ const NOTES: { title: string; text: string | string[] }[] = [
   },
   {
     title: 'What Tenantry does not do',
-    text: 'Tenantry is a library, not an application framework: there is no tenant management UI, as ABP’s Tenant Management module has. It ships no database or configuration store: you implement ITenantStore’s two methods over whatever already holds your tenants. Core provides what surrounds them: caching, invalidation across instances through a channel you choose, the store’s service lifetime and suspension checks. It adds TenantId to no key or index, where Finbuckle can, with AdjustUniqueIndexes(), so declare per-tenant unique indexes yourself. When a resolver’s identifier names no tenant, Tenantry does not try the next resolver, as Finbuckle does. The isolation is in EF Core, not the database: FromSql on a tenant entity is filtered like any other query on it; SQL sent with SqlQuery or ExecuteSql, and queries with IgnoreQueryFilters(), are not isolated.',
+    text: 'Tenantry is a library, not an application framework: there is no tenant management UI, as ABP’s Tenant Management module has. It ships no database or configuration store: you implement ITenantStore over whatever already holds your tenants. You write its GetTenantAsync and GetAllTenantsAsync, and its FindByIdentifierAsync when requests name tenants by something other than their id, such as a subdomain or custom domain. Core provides what surrounds the store: caching, invalidation across instances through a channel you choose, the store’s service lifetime and suspension checks. It adds TenantId to no key or index, where Finbuckle can, with AdjustUniqueIndexes(), so declare per-tenant unique indexes yourself. When a resolver’s identifier names no tenant, Tenantry does not try the next resolver, as Finbuckle does. The isolation is in EF Core, not the database: FromSql on a tenant entity is filtered like any other query on it; SQL sent with SqlQuery or ExecuteSql, and queries with IgnoreQueryFilters(), are not isolated.',
   },
   {
     title: 'Versions',
@@ -53,11 +53,11 @@ export default function ComparePage() {
         </p>
         <p className={'mt-4 max-w-3xl leading-relaxed text-muted-foreground'}>
           Tenantry fits an existing ASP.NET Core and EF Core application that keeps its own DbContext and tenant store:
-          it is a library with no tenant management UI, and tenants come from an ITenantStore you implement with two
-          methods over whatever already holds them. ABP fits an application built on ABP, whose contexts derive from
-          AbpDbContext and whose Tenant Management module has a UI for tenants. Finbuckle.MultiTenant builds in tenant
-          stores, such as EF Core and a distributed cache, and can add TenantId to unique indexes with
-          AdjustUniqueIndexes(). Your own query filters need a filter on each entity and a SaveChanges override.
+          it is a library with no tenant management UI, and tenants come from an ITenantStore you implement over
+          whatever already holds them. ABP fits an application built on ABP, whose contexts derive from AbpDbContext and
+          whose Tenant Management module has a UI for tenants. Finbuckle.MultiTenant builds in tenant stores, such as EF
+          Core and a distributed cache, and can add TenantId to unique indexes with AdjustUniqueIndexes(). Your own
+          query filters need a filter on each entity and a SaveChanges override.
         </p>
         <div className={'mt-10'}>
           <ComparisonTable full={true} />

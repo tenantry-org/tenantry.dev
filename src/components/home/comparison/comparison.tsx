@@ -80,7 +80,7 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
       'Yours',
       'In-memory, configuration, EF Core, distributed cache, HTTP remote and echo',
       'Configuration, and a database store with a management UI in the Tenant Management module',
-      'An ITenantStore of two methods over whatever holds your tenants, cached by Core; an in-memory store for tests and demos',
+      'An ITenantStore of three methods over whatever holds your tenants, cached by Core; an in-memory store for tests and demos',
     ],
     fullOnly: true,
   },
