@@ -146,6 +146,7 @@ describe('headingIds', () => {
         '## When the key is checked',
         '## `OnMissingTenant` — what happens when a write runs with no tenant',
         '## [Installation](/docs/pro/installation) and **CI**',
+        '## `ITenantScopeFactory<TKey>` and `ITenantScope<TKey>` <a id="scopes"></a>',
         '## Custom heading [#custom-id]',
         '## When the key is checked',
         '```md',
@@ -159,6 +160,7 @@ describe('headingIds', () => {
       'when-the-key-is-checked',
       'onmissingtenant--what-happens-when-a-write-runs-with-no-tenant',
       'installation-and-ci',
+      'itenantscopefactorytkey-and-itenantscopetkey',
       'custom-id',
       'when-the-key-is-checked-1',
     ]);

@@ -105,9 +105,9 @@ export function headingIds(markdown) {
     }
     const text = heading[1]
       .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // a link or image: its text
-      .replace(/<[^>]+>/g, '') // HTML tags
-      .replace(/`([^`]*)`/g, '$1') // code: its text
-      .replace(/(\*\*|\*)(.+?)\1/g, '$2'); // emphasis
+      .replace(/`([^`]*)`|<[^>]+>/g, (_, code) => code ?? '') // code: its text, `<TKey>` included; an HTML tag: dropped
+      .replace(/(\*\*|\*)(.+?)\1/g, '$2') // emphasis
+      .trim();
     ids.add(slugger.slug(text));
   }
   return ids;
