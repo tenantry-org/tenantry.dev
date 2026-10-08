@@ -366,21 +366,9 @@ describe('reconcileCustomer', () => {
       );
     });
 
-    it('acts on an adjustment once, whether reconcile or its notification gets to it first', async () => {
-      await startAccess();
-      const partial = listedAdjustment('partial', { subtotal: '1950', type: 'partial' });
-      deps.listAdjustments.mockResolvedValue([partial]);
-
-      await reconcileCustomer('ctm_1', deps);
-      expect(deps.alertOperator).toHaveBeenCalledWith(
-        'Recovered 1 adjustment for customer ctm_1',
-        expect.stringContaining('or are still on their way'),
-      );
-      expect(deps.alertOperator).toHaveBeenCalledWith('Paddle refund for customer ctm_1', expect.any(String));
-
-      // Its notification, queued behind the reconcile, arrives with the same status.
-      vi.clearAllMocks();
-      await applyPaddleEvent(
+    // The partial refund's notification, with the status Paddle lists.
+    const partialRefundNotification = () =>
+      applyPaddleEvent(
         Webhooks.fromJson(
           adjustmentEvent({
             eventId: 'partial',
@@ -396,6 +384,36 @@ describe('reconcileCustomer', () => {
         ),
         deps,
       );
+
+    it('acts on an adjustment once when reconcile gets to it before its notification', async () => {
+      await startAccess();
+      deps.listAdjustments.mockResolvedValue([listedAdjustment('partial', { subtotal: '1950', type: 'partial' })]);
+
+      await reconcileCustomer('ctm_1', deps);
+      expect(deps.alertOperator).toHaveBeenCalledWith(
+        'Recovered 1 adjustment for customer ctm_1',
+        expect.stringContaining('or are still on their way'),
+      );
+      expect(deps.alertOperator).toHaveBeenCalledWith('Paddle refund for customer ctm_1', expect.any(String));
+
+      // Its notification, queued behind the reconcile, arrives with the same status.
+      vi.clearAllMocks();
+      await partialRefundNotification();
+      expect(deps.alertOperator).not.toHaveBeenCalled();
+    });
+
+    it('acts on an adjustment once when its notification gets to it before reconcile', async () => {
+      await startAccess();
+      await partialRefundNotification();
+      expect(deps.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Paddle refund for customer ctm_1',
+        expect.any(String),
+      );
+
+      // Paddle then lists it with the same status.
+      vi.clearAllMocks();
+      deps.listAdjustments.mockResolvedValue([listedAdjustment('partial', { subtotal: '1950', type: 'partial' })]);
+      await expect(reconcileCustomer('ctm_1', deps)).resolves.toMatchObject({ adjustmentsRecovered: 0 });
       expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
