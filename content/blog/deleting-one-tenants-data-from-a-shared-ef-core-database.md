@@ -61,7 +61,7 @@ services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionStrin
 
 services.AddTenantry<string>(tenant => tenant
     .UseInMemoryStore([acme, globex])
-    .ValidateTenantActivity(t => t.As<AppTenant>().IsActive)
+    .ValidateTenantActivity(t => t is AppTenant { IsActive: true })
     .UsePro(pro => pro
         .AddDeprovisioningStep<ExportTenantData>()
         .AddSharedDataDeletion<AppDbContext>()));

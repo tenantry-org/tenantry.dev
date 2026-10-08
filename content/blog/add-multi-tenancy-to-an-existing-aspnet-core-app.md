@@ -95,7 +95,7 @@ builder.Services.AddTenantry<Guid>(tenant => tenant
     .CacheTenants()                                                 // five minutes by default
     .RequireTenantByDefault()
     .ValidateTenantAccessByClaim("org_id")                          // the caller belongs to it
-    .ValidateTenantActivity(t => t.As<OrganisationTenant>().IsActive));
+    .ValidateTenantActivity(t => t is OrganisationTenant { IsActive: true }));
 ```
 
 ```csharp

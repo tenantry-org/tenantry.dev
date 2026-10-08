@@ -111,7 +111,7 @@ builder.Services.AddTenantry<string>(tenant => tenant
     .UseInMemoryStore([acme, globex])
     .RequireTenantByDefault()
     .ValidateTenantAccessByClaim("tenant")                     // the caller may use the tenant
-    .ValidateTenantActivity(t => t.As<AppTenant>().IsActive)   // the tenant is active
+    .ValidateTenantActivity(t => t is AppTenant { IsActive: true })   // the tenant is active
     .UsePro(pro => pro.AddHangfirePropagation()));
 
 builder.Services.AddHangfire((sp, config) => config
