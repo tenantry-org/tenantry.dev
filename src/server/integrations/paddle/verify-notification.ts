@@ -1,4 +1,5 @@
 import 'server-only';
+import { EventName } from '@paddle/paddle-node-sdk';
 import { getPaddleInstance } from '@/server/integrations/paddle/get-paddle-instance';
 import { alertOperator } from '@/server/integrations/email/alerts';
 
@@ -8,9 +9,13 @@ import { alertOperator } from '@/server/integrations/email/alerts';
  * has no limit: the SDK rejects one more than five seconds old, which is what a fast clock causes.
  */
 const AHEAD_MS = 5 * 60 * 1000;
-/** Paddle's notification ids and event types: anything else in a rejected body is left out of the alert. */
+/**
+ * Paddle's notification id format and the event names the SDK knows. The alert leaves out anything else in a rejected
+ * body, including an event type newer than the SDK. A pattern for the type would also pass a domain, which looks like
+ * Paddle's `word.word` names.
+ */
 const NOTIFICATION_ID = /^ntf_[a-z0-9]{26}$/;
-const EVENT_TYPE = /^[a-z_.]{1,64}$/;
+const EVENT_TYPES = new Set<string>(Object.values(EventName));
 /** How often a process alerts about rejected notifications: once per problem, not once per delivery. */
 const ALERT_INTERVAL_MS = 6 * 60 * 60 * 1000;
 let lastAlertAt: number | null = null;
@@ -29,7 +34,7 @@ export function resetRejectionAlerts() {
  * notification. A secret that no longer matches the destination, or a server clock more than five seconds fast,
  * rejects every notification, and Paddle stops retrying after a while; both are reported, however fast the clock is.
  * Other rejected requests are internet noise and alert nothing. Anyone can send a request that looks the same, so the
- * alert names the notification only when its id and type have Paddle's formats.
+ * alert names the notification only when its id has Paddle's format and its type is an event name the SDK knows.
  */
 export async function verifyNotification(body: string, signature: string, secret: string): Promise<boolean> {
   let valid: boolean;
@@ -78,7 +83,7 @@ function notificationOf(body: string): { id: string; type: string } | null {
   }
 }
 
-// The notification as the alert names it: its id and type only if they have Paddle's formats.
+// The notification as the alert names it: its id and type only if both pass the checks above.
 function described({ id, type }: { id: string; type: string }): string {
-  return NOTIFICATION_ID.test(id) && EVENT_TYPE.test(type) ? `notification ${id} (${type})` : 'a notification';
+  return NOTIFICATION_ID.test(id) && EVENT_TYPES.has(type) ? `notification ${id} (${type})` : 'a notification';
 }

@@ -139,6 +139,17 @@ describe('POST /api/webhook', () => {
       expect(mocks.alertOperator.mock.calls[0][1]).not.toContain('evil.example');
     });
 
+    it('leaves out a type that is not one of Paddle’s event names, though it looks like one', async () => {
+      const forged = { ...event, notification_id: 'ntf_01h8bkrb5zq2xjfc4r2tqpm1aa', event_type: 'login.evil.example' };
+      await POST(delivery(JSON.stringify(forged), signedAt(NOW)));
+
+      expect(mocks.alertOperator).toHaveBeenCalledExactlyOnceWith(
+        'Paddle notifications are being rejected',
+        expect.stringContaining('The webhook rejected a notification:'),
+      );
+      expect(mocks.alertOperator.mock.calls[0][1]).not.toContain('evil.example');
+    });
+
     it('alerts nothing for a signature far ahead, a malformed header or a body that is not a notification', async () => {
       await POST(delivery(fromPaddle, signedAt(new Date(NOW.getTime() + 10 * 60 * 1000))));
       await POST(delivery(fromPaddle, `ts=${Math.floor(NOW.getTime() / 1000)}`));
