@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 set local role postgres;
 set local search_path to public, extensions;
 
-select plan(3);
+select plan(4);
 
 insert into public.customers (customer_id, email)
 select 'ctm_' || lpad(n::text, 4, '0'), 'buyer' || n || '@example.com' from generate_series(1, 1500) n;
@@ -69,6 +69,22 @@ select ok(
   public.customers_to_reconcile() @> array['ctm_paid_on']
     and not public.customers_to_reconcile() @> array['ctm_paid_off'],
   'a lapsed customer is visited while a paid period is being served, and until two days after it ends');
+
+-- A refund, credit or chargeback recorded but not yet acted on: a lapsed customer is visited until it is, so a job
+-- that recorded it and then failed for good still has it acted on.
+insert into public.customers (customer_id, email) values
+  ('ctm_adjusted', 'adjusted@example.com'), ('ctm_acted_on', 'acted-on@example.com');
+insert into public.active_subscriptions (customer_id, access_status) values
+  ('ctm_adjusted', 'lapsed'), ('ctm_acted_on', 'lapsed');
+insert into public.payment_adjustments (
+  adjustment_id, transaction_id, customer_id, action, type, status, last_event_at, consequences_applied_at
+) values
+  ('adj_due', 'txn_adjusted', 'ctm_adjusted', 'refund', 'full', 'approved', now(), null),
+  ('adj_done', 'txn_acted_on', 'ctm_acted_on', 'refund', 'full', 'approved', now(), now());
+select ok(
+  public.customers_to_reconcile() @> array['ctm_adjusted']
+    and not public.customers_to_reconcile() @> array['ctm_acted_on'],
+  'a lapsed customer is visited while a recorded adjustment is still to be acted on, and not once it has been');
 
 select * from finish();
 rollback;

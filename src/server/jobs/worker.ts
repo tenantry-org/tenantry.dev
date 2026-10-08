@@ -72,13 +72,15 @@ async function handleJob(job: Job, handlers: JobHandlers): Promise<keyof DrainRe
       await alertOperator(
         `Job ${job.id} failed for good`,
         `Job ${job.id} (${describe(job)}, customer ${job.customerId ?? 'none'}) failed on every attempt and will ` +
-          `not be retried: ${errorMessage(error)}. Its effect is missing until someone handles it. The next ` +
-          "reconcile recomputes the customer's access and entitlement from what is recorded, records a completed " +
-          'Pro payment, refund, credit or chargeback Paddle lists that is missing, acts as the webhook would on any ' +
-          'recorded refund, credit or chargeback not yet acted on, and records the current status of each Pro ' +
-          'subscription recorded as active, trialing or past due. It does not recover a lost customer event, or an ' +
-          'event for a subscription recorded with another status or not recorded at all: for those, replay the ' +
-          'notification from Paddle.',
+          `not be retried: ${errorMessage(error)}. Its effect is missing until someone handles it. Reconcile ` +
+          'visits a customer only while they have access, a running subscription, paid time being served, a ' +
+          'licence failure or a recorded refund, credit or chargeback still to act on. A visit recomputes the ' +
+          "customer's access and entitlement from what is recorded, records a completed Pro payment, refund, " +
+          'credit or chargeback Paddle lists that is missing, acts as the webhook would on any recorded refund, ' +
+          'credit or chargeback not yet acted on, and records the current status of each Pro subscription recorded ' +
+          'as active, trialing or past due. It does not recover a lost customer event, an event for a subscription ' +
+          'recorded with another status or not recorded at all, or anything for a customer it does not visit: for ' +
+          'those, replay the notification from Paddle.',
       );
     }
 

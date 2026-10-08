@@ -165,6 +165,10 @@ export const memory = {
         ...[...state.payments.values()]
           .filter((payment) => new Date(payment.periodEndsAt).getTime() > Date.now() - 2 * 24 * 60 * 60 * 1000)
           .map((payment) => payment.customerId),
+        // An adjustment still to act on (20261008090000_reconcile_adjustments_to_act_on.sql).
+        ...[...state.adjustments.values()]
+          .filter((adjustment) => adjustment.consequencesAppliedAt === null)
+          .map((adjustment) => adjustment.customerId),
       ]);
       return [...customers].sort();
     },

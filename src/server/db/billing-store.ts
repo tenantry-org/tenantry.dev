@@ -272,8 +272,9 @@ export async function recordLicence(params: { customerId: string; jwt: string })
 
 /**
  * Everyone whose access, licence or entitlement might need correcting: entitled (by recorded access or by a
- * subscription), with a failing licence, with paid time stored, or with a payment whose billing period ends after two days
- * ago (paid time still being served). One array, so the API's row limit cannot leave anyone out.
+ * subscription), with a failing licence, with paid time stored, with a payment whose billing period ends after two days
+ * ago (paid time still being served), or with a recorded refund, credit or chargeback not yet acted on. One array, so
+ * the API's row limit cannot leave anyone out.
  */
 export async function customersToReconcile(): Promise<string[]> {
   const supabase = createServiceRoleClient();

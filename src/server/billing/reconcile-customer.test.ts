@@ -417,6 +417,25 @@ describe('reconcileCustomer', () => {
       expect(deps.alertOperator).not.toHaveBeenCalled();
     });
 
+    it('visits a lapsed customer until an adjustment their failed notification recorded is acted on', async () => {
+      await startAccess();
+      await record({ status: 'canceled' });
+      vi.setSystemTime(new Date('2026-11-01T04:00:00Z'));
+      await syncCustomer('ctm_1', deps);
+      expect(memory.state.access.get('ctm_1')).toBe('lapsed');
+      expect(await memory.store.customersToReconcile()).not.toContain('ctm_1');
+
+      // The notification records the refund, then fails before acting on it.
+      deps.alertOperator.mockRejectedValue(new Error('Email unavailable'));
+      await expect(partialRefundNotification()).rejects.toThrow('Email unavailable');
+      expect(await memory.store.customersToReconcile()).toContain('ctm_1');
+
+      deps.alertOperator.mockReset();
+      await reconcileCustomer('ctm_1', deps);
+      expect(deps.alertOperator).toHaveBeenCalledWith('Paddle refund for customer ctm_1', expect.any(String));
+      expect(await memory.store.customersToReconcile()).not.toContain('ctm_1');
+    });
+
     it('carries on when Paddle cannot list adjustments', async () => {
       await startAccess();
       deps.listAdjustments.mockRejectedValue(new Error('Paddle unavailable'));
