@@ -93,10 +93,10 @@ Cancelling abandons the databases in progress and starts no more; those already 
 From code, `ITenantMigrationRunner<TKey>` returns the report, and can report each database as it completes:
 
 ```csharp
-var report = await migrations.MigrateAllAsync(
-    new Progress<MigrationResult<string>>(r => Console.WriteLine(
+var report = await migrations.MigrateAsync(
+    progress: new Progress<MigrationResult<string>>(r => Console.WriteLine(
         $"{r.Database}: {(r.Succeeded ? $"{r.AppliedMigrations.Count} applied" : r.Error!.Message)}")),
-    ct);
+    cancellationToken: ct);
 
 Console.WriteLine($"{report.Succeeded} of {report.Total} databases migrated");
 ```

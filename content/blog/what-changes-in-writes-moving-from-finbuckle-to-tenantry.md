@@ -15,7 +15,8 @@ A team on Finbuckle.MultiTenant that looks at moving to [Tenantry Core](/docs/co
 ends up isolated the same way, as well as which methods to rename. I ran three writes against both libraries, with the
 same `Order` entity, one shared SQLite database and two tenants, Acme and Globex, each with one order. Order 1 is
 Acme's. Finbuckle.MultiTenant was 10.1.4, the current release; Tenantry was 0.8. Both ran on .NET 10 and EF Core
-10.0.12.
+10.0.12. Tenantry Core is open source (Apache-2.0) and free for commercial use; [Tenantry Pro](/pro) is a paid
+subscription.
 
 The entity is the same in both runs, except that under Tenantry it implements `ITenantEntity<string>`:
 
@@ -194,8 +195,9 @@ Tenantry adds `TenantId` to no key or index. Finbuckle's `AdjustUniqueIndexes()`
 after the move you declare those indexes yourself, with their current names and columns, or the next migration drops
 `TenantId` from them and a unique index becomes unique across every tenant.
 
-Tenantry also builds in only an in-memory tenant store, so any other store becomes an `ITenantStore<TKey>` you
-write. Finbuckle
+Tenantry ships no database or configuration store, and its in-memory store is for tests and samples. An application
+has one store, an `ITenantStore<TKey>` you write over whatever holds your tenants: `GetTenantAsync` and
+`GetAllTenantsAsync`, and `FindByIdentifierAsync` when identifiers differ from ids. Finbuckle
 [tries the next strategy](https://www.finbuckle.com/MultiTenant/Docs/v10.1.4/Strategies#using-multiple-strategies)
 when no store knows an identifier; Tenantry uses the first identifier a resolver returns, and a request whose
 identifier the store does not know has no tenant.

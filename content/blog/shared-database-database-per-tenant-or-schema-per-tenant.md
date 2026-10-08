@@ -1,5 +1,5 @@
 ---
-title: Shared database, database per tenant, or schema per tenant?
+title: 'Shared database, database per tenant or schema per tenant: what each costs'
 description: Where a multi-tenant EF Core application keeps each tenant's rows decides what a missed filter exposes, what a release migrates and what a backup restores. The three layouts, what each costs, and what Tenantry Core and Pro do for each.
 date: 2026-10-06
 author: Oliver McNally
@@ -202,7 +202,3 @@ tenant with `[SharedAcrossTenants]`. Pro refuses the context for a `Shared` tena
 - A database per tenant: Tenantry Core connects each context to its tenant's database and checks the connection
   before each command. Tenantry Pro creates, migrates and drops the databases, and checks their health.
 - A schema per tenant, and mixed mode: Tenantry Pro.
-
-With a shared database or a database per tenant, Core is enough to keep one tenant's data from another's. Pro adds
-the two other layouts, and operations around tenants, such as creating, migrating and removing their databases and
-schemas.
