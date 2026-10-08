@@ -12,7 +12,7 @@ import { ProofStrip } from '@/components/shared/proof-strip';
 import { TrackedLink } from '@/components/shared/tracked-link';
 import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
 import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
-import { VESTED_RELEASES, VESTING_RULES } from '@/constants/vesting';
+import { VESTING_RULES } from '@/constants/vesting';
 import { latestDocsVersion, publishedSince } from '@/lib/docs-versions';
 
 export const metadata: Metadata = {
@@ -128,10 +128,10 @@ const QUESTIONS = [
         <Suspense fallback={null}>
           <ProPriceSentence />
         </Suspense>
-        {`Every Tenantry Pro release while you subscribe, a licence key, and email support with a reply within ${SUPPORT_REPLY_WITHIN}. Releases come from the package feed, Tenantry’s private NuGet feed. Once you have paid for 12 months in total, or for a year up front, ${VESTED_RELEASES} stay licensed to you after the subscription ends. Your vested-through date is the end of your paid time.`}
+        {`Every Tenantry Pro release while you subscribe, a licence key, and email support with a reply within ${SUPPORT_REPLY_WITHIN}. Releases come from the package feed, Tenantry’s private NuGet feed. After 12 paid months in total or a year paid up front, you keep releases when the subscription ends.`}
       </>
     ),
-    link: { label: 'EULA', href: VESTING_RULES },
+    link: { label: 'What you keep', href: '#subscription-ends' },
   },
   {
     question: 'How does my team install it, locally and in CI?',
@@ -175,7 +175,7 @@ const QUESTIONS = [
   {
     question: 'Is Pro’s source available?',
     answer:
-      'No. Pro ships as compiled packages with their debug symbols built in, so stack traces show Pro’s file names and line numbers, but a debugger cannot show its source. Pro’s documentation and samples are public. If Tenantry stops trading and the package feed goes offline for good, you can request the source of your vested releases, as the last answer on this page sets out.',
+      'No. Pro ships as compiled packages with their debug symbols built in, so stack traces show Pro’s file names and line numbers, but a debugger cannot show its source. Pro’s documentation and samples are public. If Tenantry stops trading and the package feed goes offline for good, you can request the source of the releases you keep, as the last answer on this page sets out.',
   },
   {
     question: 'How does a company buy it?',
@@ -197,9 +197,9 @@ const QUESTIONS = [
   },
   {
     question: 'What happens when the subscription ends?',
-    // The price cards link here.
+    // The price cards and the first answer link here.
     id: 'subscription-ends',
-    answer: `With 12 paid months in total, gaps allowed, or a paid year, you keep every release published up to the end of the time you paid for, and its later patches. The package feed keeps serving them and your licence key keeps working. Other releases are no longer licensed to you; if nothing is vested, none are. With less paid time, your licence to Pro ends with the subscription and you stop using it. Only a refund, credit or chargeback takes kept releases away. If you subscribe again, the paid time you kept still counts. A vested Pro minor stays on the Core minor of the same number (Pro ${latestDocsVersion.version} on Core ${latestDocsVersion.version}.x).`,
+    answer: `After 12 paid months in total, gaps allowed, or a year paid up front, you keep every release published up to your vested-through date, the end of the time you paid for, with its later patches. The package feed keeps serving them and your licence key keeps working; later releases are not licensed to you. With less paid time, your licence to Pro ends with the subscription and you stop using it. Only a refund, credit or chargeback takes kept releases away. If you subscribe again, the paid time you kept still counts. A kept Pro minor stays on the Core minor of the same number (Pro ${latestDocsVersion.version} on Core ${latestDocsVersion.version}.x).`,
     link: [
       { label: 'EULA', href: VESTING_RULES },
       { label: 'Compatibility', href: '/docs/pro/compatibility#tenantry-core' },
@@ -208,7 +208,7 @@ const QUESTIONS = [
   {
     question: 'How long is a release patched?',
     answer:
-      'Until 1.0, security fixes are released as a patch to the latest two Pro minor versions. Pro minor versions released before Tenantry Pro went on sale were internal development builds, and they are not patched. A patch release takes the date of its x.y.0 release, so once that release is vested, the package feed serves you its patches after your subscription ends too.',
+      'Until 1.0, security fixes are released as a patch to the latest two Pro minor versions. Pro minor versions released before Tenantry Pro went on sale were internal development builds, and they are not patched.',
     link: {
       label: 'Licensing',
       href: publishedSince('pro', 'v0.8.0') ? '/docs/pro/licensing#security-patches' : '/docs/pro/licensing',
@@ -217,7 +217,7 @@ const QUESTIONS = [
   {
     question: 'What if Tenantry stops?',
     answer:
-      'Core stays Apache-2.0 on GitHub, and the vested Pro releases stay licensed and keep working, as when a subscription ends. If Tenantry fully ceases commercial operations and the package feed goes offline permanently, you can request copies of the packages of your vested releases, with a copy of the source code of those releases, by email to support@tenantry.dev.',
+      'Core stays Apache-2.0 on GitHub, and the Pro releases you keep stay licensed and keep working, as when a subscription ends. If Tenantry fully ceases commercial operations and the package feed goes offline permanently, you can request copies of the packages of those releases, with a copy of their source code, by email to support@tenantry.dev.',
     link: { label: 'EULA', href: '/legal/eula' },
   },
 ];
