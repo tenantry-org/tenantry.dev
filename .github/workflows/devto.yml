@@ -22,7 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     # The script waits up to twenty minutes for the site to serve the posts.
     timeout-minutes: 30
-    # A later push supersedes a run still waiting; one that is copying finishes first.
+    # Runs copy one at a time. A run waits for its own commit's posts; if a later push changes them first, it fails
+    # after twenty minutes and the later run copies them.
     concurrency:
       group: devto
       cancel-in-progress: false
