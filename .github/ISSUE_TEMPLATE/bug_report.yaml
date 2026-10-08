@@ -15,14 +15,14 @@ body:
     id: description
     attributes:
       label: What happened?
-      description: Describe the bug in a sentence or two. Feel free to add screenshots or a video to better explain!
+      description: Describe the bug in a sentence or two, with screenshots or a video if they help.
     validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
       label: Steps to reproduce
-      description: Explain how to reproduce this issue. We prefer a step-by-step walkthrough, where possible.
+      description: List the steps that reproduce it.
       value: |
         1.
         2.
