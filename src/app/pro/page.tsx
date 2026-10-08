@@ -128,7 +128,7 @@ const QUESTIONS = [
         <Suspense fallback={null}>
           <ProPriceSentence />
         </Suspense>
-        {`Every Tenantry Pro release while you subscribe, a licence key, and email support with a reply within ${SUPPORT_REPLY_WITHIN}. Releases come from the package feed, Tenantry’s private NuGet feed. After 12 paid months in total or a year paid up front, you keep releases when the subscription ends.`}
+        {`Every Tenantry Pro release while you subscribe, a licence key, and email support with a reply within ${SUPPORT_REPLY_WITHIN}. Releases come from the package feed, Tenantry’s private NuGet feed. After 12 paid months in total or a year paid up front, you keep the releases published while you paid when the subscription ends.`}
       </>
     ),
     link: { label: 'What you keep', href: '#subscription-ends' },

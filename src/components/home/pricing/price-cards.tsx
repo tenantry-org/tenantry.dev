@@ -64,7 +64,7 @@ export function PriceCards({ option, prices, basePrice, proLink }: Props) {
             </Link>{' '}
             · Cancel any time ·{' '}
             <Link href={SUBSCRIPTION_ENDS} className={'hover:underline'}>
-              Releases stay licensed after 12 paid months or a paid year
+              Releases published while you paid stay licensed after 12 paid months or a paid year
             </Link>
           </p>
         </div>
