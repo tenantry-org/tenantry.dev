@@ -52,12 +52,10 @@ export default function ComparePage() {
           Tenantry beside three alternatives: your own query filters, Finbuckle.MultiTenant and ABP.
         </p>
         <p className={'mt-4 max-w-3xl leading-relaxed text-muted-foreground'}>
-          Tenantry fits an existing ASP.NET Core and EF Core application that keeps its own DbContext and tenant store:
-          it is a library with no tenant management UI, and tenants come from an ITenantStore you implement over
-          whatever already holds them. ABP fits an application built on ABP, whose contexts derive from AbpDbContext and
-          whose Tenant Management module has a UI for tenants. Finbuckle.MultiTenant builds in tenant stores, such as EF
-          Core and a distributed cache, and can add TenantId to unique indexes with AdjustUniqueIndexes(). Your own
-          query filters need a filter on each entity and a SaveChanges override.
+          Tenantry fits an existing ASP.NET Core and EF Core application that keeps its own DbContext and tenant store.
+          ABP fits an application built on ABP. Finbuckle.MultiTenant fits one that wants built-in tenant stores, such
+          as EF Core and a distributed cache. Your own query filters need a filter on each entity and a SaveChanges
+          override.
         </p>
         <div className={'mt-10'}>
           <ComparisonTable full={true} />
