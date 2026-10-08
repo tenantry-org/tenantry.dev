@@ -103,8 +103,10 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
               nothing from the feed when every package they name is already in that folder. The folder is{' '}
               <code>~/.nuget/packages</code> unless <code>NUGET_PACKAGES</code> names another; keep it between CI runs.
               NuGet&apos;s vulnerability audit still reads the feed and warns NU1900 when it cannot, which fails the
-              restore when warnings are errors. The feed publishes no vulnerability data, so an{' '}
-              <code>auditSources</code> list in nuget.config that names only nuget.org stops the warning.
+              restore when warnings are errors. The feed publishes no vulnerability data, so with the .NET 9 SDK or
+              later (NuGet 6.12), an <code>auditSources</code> list in nuget.config that names only nuget.org stops the
+              warning. The .NET 8 SDK ignores that list; there, add NU1900 to <code>WarningsNotAsErrors</code> in the
+              project or Directory.Build.props, which keeps the warning without failing the restore.
             </p>
           </Step>
 

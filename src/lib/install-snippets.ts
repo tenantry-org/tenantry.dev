@@ -72,7 +72,11 @@ export const lockFileProperty = `<PropertyGroup>
 </PropertyGroup>`;
 export const lockedRestore = 'dotnet restore --locked-mode';
 
-/** A GitHub Actions job restoring from the feed in locked mode and running the tests with the licence key. */
+/**
+ * A GitHub Actions job restoring from the feed in locked mode and running the tests with the licence key.
+ * setup-dotnet's cache keeps the global packages folder between runs, keyed on the lock files, so a restore downloads
+ * from the feed only the packages the cache does not hold.
+ */
 export const ciWorkflow = `jobs:
   build:
     runs-on: ubuntu-latest
@@ -83,6 +87,7 @@ export const ciWorkflow = `jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
+          cache: true
       - run: dotnet restore --locked-mode
       - run: dotnet build --no-restore
       - run: dotnet test --no-build

@@ -68,4 +68,8 @@ describe('install snippets', () => {
     expect(dockerRestore).toContain('COPY nuget.config Directory.*.props ./');
     expect(dockerBuild).toContain(`--secret id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE}`);
   });
+
+  it('keep the global packages folder between CI runs', () => {
+    expect(ciWorkflow).toMatch(/- uses: actions\/setup-dotnet@v6\n {8}with:\n( {10}\S.*\n)* {10}cache: true\n/);
+  });
 });
