@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ENTITLEMENT } from '@/test/entitlement-views';
 import { InstallPanel } from './install-panel';
+
+const publishedSince = vi.hoisted(() => vi.fn(() => false));
+vi.mock('@/lib/docs-versions', () => ({ publishedSince }));
 
 const render = () =>
   renderToStaticMarkup(
@@ -23,9 +26,21 @@ describe('InstallPanel', () => {
   it('says what a restore needs while the package feed is unreachable', () => {
     const html = render();
 
+    expect(publishedSince).toHaveBeenCalledWith('pro', 'v0.8.0');
     expect(html).toContain('so it fails while the feed cannot be reached');
     expect(html).toContain('<code>NUGET_PACKAGES</code> names another; keep it between CI runs');
     expect(html).toContain('warns NU1900 when it cannot');
+  });
+
+  it('links the installation guide for an unreachable feed once the site shows Pro 0.8', () => {
+    publishedSince.mockReturnValueOnce(true);
+    const html = render();
+
+    expect(html).toContain('already in NuGet&#x27;s global packages folder, so keep that folder between CI runs.');
+    expect(html).toMatch(
+      /<a [^>]*href="\/docs\/pro\/installation#when-the-package-feed-is-unreachable"[^>]*>When the package feed is unreachable<\/a>/,
+    );
+    expect(html).not.toContain('NUGET_PACKAGES');
   });
 
   it('numbers the steps in order', () => {

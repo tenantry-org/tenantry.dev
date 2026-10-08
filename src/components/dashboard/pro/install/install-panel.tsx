@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { NoSubscription } from '@/components/dashboard/pro/no-subscription';
 import { Snippet } from '@/components/dashboard/pro/snippet';
 import { VESTED_RELEASES, VESTING_RULES } from '@/constants/vesting';
+import { publishedSince } from '@/lib/docs-versions';
 import type { InstallView, NoSubscriptionView } from '@/server/billing/pro-pages';
 import {
   FEED_TOKEN_VARIABLE,
@@ -21,6 +22,7 @@ import {
 } from '@/lib/install-snippets';
 
 const INSTALL_GUIDE = '/docs/pro/installation';
+const FEED_UNREACHABLE = `${INSTALL_GUIDE}#when-the-package-feed-is-unreachable`;
 const ACCESS_PAGE = '/dashboard/pro';
 
 /**
@@ -97,17 +99,29 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
             </p>
             <Snippet value={lockFileProperty} label={'Copy'} />
             <Snippet value={lockedRestore} />
-            <p className={'text-sm text-muted-foreground'}>
-              A restore that needs a Pro package not already in NuGet&apos;s global packages folder downloads it from
-              the package feed, so it fails while the feed cannot be reached. With lock files, a restore downloads
-              nothing from the feed when every package they name is already in that folder. The folder is{' '}
-              <code>~/.nuget/packages</code> unless <code>NUGET_PACKAGES</code> names another; keep it between CI runs.
-              NuGet&apos;s vulnerability audit still reads the feed and warns NU1900 when it cannot, which fails the
-              restore when warnings are errors. The feed publishes no vulnerability data, so with the .NET 9 SDK or
-              later (NuGet 6.12), an <code>auditSources</code> list in nuget.config that names only nuget.org stops the
-              warning. The .NET 8 SDK ignores that list; there, add NU1900 to <code>WarningsNotAsErrors</code> in the
-              project or Directory.Build.props, which keeps the warning without failing the restore.
-            </p>
+            {/* Pro 0.8's installation guide covers an unreachable feed in full, so from 0.8 the step links to it. */}
+            {publishedSince('pro', 'v0.8.0') ? (
+              <p className={'text-sm text-muted-foreground'}>
+                With lock files, a restore downloads nothing from the package feed when every package they name is
+                already in NuGet&apos;s global packages folder, so keep that folder between CI runs.{' '}
+                <Link className={'text-link underline underline-offset-4'} href={FEED_UNREACHABLE}>
+                  When the package feed is unreachable
+                </Link>{' '}
+                says where the folder is and how to keep the NU1900 audit warning from failing the restore.
+              </p>
+            ) : (
+              <p className={'text-sm text-muted-foreground'}>
+                A restore that needs a Pro package not already in NuGet&apos;s global packages folder downloads it from
+                the package feed, so it fails while the feed cannot be reached. With lock files, a restore downloads
+                nothing from the feed when every package they name is already in that folder. The folder is{' '}
+                <code>~/.nuget/packages</code> unless <code>NUGET_PACKAGES</code> names another; keep it between CI
+                runs. NuGet&apos;s vulnerability audit still reads the feed and warns NU1900 when it cannot, which fails
+                the restore when warnings are errors. The feed publishes no vulnerability data, so with the .NET 9 SDK
+                or later (NuGet 6.12), an <code>auditSources</code> list in nuget.config that names only nuget.org stops
+                the warning. The .NET 8 SDK ignores that list; there, add NU1900 to <code>WarningsNotAsErrors</code> in
+                the project or Directory.Build.props, which keeps the warning without failing the restore.
+              </p>
+            )}
           </Step>
 
           <Step title={'6. CI'}>
