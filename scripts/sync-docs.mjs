@@ -40,6 +40,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = resolve(here, '..');
 const releaseBuild = Boolean(process.env.VERCEL || process.env.CI);
 
+// Links in released docs to a heading by a slug the site does not produce (a heading's inline code keeps its type
+// parameters, so `ITenantEntity<TKey>` is itenantentitytkey). Docs are read at their release tag, which cannot change:
+// the next release corrects the link, and an entry goes when that release's docs leave the site.
+const RELEASE_LINK_FIXES = {
+  'core@v0.7.0': [['/core/core-concepts#itenantentity', '/core/core-concepts#itenantentitytkey']],
+};
+
 const groups = [
   {
     name: 'core',
@@ -131,11 +138,15 @@ function toFrontmatter(raw, group, source, dir, context) {
 
   const linked = dir === 'api' ? body.join('\n') : linkApiTypes(body.join('\n'), context.apiTypes);
   const rewritten = rewriteLinks(linked, group, source, dir, context.base).trimStart();
+  const fixed = (RELEASE_LINK_FIXES[`${group}@${source?.ref}`] ?? []).reduce(
+    (text, [from, to]) => text.replaceAll(`](${context.base}${from})`, `](${context.base}${to})`),
+    rewritten,
+  );
 
   const yamlTitle = title.replaceAll('"', String.raw`\"`);
   const yamlDesc = description.replaceAll('"', String.raw`\"`);
 
-  return `---\ntitle: "${yamlTitle}"\ndescription: "${yamlDesc}"\n---\n\n${rewritten}`;
+  return `---\ntitle: "${yamlTitle}"\ndescription: "${yamlDesc}"\n---\n\n${fixed}`;
 }
 
 // Writes one folder's markdown pages as MDX and returns their slugs (README.md becomes the folder's index).
