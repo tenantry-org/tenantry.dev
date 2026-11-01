@@ -12,6 +12,10 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 10
+    ignore:
+      # @types/node follows the Node major the site runs on (.nvmrc and engines); it moves with a Node upgrade, by hand.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     groups:
       minor-patch-dependencies:
         patterns:
