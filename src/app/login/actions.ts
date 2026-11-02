@@ -10,13 +10,28 @@ interface FormData {
   email: string;
   password: string;
 }
+
+export type LoginResult = { error: string };
+
+// Supabase error codes the customer can act on; anything else, such as Auth out of reach, gets the generic message
+// rather than being reported as a wrong password. Supabase checks the password before it reports an unconfirmed
+// address, so email_not_confirmed reveals nothing to someone without the password.
+const MESSAGES: Record<string, string> = {
+  invalid_credentials: 'Invalid email or password.',
+  email_not_confirmed:
+    'Confirm your email address first: open the link we sent, or sign up again with the same address to resend it.',
+  over_request_rate_limit: 'Too many attempts. Please wait a minute and try again.',
+  validation_failed: 'Enter a valid email address and password.',
+};
+
 /** Signs in, then continues to `next` when it is a page on the site, such as the checkout, or else the Pro page. */
-export async function login(data: FormData, next?: string) {
+export async function login(data: FormData, next?: string): Promise<LoginResult> {
   const supabase = await createUserClient();
   const { error } = await supabase.auth.signInWithPassword(data);
 
   if (error) {
-    return { error: true };
+    console.error('Sign-in failed:', error.code, error.message);
+    return { error: (error.code && MESSAGES[error.code]) || 'Something went wrong. Please try again.' };
   }
 
   revalidatePath('/', 'layout');
