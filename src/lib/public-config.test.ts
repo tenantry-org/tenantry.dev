@@ -27,6 +27,7 @@ describe('readPublicConfig', () => {
           prices: { month: 'pri_01month', year: 'pri_01year' },
         },
         checkoutEnabled: true,
+        turnstileSiteKey: null,
       },
       problems: [],
     });
@@ -77,6 +78,14 @@ describe('readPublicConfig', () => {
     ] as const) {
       expect(read({ ...complete, NEXT_PUBLIC_CHECKOUT_ENABLED: value }).config.checkoutEnabled).toBe(open);
     }
+  });
+
+  it('takes the Turnstile site key, which is optional', () => {
+    expect(read({ ...complete, NEXT_PUBLIC_TURNSTILE_SITE_KEY: ' 0x4AAAAAAA ' })).toMatchObject({
+      config: { turnstileSiteKey: '0x4AAAAAAA' },
+      problems: [],
+    });
+    expect(read({ ...complete, NEXT_PUBLIC_TURNSTILE_SITE_KEY: ' ' }).config.turnstileSiteKey).toBeNull();
   });
 });
 

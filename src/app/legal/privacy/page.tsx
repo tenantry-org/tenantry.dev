@@ -58,8 +58,9 @@ export default function PrivacyPage() {
       <p>
         We share data with sub-processors that operate the Services on our behalf, each under its own terms: Paddle
         (billing, as merchant of record), Supabase (authentication and database), GitHub (sign-in, if you use it),
-        Vercel (hosting, Web Analytics and Speed Insights) and Resend (email). Some of them process data outside the UK
-        and the EEA, under appropriate safeguards such as standard contractual clauses.
+        Vercel (hosting, Web Analytics and Speed Insights), Resend (email) and Cloudflare (Turnstile, which checks that
+        the sign-up, log-in and password reset forms are used by a person rather than a script). Some of them process
+        data outside the UK and the EEA, under appropriate safeguards such as standard contractual clauses.
       </p>
 
       <h2>4. Cookies and analytics</h2>

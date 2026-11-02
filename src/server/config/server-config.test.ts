@@ -64,6 +64,7 @@ describe('validateServerConfig', () => {
         proProductId: 'pro_01',
       },
       checkoutEnabled: false,
+      turnstileSiteKey: null,
       licenceSigningKey: expect.any(KeyObject),
       provisioning: 'manual',
       email: { resendApiKey: 'resend', from: 'Tenantry <hello@tenantry.dev>', replyTo: 'support@tenantry.dev' },

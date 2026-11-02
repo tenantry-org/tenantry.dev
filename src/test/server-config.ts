@@ -17,6 +17,7 @@ export function testServerConfig(overrides: Partial<ServerConfig> = {}): ServerC
       proProductId: 'pro_01',
     },
     checkoutEnabled: true,
+    turnstileSiteKey: null,
     licenceSigningKey: privateKey,
     provisioning: 'auto',
     email: { resendApiKey: 're_test', from: 'Tenantry <noreply@example.com>', replyTo: 'support@example.com' },

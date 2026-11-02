@@ -15,10 +15,16 @@ beforeEach(() => {
 
 describe('requestPasswordReset', () => {
   it('sends a link that signs in through the callback and opens the new-password page', async () => {
-    expect(await requestPasswordReset('me@example.com')).toEqual({ sent: true });
+    expect(await requestPasswordReset('me@example.com', 'turnstile')).toEqual({ sent: true });
     expect(auth.resetPasswordForEmail).toHaveBeenCalledWith('me@example.com', {
       redirectTo: 'https://sandbox.example.com/auth/callback?next=/reset-password',
+      captchaToken: 'turnstile',
     });
+  });
+
+  it('says when the check for scripts did not pass', async () => {
+    auth.resetPasswordForEmail.mockResolvedValue({ data: null, error: { code: 'captcha_failed', message: 'x' } });
+    expect(await requestPasswordReset('me@example.com')).toEqual({ error: expect.stringContaining('did not pass') });
   });
 
   it('answers as sent when Supabase fails for a reason the customer cannot act on, revealing no account', async () => {

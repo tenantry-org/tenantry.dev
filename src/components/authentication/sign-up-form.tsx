@@ -5,6 +5,7 @@ import { FormEvent, useState, useTransition } from 'react';
 import { AuthenticationForm } from '@/components/authentication/authentication-form';
 import { signup } from '@/app/signup/actions';
 import { useToast } from '@/components/ui/use-toast';
+import { useCaptcha } from '@/components/authentication/captcha';
 
 interface Props {
   /** The page the confirmation link continues to, such as the checkout. */
@@ -18,13 +19,16 @@ export function SignupForm({ next }: Props) {
   const [sentTo, setSentTo] = useState<string | null>(null);
   // Sending the confirmation email can take a few seconds; the button says so and ignores further clicks.
   const [pending, startTransition] = useTransition();
+  const captcha = useCaptcha();
 
   function handleSignup(event: FormEvent) {
     event.preventDefault();
     startTransition(async () => {
-      const result = await signup({ email, password }, next);
-      if ('error' in result) toast({ description: result.error, variant: 'destructive' });
-      else setSentTo(email);
+      const result = await signup({ email, password, captchaToken: captcha.token ?? undefined }, next);
+      if ('error' in result) {
+        toast({ description: result.error, variant: 'destructive' });
+        captcha.reset();
+      } else setSentTo(email);
     });
   }
 
@@ -53,7 +57,13 @@ export function SignupForm({ next }: Props) {
         onPasswordChange={(password) => setPassword(password)}
         newPassword={true}
       />
-      <Button type={'submit'} className={'w-full'} disabled={pending} aria-busy={pending}>
+      {captcha.element}
+      <Button
+        type={'submit'}
+        className={'w-full'}
+        disabled={pending || (captcha.required && !captcha.token)}
+        aria-busy={pending}
+      >
         {pending ? 'Creating your account…' : 'Sign up'}
       </Button>
     </form>

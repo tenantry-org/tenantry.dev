@@ -9,6 +9,7 @@ export type ResetRequestResult = { sent: true } | { error: string };
 const MESSAGES: Record<string, string> = {
   over_email_send_rate_limit: 'Too many reset emails were requested. Please wait a minute and try again.',
   over_request_rate_limit: 'Too many attempts. Please wait a minute and try again.',
+  captcha_failed: 'The check that keeps out scripts did not pass. Please try again.',
   email_address_invalid: 'Enter a valid email address.',
   validation_failed: 'Enter a valid email address.',
 };
@@ -16,12 +17,14 @@ const MESSAGES: Record<string, string> = {
 /**
  * Emails a password reset link. The link comes back through /auth/callback, which signs the customer in and
  * takes them to /reset-password to choose a new password. The answer is the same whether or not an account
- * has the address, so accounts cannot be discovered.
+ * has the address, so accounts cannot be discovered. `captchaToken` is Turnstile's token, when the site has a Turnstile
+ * site key (captcha.tsx).
  */
-export async function requestPasswordReset(email: string): Promise<ResetRequestResult> {
+export async function requestPasswordReset(email: string, captchaToken?: string): Promise<ResetRequestResult> {
   const supabase = await createUserClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${serverConfig().siteUrl}/auth/callback?next=/reset-password`,
+    captchaToken,
   });
 
   if (error) {
