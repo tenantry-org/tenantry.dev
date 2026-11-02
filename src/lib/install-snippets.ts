@@ -109,6 +109,14 @@ RUN --mount=type=secret,id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE} \\
     dotnet restore src/MyApp --locked-mode
 COPY . .
 RUN dotnet publish src/MyApp -c Release --no-restore -o /app`;
+/**
+ * The .dockerignore beside the Dockerfile. Without it, `COPY . .` copies the host's obj folders over the ones the
+ * container's restore wrote. Their project.assets.json names packages in the host's global packages folder, which the
+ * image does not have, so `dotnet publish --no-restore` fails with NETSDK1064. bin is left out with obj: the publish
+ * builds its own.
+ */
+export const dockerIgnore = `**/bin
+**/obj`;
 export const dockerBuild = `docker build --secret id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE} .`;
 
 /** Storing the licence key with user secrets, from the application's project directory. */

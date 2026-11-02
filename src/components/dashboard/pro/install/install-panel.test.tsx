@@ -43,6 +43,13 @@ describe('InstallPanel', () => {
     expect(html).not.toContain('NUGET_PACKAGES');
   });
 
+  it('adds a .dockerignore to the Docker build, so a local obj folder does not replace the image’s restore', () => {
+    const html = render();
+
+    expect(html).toContain('Add a <code>.dockerignore</code> beside the Dockerfile');
+    expect(html).toContain('**/bin\n**/obj');
+  });
+
   it('numbers the steps in order', () => {
     const steps = [...render().matchAll(/<h3[^>]*>(\d+)\. /g)].map((match) => Number(match[1]));
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ciWorkflow,
   dockerBuild,
+  dockerIgnore,
   dockerRestore,
   FEED_SOURCE_KEY,
   FEED_TOKEN_VARIABLE,
@@ -67,6 +68,13 @@ describe('install snippets', () => {
     expect(dockerRestore).toContain('--locked-mode');
     expect(dockerRestore).toContain('COPY nuget.config Directory.*.props ./');
     expect(dockerBuild).toContain(`--secret id=tenantry_feed_token,env=${FEED_TOKEN_VARIABLE}`);
+  });
+
+  it('keep the host’s obj folders out of the Docker build, whose publish uses the container’s restore', () => {
+    // The Dockerfile copies the whole build context over the restored project, then publishes without restoring: an
+    // obj folder from the host would replace the container's project.assets.json with one naming host package paths.
+    expect(dockerRestore).toMatch(/dotnet restore [^\n]*\nCOPY \. \.\nRUN dotnet publish [^\n]*--no-restore/);
+    expect(dockerIgnore.split('\n')).toEqual(['**/bin', '**/obj']);
   });
 
   it('keep the global packages folder between CI runs', () => {

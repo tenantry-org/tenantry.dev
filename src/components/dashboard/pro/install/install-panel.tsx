@@ -12,6 +12,7 @@ import {
   addProPackages,
   ciWorkflow,
   dockerBuild,
+  dockerIgnore,
   dockerRestore,
   feedTokenPowerShell,
   feedTokenShell,
@@ -142,6 +143,13 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
               project and lock files before copying the rest of the source:
             </p>
             <Snippet value={dockerRestore} label={'Copy'} />
+            <p className={'text-sm text-muted-foreground'}>
+              Add a <code>.dockerignore</code> beside the Dockerfile that leaves out the bin and obj folders. Without
+              it, <code>COPY . .</code> copies the obj folders of a local build over the ones the restore in the image
+              wrote, and the publish fails with NETSDK1064, because they name packages on your machine:
+            </p>
+            <Snippet value={dockerIgnore} label={'Copy'} />
+            <p className={'text-sm text-muted-foreground'}>Then build the image:</p>
             <Snippet value={dockerBuild} label={'Copy'} />
           </Step>
 
