@@ -23,15 +23,16 @@ import { compareVersions, parseVersion } from '@/server/feed/version';
  *   releasedAt  the release's date (ISO 8601), such as the signed tag's date, for a release published later. It may
  *               be at most MAX_BACKDATE_DAYS before now, at most five minutes ahead, and not before any earlier
  *               version's date (in SemVer's order, a candidate before its release): otherwise a release could be dated
- *               under customers' vested dates and be served to them. It is ignored, and not checked, when the release
- *               is recorded already by another of its packages. Without it, a release is dated now, or as the newest
- *               earlier release if that is later.
+ *               under customers' vested dates and be served to them. A patch release is bounded only by the earlier
+ *               releases of its own minor, since it is dated for vesting as its X.Y.0 (below). It is ignored, and not
+ *               checked, when the release is recorded already by another of its packages. Without it, a release is
+ *               dated now, or as the newest earlier release that bounds it if that is later.
  *   security    true for a security patch, recorded and listed to the operator. It changes no date: every patch
  *               release, a security fix or not, is dated for vesting as its minor's X.Y.0 release, which must be
  *               recorded first, by the release record's own rule. A release candidate is never a security patch.
  *
- * Packages are limited to 4 MB: a Vercel function takes a request body of at most 4.5 MB. Pro's packages are well
- * under 1 MB.
+ * Packages are limited to 4 MB: a Vercel function takes a request body of at most 4.5 MB. Pro's largest package,
+ * Tenantry.Pro.EfCore, is about 1 MB with four target frameworks.
  */
 
 const MAX_PACKAGE_BYTES = 4 * 1024 * 1024;
@@ -110,9 +111,14 @@ export async function handlePublish(request: Request, deps: FeedDeps = defaultFe
   const releases = await deps.store.listReleases();
   // A release already recorded (by another of its packages) keeps its date, so this package's is not checked.
   const releaseRecorded = releases.some((release) => release.version === nuspec.version);
+  // A patch release is dated for vesting as its X.Y.0 (pro_releases' trigger), so its own date can put it under no
+  // one's vested date: only its own minor's earlier releases bound it. Otherwise a patch of an older minor published
+  // first, as in a security fix released for two minors at once, would refuse it.
+  const isPatch = version.patch > 0 && version.rc === null;
   const newestEarlier = Math.max(
     ...releases
       .filter((release) => compareVersions(release, version) < 0)
+      .filter((release) => !isPatch || (release.major === version.major && release.minor === version.minor))
       .map((release) => release.publishedAt.getTime()),
   );
   const now = deps.now().getTime();
