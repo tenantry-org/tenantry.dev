@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Header from '@/components/home/header/header';
 import { Footer } from '@/components/home/footer/footer';
 import { ComparisonTable } from '@/components/home/comparison/comparison';
-import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
+import { DOTNET_SUPPORT, V1_NOT_BEFORE } from '@/constants/dotnet-support';
 import { latestDocsVersion } from '@/lib/docs-versions';
 
 export const metadata: Metadata = {
@@ -38,7 +38,7 @@ const NOTES: { title: string; text: string | string[] }[] = [
   },
   {
     title: 'Versions',
-    text: `Tenantry is in beta: its releases are numbered 0.x, the newest is ${latestDocsVersion.version}, and 1.0 comes no earlier than 10 November 2027. From version 10, Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only; its 9.x and 8.x lines still get fixes (9.4.13 and 8.1.18 in September 2026). Tenantry supports ${DOTNET_SUPPORT}.`,
+    text: `Tenantry is in beta: its releases are numbered 0.x, the newest is ${latestDocsVersion.version}, and 1.0 comes no earlier than ${V1_NOT_BEFORE}. From version 10, Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only; its 9.x and 8.x lines still get fixes (9.4.13 and 8.1.18 in September 2026). Tenantry supports ${DOTNET_SUPPORT}.`,
   },
 ];
 

@@ -8,6 +8,12 @@ import newestRelease from '../../newest-release.json';
 const LEGACY = ['8', '9'];
 export const LEGACY_SUPPORT_ENDS = '10 November 2027';
 
+/**
+ * 1.0 drops .NET 8 and 9, so it comes no earlier than the end of their support. The hero, the Pro page and the compare
+ * page state this date, as Core's and Pro's compatibility guides do: a change to it changes them in the same release.
+ */
+export const V1_NOT_BEFORE = LEGACY_SUPPORT_ENDS;
+
 function list(versions: string[]): string {
   return versions.length > 1 ? `${versions.slice(0, -1).join(', ')} and ${versions.at(-1)}` : versions.join('');
 }
