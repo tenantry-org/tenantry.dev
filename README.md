@@ -41,7 +41,9 @@ Key code is in `src/server`, in layers whose imports point only down this list (
   `paddle-assumptions.ts`); storing that and keeping their licence and emails in line with it (`customer-access.ts`);
   applying Paddle's notifications (`apply-paddle-event.ts`); the reconcile run; and the Pro pages' read models, one
   per page, each reading only what its page shows (`pro-pages.ts`).
-- `jobs/`: the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order.
+- `jobs/`: the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order. A
+  Paddle event is stored without its payment attempts' card or PayPal details, and the daily reconcile run deletes
+  jobs done more than 30 days ago, the period the privacy policy states.
 - `integrations/`: Paddle, email (Resend) and the licence issuer.
 - `db/`: `createUserClient` (the signed-in user's session; RLS applies) and `createServiceRoleClient` (bypasses
   RLS), and the only modules that query the database: the billing tables' store, the customer jobs and the

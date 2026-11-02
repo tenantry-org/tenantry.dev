@@ -5,7 +5,7 @@ export const metadata = { title: 'Privacy Policy | Tenantry' };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" lastUpdated="2026-10-06">
+    <LegalPage title="Privacy Policy" lastUpdated="2026-11-02">
       <p>
         This Privacy Policy explains how {LegalEntity.name} (&quot;Tenantry&quot;, &quot;we&quot;) collects, uses, and
         protects personal data when you use our website and Services.
@@ -23,7 +23,9 @@ export default function PrivacyPage() {
         <li>
           <strong>Billing data:</strong> processed by Paddle.com as merchant of record. We receive subscription status,
           customer identifiers and, for each Tenantry Pro payment, its billing period, amounts, currency and any
-          refunds, credits or chargebacks, not payment-card details.
+          refunds, credits or chargebacks. We do not keep payment-card or PayPal details: we remove them from
+          Paddle&apos;s notifications before storing them. We keep each notification, which can include your name and
+          email address, for 30 days after we act on it, or until we have dealt with one we could not act on.
         </li>
         <li>
           <strong>Entitlement records:</strong> subscription status, the licence keys issued to your account, and the
@@ -71,8 +73,8 @@ export default function PrivacyPage() {
       <h2>5. Data retention</h2>
       <p>
         We retain account and entitlement data for as long as your account is active and as required for legal and
-        accounting purposes. Package download records are deleted after 90 days. You may request deletion subject to
-        those obligations.
+        accounting purposes. Package download records are deleted after 90 days, and Paddle&apos;s notifications 30 days
+        after we act on them. You may request deletion subject to those obligations.
       </p>
 
       <h2>6. Your rights</h2>

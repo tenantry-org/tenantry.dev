@@ -10,6 +10,7 @@ function fakeDeps(customers: string[]) {
     enqueueReconcileJobs: vi.fn<ReconcileDeps['enqueueReconcileJobs']>(async () => undefined),
     processJobs: vi.fn<ReconcileDeps['processJobs']>(async () => ({ processed: 3, retrying: 0, failed: 0 })),
     deleteFeedDownloadsBefore: vi.fn<ReconcileDeps['deleteFeedDownloadsBefore']>(async () => 2),
+    deleteDoneJobsBefore: vi.fn<ReconcileDeps['deleteDoneJobsBefore']>(async () => 5),
     alertOperator: vi.fn<ReconcileDeps['alertOperator']>(async () => undefined),
   } satisfies ReconcileDeps;
 }
@@ -22,6 +23,7 @@ describe('reconcileEntitlements', () => {
       customers: 3,
       jobs: { processed: 3, retrying: 0, failed: 0 },
       feedDownloadsDeleted: 2,
+      doneJobsDeleted: 5,
     });
 
     expect(deps.enqueueReconcileJobs).toHaveBeenCalledExactlyOnceWith(
@@ -46,6 +48,34 @@ describe('reconcileEntitlements', () => {
     );
   });
 
+  it('deletes the customer jobs done more than 30 days ago, before the jobs run', async () => {
+    const deps = fakeDeps([]);
+
+    await reconcileEntitlements({ now: NOW }, deps);
+
+    expect(deps.deleteDoneJobsBefore).toHaveBeenCalledExactlyOnceWith(new Date('2026-10-01T04:00:00Z'));
+    expect(deps.deleteDoneJobsBefore.mock.invocationCallOrder[0]).toBeLessThan(
+      deps.processJobs.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('still deletes the old download records and runs the jobs when deleting old jobs fails', async () => {
+    const deps = fakeDeps(['ctm_entitled']);
+    deps.deleteDoneJobsBefore.mockRejectedValue({ code: '57014', message: 'canceling statement due to timeout' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(reconcileEntitlements({ now: NOW, budgetMs: 45_000 }, deps)).resolves.toMatchObject({
+      feedDownloadsDeleted: 2,
+      doneJobsDeleted: null,
+    });
+
+    expect(deps.processJobs).toHaveBeenCalledOnce();
+    expect(deps.alertOperator).toHaveBeenCalledExactlyOnceWith(
+      'Old customer jobs were not deleted',
+      expect.stringContaining('the customer jobs done more than 30 days ago failed: canceling statement'),
+    );
+  });
+
   it('still queues and runs the jobs when the deletion fails, and tells the operator', async () => {
     const deps = fakeDeps(['ctm_entitled']);
     deps.deleteFeedDownloadsBefore.mockRejectedValue({ code: '57014', message: 'canceling statement due to timeout' });
@@ -55,6 +85,7 @@ describe('reconcileEntitlements', () => {
       customers: 1,
       jobs: { processed: 3, retrying: 0, failed: 0 },
       feedDownloadsDeleted: null,
+      doneJobsDeleted: 5,
     });
 
     expect(deps.enqueueReconcileJobs).toHaveBeenCalledExactlyOnceWith(['ctm_entitled'], NOW);
