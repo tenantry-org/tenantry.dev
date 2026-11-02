@@ -80,9 +80,10 @@ export function InstallPanel({ view, siteUrl }: Readonly<{ view: InstallView | N
 
           <Step title={'4. Add the packages'}>
             <p className={'text-sm text-muted-foreground'}>
-              From your project&apos;s directory. Add <code>Tenantry.Pro.Hangfire</code>, <code>.Quartz</code>,{' '}
-              <code>.MassTransit</code> or <code>.Rebus</code> for your job or message library. The application does not
-              start without your licence key: the{' '}
+              From your project&apos;s directory. <code>Tenantry.AspNetCore</code> is Tenantry Core&apos;s ASP.NET Core
+              package, from nuget.org; the Pro packages come from the feed. Add <code>Tenantry.Pro.Hangfire</code>,{' '}
+              <code>.Quartz</code>, <code>.MassTransit</code> or <code>.Rebus</code> for your job or message library.
+              The application does not start without your licence key: the{' '}
               <Link className={'text-link underline underline-offset-4'} href={ACCESS_PAGE}>
                 Access page
               </Link>{' '}
