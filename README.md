@@ -223,7 +223,7 @@ still relative after rewriting (`scripts/docs-links.mjs`).
 
 Releasing Core or Pro needs no edit to the site. The owner pushes a signed `v*` tag, and the repository's release
 workflow publishes the packages; Pro's also publishes its docs to tenantry-pro-docs under the same tag. The
-`docs-versions` workflow runs hourly, at 23 minutes past, and reads both repositories' tags
+`docs-versions` workflow is scheduled hourly, at 23 minutes past, and reads both repositories' tags
 (`scripts/docs-versions-update.mjs`). A Core tag counts once NuGet lists its version (Tenantry.Core's registration),
 since Core is tagged before its release runs; pre-release tags never count. To take a Core release back, unlist it on
 NuGet and the next run drops it; a Pro release is dropped by deleting its tag from tenantry-pro-docs. A minor is listed
@@ -241,13 +241,14 @@ start none. That workflow's deploy job deploys the commit once its checks pass (
 reset to master: commits that only staging has are dropped from it, and the run's warning lists them. A run that finds
 nothing new but sees its own commit at master's head runs the test workflow if it never ran on it, and fast-forwards
 staging to it. That run leaves staging alone, with a warning, when staging has commits master lacks. A release is live
-at the first run after its packages are published, so within the hour, plus the few minutes the checks and the build
-take. Run the workflow from the Actions tab to publish sooner.
+at the first run after its packages are published, plus the few minutes the checks and the build take. GitHub drops
+many scheduled runs (since October they have come about every five hours, and up to ten apart), so after a release
+run the workflow by hand, from the Actions tab or with `gh workflow run docs-versions.yml -R tenantry-org/tenantry.dev`.
 
 A release whose tag has no `docs` folder, or whose `CHANGELOG.md` has no section for it, is left out, and its line keeps
 the release before it. So is a release of the newest line that does not give the facts above: a nuspec without target
 frameworks, or no sample folder. The run commits what it can publish, then
-fails, with the releases left out and why in its summary, and fails again each hour until the release is fixed or
+fails, with the releases left out and why in its summary, and fails again at each run until the release is fixed or
 replaced. A run that cannot reach NuGet or read a file from a tag publishes nothing. A release build fails before
 deploying, and production keeps the last deployment, if a listed tag cannot be read or its docs are incomplete. Two things
 on the site are not release data. The code samples on the home and Pro pages are updated by hand when a minor release
