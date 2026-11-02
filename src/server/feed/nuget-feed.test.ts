@@ -87,8 +87,15 @@ const tokenOf = (name: string) => `tpf_${name.padEnd(43, '0')}`;
 
 let store: { [K in keyof FeedStore]: ReturnType<typeof vi.fn> };
 let deps: FeedDeps;
+// The work the handler left for after its response (deps.afterResponse), run by afterResponse().
+let deferred: (() => Promise<void>)[];
+
+async function afterResponse() {
+  for (const task of deferred.splice(0)) await task();
+}
 
 beforeEach(() => {
+  deferred = [];
   store = {
     findFeedCustomer: vi.fn(async (hash: string) => {
       const name = Object.keys(CUSTOMERS).find((key) => hashFeedToken(tokenOf(key)) === hash);
@@ -120,6 +127,7 @@ beforeEach(() => {
     githubOidcKeys: vi.fn(),
     feedPublishActors: () => [],
     rateLimited: vi.fn(async () => false),
+    afterResponse: (task) => void deferred.push(task),
     now: () => new Date('2028-06-01T00:00:00Z'),
   };
 });
@@ -220,14 +228,16 @@ describe('what each customer sees', () => {
     expect((await get('flat/tenantry.pro/index.json', 'graceOverUnvested')).status).toBe(403);
   });
 
-  it('refuses a lapsed customer who never vested, saying why', async () => {
+  it('refuses a lapsed customer who never vested, saying why where NuGet shows it', async () => {
+    const reason =
+      "This feed token's Tenantry Pro subscription has ended and no releases are vested, so the feed serves " +
+      'nothing. Subscribe again at https://sandbox.example.com/#pricing.';
     for (const path of ['flat/tenantry.pro/index.json', 'registration/tenantry.pro/index.json', 'query']) {
       const response = await get(path, 'unvested');
       expect(response.status).toBe(403);
-      expect(await response.text()).toBe(
-        "This feed token's Tenantry Pro subscription has ended and no releases are vested, so the feed serves " +
-          'nothing. Subscribe again at https://sandbox.example.com/#pricing.',
-      );
+      // NuGet prints only the status line of a failed request, but logs this header as a warning.
+      expect(response.headers.get('x-nuget-warning')).toBe(reason);
+      expect(await response.text()).toBe(reason);
     }
   });
 
@@ -639,9 +649,12 @@ describe('serveFeed', () => {
 });
 
 describe('download records', () => {
-  it('records each download with its token, package, version and the client network', async () => {
-    await get('flat/Tenantry.Pro/1.4.0/tenantry.pro.1.4.0.nupkg', 'vested', { ip: '203.0.113.77' });
+  it('records each download with its token, package, version and the client network, after redirecting', async () => {
+    const response = await get('flat/Tenantry.Pro/1.4.0/tenantry.pro.1.4.0.nupkg', 'vested', { ip: '203.0.113.77' });
 
+    expect(response.status).toBe(302);
+    expect(store.recordFeedDownload).not.toHaveBeenCalled();
+    await afterResponse();
     expect(store.recordFeedDownload).toHaveBeenCalledExactlyOnceWith({
       tokenId: 'tok_vested',
       lowerId: 'tenantry.pro',
@@ -655,6 +668,7 @@ describe('download records', () => {
     await get('flat/tenantry.pro/1.4.0/tenantry.pro.nuspec', 'active');
     await get('flat/tenantry.pro/1.6.0/tenantry.pro.1.6.0.nupkg', 'vested');
     await get('flat/tenantry.pro/1.4.0/tenantry.pro.1.4.0.nupkg', 'unvested');
+    await afterResponse();
 
     expect(store.recordFeedDownload).not.toHaveBeenCalled();
   });
@@ -664,6 +678,7 @@ describe('download records', () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const response = await get('flat/tenantry.pro/1.4.0/tenantry.pro.1.4.0.nupkg', 'active');
+    await afterResponse();
 
     expect(response.status).toBe(302);
     expect(logged).toHaveBeenCalledWith('Package feed: a download could not be recorded:', expect.any(Error));

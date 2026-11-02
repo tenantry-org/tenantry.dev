@@ -97,6 +97,7 @@ beforeEach(() => {
     githubOidcKeys: github.keys,
     feedPublishActors: () => ['olliejm', 'Release-Manager'],
     rateLimited: vi.fn(async () => false),
+    afterResponse: vi.fn(),
     now: () => new Date('2028-06-01T00:00:00Z'),
   };
 });

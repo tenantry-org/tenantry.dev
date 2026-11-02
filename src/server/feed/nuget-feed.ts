@@ -29,7 +29,8 @@ import { FEED_PATH } from '@/lib/install-snippets';
  * Every package resource needs a feed token as the basic-auth password; without a live one the answer is 401 with a
  * Basic challenge, which makes NuGet send the credentials configured for the source. Responses are never cached by
  * anyone but the client: each customer's lists differ. Every request counts against the feed's rate limit
- * (rate-limit.ts), and each package download is recorded with its token (feed_downloads), kept for 90 days.
+ * (rate-limit.ts), and each package download is recorded with its token (feed_downloads), kept for 90 days, once the
+ * redirect has been sent.
  */
 
 /** How long a download's signed URL works. NuGet follows the redirect at once. */
@@ -55,13 +56,14 @@ export async function handleFeedRequest(
   if (!found) return unauthorized(deps.siteUrl());
   const customer = { accessStatus: currentAccess(found.access, deps.now()).status, vestedThrough: found.vestedThrough };
 
-  // A lapsed customer who never vested may restore nothing: say so, rather than claim the packages do not exist.
+  // A lapsed customer who never vested may restore nothing: say so, rather than claim the packages do not exist. NuGet
+  // prints only the status line of a failed request, never its body, but it logs X-NuGet-Warning as a warning, so the
+  // reason goes there as well.
   if (!canRestore(customer)) {
-    return text(
-      403,
+    const reason =
       "This feed token's Tenantry Pro subscription has ended and no releases are vested, so the feed serves nothing. " +
-        `Subscribe again at ${deps.siteUrl()}/#pricing.`,
-    );
+      `Subscribe again at ${deps.siteUrl()}/#pricing.`;
+    return text(403, reason, { 'X-NuGet-Warning': reason });
   }
 
   if (resource === 'query' && rest.length === 0) {
@@ -120,7 +122,8 @@ async function flat(
 
   if (name === `${lowerId}.${version}.nupkg`) {
     const location = await deps.storage.signedDownloadUrl(pkg.storagePath, DOWNLOAD_URL_SECONDS);
-    await recordDownload(download.tokenId, pkg, download.request, deps);
+    // Nothing waits on the record, so it is written after the redirect has gone out.
+    deps.afterResponse(() => recordDownload(download.tokenId, pkg, download.request, deps));
     return new Response(null, { status: 302, headers: { ...PRIVATE, Location: location } });
   }
 

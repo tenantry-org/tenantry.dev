@@ -26,10 +26,11 @@ release workflow ─▶ PUT /feed/v3/package (publish key) ─▶ pro_releases, 
 cron ─▶ /api/reconcile ─▶ recompute access and entitlement, retry what failed
 ```
 
-The package feed (`/feed/v3/index.json`, `src/server/feed`) serves an active or in-grace subscriber every release, a
-lapsed customer the vested releases, and a lapsed customer with nothing vested nothing. Customers authenticate with
-feed tokens they create on the Access page; the licence key is never a feed credential. GitHub is only a way to sign
-in.
+The package feed (`/feed/v3/index.json`, `src/server/feed`) serves an active or in-grace subscriber every release and a
+lapsed customer the vested releases. A lapsed customer with nothing vested gets 403 with the reason in an
+`X-NuGet-Warning` header, which NuGet prints as a warning (it never prints a failed request's body). Customers
+authenticate with feed tokens they create on the Access page; the licence key is never a feed credential. GitHub is
+only a way to sign in.
 
 Key code is in `src/server`, in layers whose imports point only down this list (ESLint enforces it):
 
@@ -188,9 +189,9 @@ answers 429 over the limit. The limit itself is a Vercel Firewall rule with that
 `next dev`, or when the firewall cannot be reached, the request goes ahead and a warning is logged. A credential that is
 not shaped like a feed token is refused without a database query.
 
-Each package download (a redirect to the package file) is recorded in `feed_downloads`: the token, the package and
-version, the time, and the client's network (an IPv4 address's /24, an IPv6 address's /48). Only the service role reads
-it. The daily reconcile run deletes records older than 90 days, the period the privacy policy states.
+Each package download (a redirect to the package file) is recorded in `feed_downloads`, once the redirect has been
+sent: the token, the package and version, the time, and the client's network (an IPv4 address's /24, an IPv6 address's
+/48). Only the service role reads it. The daily reconcile run deletes records older than 90 days, the period the privacy policy states.
 
 `scripts/feed-e2e.sh` (`pnpm test:feed-e2e`, and a job in CI) runs the whole journey against a local stack:
 publishing, creating tokens through the Access page's actions, restoring as a subscriber, a lapsed customer with vested
