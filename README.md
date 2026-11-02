@@ -190,7 +190,8 @@ not shaped like a feed token is refused without a database query.
 
 Each package download (a redirect to the package file) is recorded in `feed_downloads`: the token, the package and
 version, the time, and the client's network (an IPv4 address's /24, an IPv6 address's /48). Only the service role reads
-it. The daily reconcile run deletes records older than 90 days, the period the privacy policy states.
+it. The daily reconcile run deletes records older than 90 days, the period the privacy policy states. A HEAD request
+for a package (a mirror's or a monitor's check) answers 200 without the redirect and is not recorded.
 
 `scripts/feed-e2e.sh` (`pnpm test:feed-e2e`, and a job in CI) runs the whole journey against a local stack:
 publishing, creating tokens through the Access page's actions, restoring as a subscriber, a lapsed customer with vested
