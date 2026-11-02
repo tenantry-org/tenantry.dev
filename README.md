@@ -204,7 +204,9 @@ refund, a chargeback, an operator grant) and undoes them.
 `/docs` is rendered by Fumadocs from Markdown under `content/docs/` (gitignored, generated). `pnpm sync:docs`
 (`scripts/sync-docs.mjs`) runs before `dev`/`build`: it reads each docs version's markdown from git and transforms
 it (injects frontmatter, rewrites links). The pages stay `.md`, compiled as plain Markdown, so nothing in a release's
-docs runs as code when the site builds.
+docs runs as code when the site builds. The numbered list of guides in each repository's `docs/README.md` orders the
+sidebar and gives each guide its description, which is its meta description and its line in `llms.txt`; a page that
+list leaves out comes after the listed ones, described by its first sentence.
 
 The versions are listed in [`docs-versions.json`](docs-versions.json), newest first: each minor version (`0.4`,
 `1.2`) with the Core and Pro release tags its docs come from (Core's repository, and the public `tenantry-pro-docs`

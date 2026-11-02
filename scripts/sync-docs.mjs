@@ -5,7 +5,8 @@
  * Ingests the markdown docs authored in the Tenantry Core and Pro repos into `content/docs`, one tree per docs
  * version, preparing them for the Fumadocs render step:
  *   - injects frontmatter (`title` from the first H1, which is then removed from the body),
- *   - derives a short `description` from the first paragraph,
+ *   - takes each guide's `description` from its line in the docs folder's index (README.md), or else from its first
+ *     paragraph, and orders the sidebar as the index lists the guides,
  *   - rewrites relative `.md` links to clean docs paths (e.g. `(tenant-stores.md)` → `(tenant-stores)`),
  *   - adds the version's releases from each tag's CHANGELOG.md as the group's Changelog page (docs-changelog.mjs).
  * The pages are written as `.md`, which Fumadocs compiles as plain Markdown: braces and tags in a release's docs are
@@ -31,7 +32,7 @@ import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { changelogPage } from './docs-changelog.mjs';
-import { pageDescription } from './docs-description.mjs';
+import { guideIndex, pageDescription } from './docs-description.mjs';
 import { brokenDocsLinks, linkApiTypes, relativeLinks, rewriteLinks } from './docs-links.mjs';
 import { basePath, compareMinors, oldestReleaseShown, readVersions, versionProblems } from './docs-versions.mjs';
 import { CHANGELOG_SINCE, docsProblem, fileAt, hasTag, partialClone, REPOSITORIES } from './docs-sources.mjs';
@@ -62,63 +63,19 @@ const groups = [
   },
 ];
 
-// Preferred ordering for the in-group nav; anything not listed falls in alphabetically afterwards.
-const PAGE_ORDER = [
-  'index',
-  'installation',
-  'getting-started',
-  'core-concepts',
-  'tenant-resolution',
-  'tenant-stores',
-  'database-per-tenant',
-  'schema-per-tenant',
-  'mixed-mode',
-  'database-providers',
-  'efcore-integration',
-  'efcore-advanced',
-  'aspnetcore-integration',
-  'per-tenant-options',
-  'authentication-per-tenant',
-  'aspnetcore-identity',
-  'caching',
-  'http-propagation',
-  'migration-orchestration',
-  'tenant-lifecycle',
-  'connection-string-encryption',
-  'background-jobs',
-  'non-http-hosts',
-  'hangfire',
-  'masstransit',
-  'quartz',
-  'rebus',
-  'audit-logging',
-  'health-checks',
-  'telemetry',
-  'diagnostics',
-  'analyzers',
-  'access-control',
-  'licensing',
-  'testing',
-  'ai-agents',
-  'aot-and-trimming',
-  'compatibility',
-  'troubleshooting',
-  'migrating-from-finbuckle',
-  'changelog',
-];
-
-function orderPages(slugs) {
-  return [...slugs].sort((a, b) => {
-    const ia = PAGE_ORDER.indexOf(a);
-    const ib = PAGE_ORDER.indexOf(b);
-    if (ia !== -1 && ib !== -1) return ia - ib;
-    if (ia !== -1) return -1;
-    if (ib !== -1) return 1;
-    return a.localeCompare(b);
-  });
+// The group's index first, then its guides in the order the index lists them (guideIndex), then any page it does not
+// list, alphabetically, and the changelog last. The docs repositories keep one list of their guides, so the sidebar
+// cannot drift from it.
+function orderPages(slugs, guides) {
+  const rank = (slug) => {
+    if (slug === 'index') return -1;
+    if (slug === 'changelog') return guides.length + 1;
+    return guides.includes(slug) ? guides.indexOf(slug) : guides.length;
+  };
+  return [...slugs].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
 
-function toFrontmatter(raw, group, source, dir, context) {
+function toFrontmatter(raw, group, source, dir, context, indexDescription) {
   const lines = raw.split('\n');
   let title = '';
   const body = [];
@@ -134,7 +91,7 @@ function toFrontmatter(raw, group, source, dir, context) {
     body.push(line);
   }
 
-  const description = pageDescription(body);
+  const description = indexDescription ?? pageDescription(body);
 
   const linked = dir === 'api' ? body.join('\n') : linkApiTypes(body.join('\n'), context.apiTypes);
   const rewritten = rewriteLinks(linked, group, source, dir, context.base).trimStart();
@@ -149,12 +106,14 @@ function toFrontmatter(raw, group, source, dir, context) {
   return `---\ntitle: "${yamlTitle}"\ndescription: "${yamlDesc}"\n---\n\n${fixed}`;
 }
 
-// Writes one folder's markdown pages as MDX and returns their slugs (README.md becomes the folder's index).
-function syncFolder(sourceDir, outDir, group, linkSource, dir, context) {
+// Writes one folder's markdown pages as MDX and returns their slugs (README.md becomes the folder's index), each with
+// the description `descriptions` has for it, if any.
+function syncFolder(sourceDir, outDir, group, linkSource, dir, context, descriptions = new Map()) {
   const slugs = [];
   for (const file of readdirSync(sourceDir).filter((f) => f.endsWith('.md'))) {
     const slug = file.toLowerCase() === 'readme.md' ? 'index' : file.replace(/\.md$/, '');
-    const content = toFrontmatter(readFileSync(join(sourceDir, file), 'utf8'), group.name, linkSource, dir, context);
+    const raw = readFileSync(join(sourceDir, file), 'utf8');
+    const content = toFrontmatter(raw, group.name, linkSource, dir, context, descriptions.get(slug));
     for (const link of relativeLinks(content))
       brokenLinks.push(`${context.version} ${group.name}/${dir ? `${dir}/` : ''}${file}: ${link}`);
     writeFileSync(join(outDir, `${slug}.md`), content);
@@ -309,9 +268,11 @@ for (const [index, entry] of versions.entries()) {
     const linkSource = { repository: group.repository, ref };
     mkdirSync(outDir, { recursive: true });
 
-    const slugs = syncFolder(source, outDir, group, linkSource, '', context);
+    const readme = readdirSync(source).find((file) => file.toLowerCase() === 'readme.md');
+    const guides = guideIndex(readme ? readFileSync(join(source, readme), 'utf8') : '');
+    const slugs = syncFolder(source, outDir, group, linkSource, '', context, guides.descriptions);
     const changelog = syncChangelog(source, outDir, group, linkSource, context);
-    const pages = orderPages(changelog ? [...slugs, changelog] : slugs);
+    const pages = orderPages(changelog ? [...slugs, changelog] : slugs, guides.order);
 
     // The API reference (docs/api, generated in each repository from its XML documentation comments) is its own
     // section, last in the group, with its pages grouped by namespace.
@@ -345,10 +306,10 @@ description: "Guides for Tenantry Core (open source) and Tenantry Pro${latest ? 
 
 Tenantry adds multi-tenancy, with tenant isolation, to ASP.NET Core and EF Core applications. It is in beta until 1.0.
 
-- **[Tenantry Core](${base}/core)**, open source: tenant resolution, and isolation in a shared database or a
-  database per tenant.
-- **[Tenantry Pro](${base}/pro)**: provisioning and offboarding, migrations across tenant databases, schema per
-  tenant and mixed mode, the tenant in background jobs and messages, and audit logging.
+- [Tenantry Core](${base}/core), open source: tenant resolution, and isolation in a shared database or a database per
+  tenant.
+- [Tenantry Pro](${base}/pro): provisioning and offboarding, migrations across tenant databases, schema per tenant
+  and mixed mode, the tenant in background jobs and messages, and audit logging.
 
 <p data-web-only>Use the sidebar to browse, or press <kbd>⌘</kbd> <kbd>K</kbd> to search.</p>
 `,

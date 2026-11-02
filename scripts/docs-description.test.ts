@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pageDescription } from './docs-description.mjs';
+import { guideIndex, pageDescription } from './docs-description.mjs';
 
 const lines = (text: string) => text.split('\n');
 
@@ -34,5 +34,48 @@ describe('pageDescription', () => {
     expect(
       pageDescription(lines('Namespace: Tenantry · Package: Tenantry.Core\n\n## Definition\n\nReads tenants.')),
     ).toBe('Reads tenants.');
+  });
+});
+
+describe('guideIndex', () => {
+  const readme = [
+    '# Tenantry documentation',
+    '',
+    'Start with [Getting started](getting-started.md).',
+    '',
+    '### Foundations',
+    '1. [Getting started](getting-started.md): install the packages and build an app end to end.',
+    '2. [Access control](access-control.md): requiring tenants per endpoint, and `IsolateOutputCache()`.',
+    '3. [Tenant lifecycle](tenant-lifecycle.md): provisioning a tenant (create, migrate) and',
+    '   offboarding one',
+    '',
+    '### Background work',
+    '4. [Hangfire](hangfire.md), [Rebus](rebus.md#setup): the tenant in each library.',
+    '5. [API reference](api/README.md): every public type.',
+    '6. [Elsewhere](https://example.com/guide.md): another site.',
+    '',
+    'An agent reads [Getting started](getting-started.md) first.',
+  ].join('\n');
+
+  it('lists the guides in the order the numbered list gives them, leaving out subfolders and other sites', () => {
+    expect(guideIndex(readme).order).toEqual([
+      'getting-started',
+      'access-control',
+      'tenant-lifecycle',
+      'hangfire',
+      'rebus',
+    ]);
+  });
+
+  it("describes a guide by its item's text, as a sentence, joining a wrapped item's lines", () => {
+    expect(Object.fromEntries(guideIndex(readme).descriptions)).toEqual({
+      'getting-started': 'Install the packages and build an app end to end.',
+      'access-control': 'Requiring tenants per endpoint, and IsolateOutputCache().',
+      'tenant-lifecycle': 'Provisioning a tenant (create, migrate) and offboarding one.',
+    });
+  });
+
+  it('has nothing for a folder without an index', () => {
+    expect(guideIndex('')).toEqual({ order: [], descriptions: new Map() });
   });
 });
