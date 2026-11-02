@@ -78,6 +78,23 @@ describe('readPublicConfig', () => {
       expect(read({ ...complete, NEXT_PUBLIC_CHECKOUT_ENABLED: value }).config.checkoutEnabled).toBe(open);
     }
   });
+
+  it('refuses checkout in production while the legal entity has placeholders, so the build fails', () => {
+    const placeholder = { name: '[COMPANY LEGAL NAME]', address: 'London', registration: 'England' };
+    const named = { name: 'Example Software Ltd', address: 'London', registration: 'England' };
+    const production = { ...complete, NEXT_PUBLIC_PADDLE_ENV: 'production' };
+    const readWith = (env: Record<string, string | undefined>, entity: Record<string, string>) => {
+      const problems: string[] = [];
+      readPublicConfig(env, problems, entity);
+      return problems;
+    };
+
+    expect(readWith(production, placeholder)).toEqual([expect.stringContaining('legal entity')]);
+    expect(readWith(production, named)).toEqual([]);
+    expect(readWith({ ...production, NEXT_PUBLIC_CHECKOUT_ENABLED: undefined }, placeholder)).toEqual([]);
+    // The sandbox sells test transactions only, so it may run checkout before the entity is set.
+    expect(readWith(complete, placeholder)).toEqual([]);
+  });
 });
 
 describe('publicConfig', () => {

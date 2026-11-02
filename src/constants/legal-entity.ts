@@ -1,7 +1,8 @@
 /**
  * The business behind Tenantry, named in every legal document, the site footer and the Pro LICENSE. The
- * placeholders stay until the entity's details are supplied. A server with checkout enabled refuses to start while
- * any remains (server-config.ts); until then the footer says only "Tenantry".
+ * placeholders stay until the entity's details are supplied. While any remains, a production build with checkout
+ * enabled fails and a production server with it enabled refuses to start (public-config.ts); until then the footer
+ * says only "Tenantry".
  */
 export const LegalEntity = {
   /** The registered legal name, e.g. "Example Software Ltd". */

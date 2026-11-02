@@ -1,6 +1,6 @@
 import 'server-only';
 import { createPrivateKey, createPublicKey, type KeyObject } from 'node:crypto';
-import { LegalEntity, legalEntityIncomplete } from '@/constants/legal-entity';
+import { LegalEntity } from '@/constants/legal-entity';
 import {
   ConfigError,
   deepFreeze,
@@ -95,7 +95,7 @@ export function validateServerConfig(
     return configured ?? '';
   };
 
-  const publicConfig = readPublicConfig(env, problems);
+  const publicConfig = readPublicConfig(env, problems, legalEntity);
   const { environment } = publicConfig.paddle;
   const production = environment === 'production';
 
@@ -166,14 +166,6 @@ export function validateServerConfig(
         "NEXT_PUBLIC_SUPABASE_URL is production's database: sandbox events would write real customers' records",
       );
     }
-  }
-
-  // Production only: sandbox purchases are test transactions, so the sandbox can sell before the entity is set.
-  if (production && publicConfig.checkoutEnabled && legalEntityIncomplete(legalEntity)) {
-    problems.push(
-      'NEXT_PUBLIC_CHECKOUT_ENABLED is on but the legal entity (src/constants/legal-entity.ts) still has placeholders: ' +
-        'customers would buy under Terms that name no one',
-    );
   }
 
   if (problems.length > 0 || !licenceSigningKey) throw new ConfigError('server configuration', problems);

@@ -1,3 +1,5 @@
+import { LegalEntity, legalEntityIncomplete } from '@/constants/legal-entity';
+
 export type PaddleEnvironment = 'sandbox' | 'production';
 
 /** How often Pro is billed: monthly or yearly, each at its own Paddle price. */
@@ -31,9 +33,14 @@ export type Env = Record<string, string | undefined>;
 
 /**
  * Reads the public configuration from `env`, adding a problem for each variable that is missing or invalid. The
- * result is valid only if it added none. The server's startup check uses it too (server-config.ts).
+ * result is valid only if it added none. The server's startup check uses it too (server-config.ts). `legalEntity` is
+ * the business the Terms name (src/constants/legal-entity.ts); tests pass their own.
  */
-export function readPublicConfig(env: Env, problems: string[]): PublicConfig {
+export function readPublicConfig(
+  env: Env,
+  problems: string[],
+  legalEntity: Record<string, string> = LegalEntity,
+): PublicConfig {
   const value = (name: string) => env[name]?.trim() || undefined;
   const required = (name: string, consequence: string) => {
     const configured = value(name);
@@ -69,10 +76,21 @@ export function readPublicConfig(env: Env, problems: string[]): PublicConfig {
     problems.push('NEXT_PUBLIC_PADDLE_PRICE_MONTHLY and NEXT_PUBLIC_PADDLE_PRICE_YEARLY are the same price');
   }
 
+  // Production only: sandbox purchases are test transactions, so the sandbox can sell before the entity is set. Both
+  // inputs are compiled in, so checking here fails the build (the pricing section prerenders with publicConfig())
+  // instead of letting a deployment through whose every server function then refuses to start.
+  const checkoutEnabled = value('NEXT_PUBLIC_CHECKOUT_ENABLED') === 'true';
+  if (environment === 'production' && checkoutEnabled && legalEntityIncomplete(legalEntity)) {
+    problems.push(
+      'NEXT_PUBLIC_CHECKOUT_ENABLED is on but the legal entity (src/constants/legal-entity.ts) still has placeholders: ' +
+        'customers would buy under Terms that name no one',
+    );
+  }
+
   return {
     supabase,
     paddle: { environment: environment as PaddleEnvironment, clientToken, prices },
-    checkoutEnabled: value('NEXT_PUBLIC_CHECKOUT_ENABLED') === 'true',
+    checkoutEnabled,
   };
 }
 
