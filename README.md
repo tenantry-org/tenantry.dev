@@ -169,7 +169,7 @@ and security flag, with its packages' ids, sizes and SHA-512s. Feed tokens and O
 The publish key is a random string, generated once per environment; only its hash goes into the deployment:
 
 ```bash
-key="$(openssl rand -base64 48 | tr -d '\n/+=')"   # store it in the password manager and the release workflow's secret
+key="$(openssl rand -base64 48 | tr -d '\n/+=')"   # store it in the password manager; only scripts/feed-publish.sh uses it
 printf '%s' "$key" | shasum -a 256 | cut -d' ' -f1  # FEED_PUBLISH_KEY_SHA256 for that environment
 ```
 
