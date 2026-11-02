@@ -126,7 +126,9 @@ contract both rely on; change it here and in both clients together.
   `<site>/feed` (`https://tenantry.dev/feed` in production). The site checks it against GitHub's signing keys and
   accepts it only from `.github/workflows/release.yml` in `tenantry-org/tenantry-pro`, running for a `v*` tag pushed by
   a login in `FEED_PUBLISH_ACTORS` (comma-separated). Without that setting, no token is accepted. No key is stored
-  anywhere for it (`src/server/feed/github-oidc.ts`).
+  anywhere for it (`src/server/feed/github-oidc.ts`). The repository is also matched by its numeric id and its org's,
+  which GitHub never reuses, so a repository that takes the name after a rename or deletion cannot publish; if Pro's
+  repository is ever recreated or moved to another org, update the two ids in `github-oidc.ts`.
 - The operator's script, for the sandbox, sends a publish key in the `X-NuGet-ApiKey` header. The deployment holds only
   the key's SHA-256 (`FEED_PUBLISH_KEY_SHA256`); without it every push with a key is refused. Production can leave it
   unset once releases publish with OIDC tokens.

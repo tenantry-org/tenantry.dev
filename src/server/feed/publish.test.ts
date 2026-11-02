@@ -536,6 +536,8 @@ describe('publishing from the release workflow with a GitHub OIDC token', () => 
     iss: 'https://token.actions.githubusercontent.com',
     aud: 'https://sandbox.example.com/feed',
     repository: 'tenantry-org/tenantry-pro',
+    repository_id: '1275766040',
+    repository_owner_id: '271523501',
     ref: 'refs/tags/v0.8.0',
     ref_type: 'tag',
     job_workflow_ref: 'tenantry-org/tenantry-pro/.github/workflows/release.yml@refs/tags/v0.8.0',
@@ -569,6 +571,21 @@ describe('publishing from the release workflow with a GitHub OIDC token', () => 
     [
       'from another repository',
       () => github.sign({ ...release, repository: 'someone/tenantry-pro' }),
+      'not from tenantry-org/tenantry-pro',
+    ],
+    [
+      'from a new repository that took the name after a rename or deletion',
+      () => github.sign({ ...release, repository_id: '987654321' }),
+      'not from tenantry-org/tenantry-pro',
+    ],
+    [
+      'from a new org that took the name',
+      () => github.sign({ ...release, repository_owner_id: '123456789' }),
+      'not from tenantry-org/tenantry-pro',
+    ],
+    [
+      'without the repository ids',
+      () => github.sign({ ...release, repository_id: undefined, repository_owner_id: undefined }),
       'not from tenantry-org/tenantry-pro',
     ],
     [
