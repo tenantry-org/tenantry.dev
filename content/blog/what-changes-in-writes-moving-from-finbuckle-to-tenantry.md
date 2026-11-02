@@ -132,7 +132,7 @@ moved the order to Globex. A Globex order loaded in Globex's context and given `
 Under Tenantry, the instance without a tenant id was refused before anything was written:
 
 ```text
-Tenantry.EfCore.TenantIsolationViolationException: Tenant isolation violation on entity 'Order': it belongs to
+Tenantry.TenantIsolationViolationException: Tenant isolation violation on entity 'Order': it belongs to
 tenant '<null>' but the current tenant is 'globex'. SaveChanges was aborted before anything was written. Change an
 entity only while its own tenant is current.
 ```
@@ -183,7 +183,7 @@ It returned 1 under every combination of the two modes, and Acme's order belonge
 setters when EF Core compiles the query, and threw before any SQL was sent:
 
 ```text
-Tenantry.EfCore.TenantIsolationViolationException: ExecuteUpdate cannot set TenantId on tenant-owned entity 'Order':
+Tenantry.TenantIsolationViolationException: ExecuteUpdate cannot set TenantId on tenant-owned entity 'Order':
 that would move rows into another tenant. Set properties on the entity itself, and move data between tenants with
 explicit, reviewed SQL.
 ```
