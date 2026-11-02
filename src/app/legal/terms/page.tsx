@@ -5,7 +5,7 @@ export const metadata = { title: 'Terms of Service | Tenantry' };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Service" lastUpdated="2026-10-06">
+    <LegalPage title="Terms of Service" lastUpdated="2026-11-02">
       <p>
         These Terms of Service (&quot;Terms&quot;) govern your access to and use of the Tenantry website, the Tenantry
         Pro software, the package feed, and related services (collectively, the &quot;Services&quot;) provided by{' '}
@@ -72,7 +72,16 @@ export default function TermsPage() {
       <h2>8. Governing law</h2>
       <p>These Terms are governed by the laws of England and Wales, excluding its conflict-of-law rules.</p>
 
-      <h2>9. Contact</h2>
+      <h2>9. Beta</h2>
+      <p>
+        Tenantry Core and Tenantry Pro are in beta until version 1.0, which will not be released before 10 November
+        2027. Until then they are released as 0.x versions, and a minor release (0.9 after 0.8, for example) can change
+        or remove public APIs, with the steps to update in its release notes. Features we describe as planned or on our
+        roadmap may change or never be released, and are not part of what you buy until they are released. Version 1.0
+        ends the beta and drops support for .NET 8 and .NET 9.
+      </p>
+
+      <h2>10. Contact</h2>
       <p>
         Questions about these Terms: <a href="mailto:legal@tenantry.dev">legal@tenantry.dev</a>.
       </p>

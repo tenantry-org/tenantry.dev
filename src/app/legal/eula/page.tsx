@@ -5,7 +5,7 @@ export const metadata = { title: 'End User Licence Agreement | Tenantry Pro' };
 
 export default function EulaPage() {
   return (
-    <LegalPage title="End User Licence Agreement (Tenantry Pro)" lastUpdated="2026-10-07">
+    <LegalPage title="End User Licence Agreement (Tenantry Pro)" lastUpdated="2026-11-02">
       <p>
         This End User Licence Agreement (&quot;EULA&quot;) is between you (or the entity you represent) and{' '}
         {LegalEntity.name}, {LegalEntity.registration}, whose registered office is at {LegalEntity.address}, the
@@ -185,7 +185,14 @@ export default function EulaPage() {
         not liable for indirect or consequential damages arising from use of the Software.
       </p>
 
-      <h2>10. Contact</h2>
+      <h2>10. Beta</h2>
+      <p>
+        The Software is in beta until version 1.0, which Tenantry will not release before 10 November 2027. Until then,
+        a minor release (0.9 after 0.8, for example) can change or remove public APIs. Features described as planned or
+        on a roadmap are not part of the Software licensed to you until they are released.
+      </p>
+
+      <h2>11. Contact</h2>
       <p>
         Licensing enquiries: <a href="mailto:legal@tenantry.dev">legal@tenantry.dev</a>.
       </p>
