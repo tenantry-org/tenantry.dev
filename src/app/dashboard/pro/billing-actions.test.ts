@@ -71,11 +71,15 @@ describe('openBillingPortal', () => {
     expect(paddle.customerPortalSessions.create).not.toHaveBeenCalled();
   });
 
-  it('reports a Paddle failure without detail', async () => {
-    paddle.customerPortalSessions.create.mockRejectedValue(new Error('500 from Paddle'));
+  it('reports a Paddle failure without detail, and logs it as an error', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const failure = new Error('500 from Paddle');
+    paddle.customerPortalSessions.create.mockRejectedValue(failure);
     await expect(openBillingPortal({ kind: 'overview' })).resolves.toEqual({
       error: 'Billing is unavailable right now, please try again later',
     });
+    // Error-level filters and log drains must see it: an API key without the portal permission fails every customer.
+    expect(error).toHaveBeenCalledWith('Error opening the billing portal', failure);
   });
 });
 
@@ -105,5 +109,15 @@ describe('keepSubscription', () => {
       });
     }
     expect(paddle.subscriptions.update).not.toHaveBeenCalled();
+  });
+
+  it('reports a Paddle failure without detail, and logs it as an error', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const failure = new Error('500 from Paddle');
+    paddle.subscriptions.update.mockRejectedValue(failure);
+    await expect(keepSubscription('sub_mine')).resolves.toEqual({
+      error: 'Something went wrong, please try again later',
+    });
+    expect(error).toHaveBeenCalledWith('Error keeping subscription', failure);
   });
 });

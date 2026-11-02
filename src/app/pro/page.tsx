@@ -251,13 +251,11 @@ export default function ProPage() {
               </Button>
             </div>
             <div className={'mt-10 max-w-2xl rounded-xl border border-border bg-card p-5 text-sm leading-relaxed'}>
-              <p>
-                <span className={'font-semibold'}>Do I need Pro?</span>{' '}
-                <span className={'text-muted-foreground'}>
-                  Not to keep tenants’ data apart: Core does that, with a shared database or a database per tenant. Core
-                  already runs your own background work as a tenant with ITenantScopeFactory; Pro adds the Hangfire,
-                  Quartz.NET, MassTransit and Rebus integrations. Pro is for when:
-                </span>
+              <h2 className={'font-semibold'}>Do I need Pro?</h2>
+              <p className={'mt-2 text-muted-foreground'}>
+                Not to keep tenants’ data apart: Core does that, with a shared database or a database per tenant. Core
+                already runs your own background work as a tenant with ITenantScopeFactory; Pro adds the Hangfire,
+                Quartz.NET, MassTransit and Rebus integrations. Pro is for when:
               </p>
               <ul className={'mt-2 list-disc pl-5 text-muted-foreground'}>
                 {NEEDS_PRO.map((need) => (

@@ -1,4 +1,4 @@
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Menu } from 'lucide-react';
 import { Sidebar } from '@/components/dashboard/layout/sidebar';
@@ -14,6 +14,8 @@ export function MobileSidebar() {
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="flex flex-col">
+        {/* Names the dialog for screen readers; the sidebar's links show what it is. */}
+        <SheetTitle className="sr-only">Navigation</SheetTitle>
         <Sidebar />
         <SidebarUserInfo />
       </SheetContent>

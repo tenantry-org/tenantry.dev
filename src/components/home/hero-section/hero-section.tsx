@@ -7,11 +7,13 @@ import { GithubIcon } from '@/components/icons/github-icon';
 import { latestDocsVersion } from '@/lib/docs-versions';
 
 // From Tenantry Core's README and getting-started guide, with the access check that guide asks for in production
-// (docs/access-control.md): a header alone lets any caller name any tenant.
+// (docs/access-control.md): a header alone lets any caller name any tenant. The store's comment says the in-memory
+// store is for development, as the guide does, so the snippet does not read as a production setup; the Registry
+// section below shows a store of your own.
 const SNIPPET = `builder.Services.AddTenantry<Guid>(tenant => tenant
     .ResolveFromHeader("X-Tenant-Id")           // names the tenant
     .ValidateTenantAccessByClaim("tenant_id")   // the user may use it
-    .UseInMemoryStore(tenants));                // lists the tenants
+    .UseInMemoryStore(tenants));                // for development only
 
 builder.Services.AddDbContext<AppDbContext>(options => options
     .UseSqlServer(connectionString)

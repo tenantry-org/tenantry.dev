@@ -39,11 +39,12 @@ export async function updateSession(request: NextRequest, { url, anonKey } = pub
   // The dashboard's pages stream, so their own sign-in check runs after the response has started and can only
   // redirect in the browser. Redirecting here answers a signed-out request with a real 307 before any rendering. With
   // Auth out of reach the request goes on, and the page reports the failure (app/error.tsx) instead of asking a
-  // signed-in customer to log in.
+  // signed-in customer to log in. The login page continues to the requested page (`next`), so a link into the
+  // dashboard, such as the welcome email's Install link, still lands there after signing in.
   if (!user && !isAuthRetryableFetchError(error) && request.nextUrl.pathname.startsWith('/dashboard')) {
     const login = request.nextUrl.clone();
     login.pathname = '/login';
-    login.search = '';
+    login.search = `?next=${encodeURIComponent(`${request.nextUrl.pathname}${request.nextUrl.search}`)}`;
     const redirect = NextResponse.redirect(login);
     supabaseResponse.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
     return redirect;
