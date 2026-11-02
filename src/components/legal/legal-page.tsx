@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { SimpleHeader } from '@/components/shared/simple-header';
 import { Footer } from '@/components/home/footer/footer';
+import { legalEntityIncomplete } from '@/constants/legal-entity';
 
 interface Props {
   title: string;
@@ -9,8 +10,9 @@ interface Props {
 }
 
 /**
- * Shared shell for legal documents. The content of each page is a TEMPLATE and must be reviewed by
- * legal counsel before launch. The legal entity comes from constants/legal-entity.ts.
+ * Shared shell for legal documents. The legal entity comes from constants/legal-entity.ts. Each page says it is an
+ * unreviewed template only while the entity has placeholders: filling them in ends counsel's review and removes the
+ * note, and a server with checkout enabled refuses to start before then, so no buyer accepts a page that says it.
  */
 export function LegalPage({ title, lastUpdated, children }: Props) {
   return (
@@ -25,6 +27,11 @@ export function LegalPage({ title, lastUpdated, children }: Props) {
           }
         >
           {children}
+          {legalEntityIncomplete() && (
+            <p className={'text-sm text-muted-foreground'}>
+              This document is a template and must be reviewed by qualified legal counsel before launch.
+            </p>
+          )}
         </div>
       </main>
       <Footer />
