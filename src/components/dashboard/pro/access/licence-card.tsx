@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CopyButton } from '@/components/dashboard/pro/copy-button';
 import { Snippet } from '@/components/dashboard/pro/snippet';
-import { DownloadButton } from '@/components/dashboard/pro/access/download-button';
 import { LICENCE_CONFIG_KEY, LICENCE_ENV_VARIABLE, licenceUserSecret } from '@/lib/install-snippets';
 
 /** The customer's licence key, and where Tenantry.Pro reads it from; null until it is issued. */
@@ -27,7 +26,6 @@ export function LicenceCard({ licenceKey }: Readonly<{ licenceKey: string | null
             </code>
             <div className={'flex gap-2'}>
               <CopyButton value={licenceKey} label={'Copy key'} />
-              <DownloadButton value={licenceKey} filename={'tenantry-pro.licence'} />
             </div>
             <p className={'text-sm text-muted-foreground'}>
               Locally, store it with user secrets, from your project&apos;s directory (they are read in the Development
