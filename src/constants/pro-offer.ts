@@ -23,7 +23,7 @@ export const ProOffer: Offer = {
     'Recurring jobs and background services that run once for each tenant',
     'Audit logging of each tenant’s inserts, updates and deletes',
     'Onboarding and offboarding in one call, including deleting a tenant’s rows from a shared database',
-    'Tenant databases created, migrated and seeded, on SQL Server, PostgreSQL and MySQL',
+    'Tenant databases created, migrated and seeded, on SQL Server, PostgreSQL and, up to .NET 10, MySQL',
     'Migrations across every tenant database or schema, as a deployment step',
     'A schema per tenant (SQL Server, PostgreSQL), and mixed mode',
     'Tenant health checks and connection-string caching',

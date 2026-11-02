@@ -141,7 +141,7 @@ const QUESTIONS = [
   },
   {
     question: 'Which versions and databases?',
-    answer: `${DOTNET_SUPPORT}, each with its own EF Core version. Provisioning and migrations on SQL Server, PostgreSQL and MySQL; schema per tenant on SQL Server and PostgreSQL.`,
+    answer: `${DOTNET_SUPPORT}, each with its own EF Core version. Provisioning and migrations on SQL Server and PostgreSQL, and on MySQL up to .NET 10, since no MySQL provider supports EF Core 11 yet; schema per tenant on SQL Server and PostgreSQL.`,
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
