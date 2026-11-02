@@ -1,17 +1,21 @@
 name: test
 
 # Changes are merged locally, without pull requests, so pushes to master and to staging (the sandbox, where changes
-# are tried first) must be tested too. Production deployments wait for these jobs (Vercel Deployment Checks), so the
-# docs-versions workflow, whose pushes start no workflow, runs this one on master after committing.
+# are tried first) must be tested too. On those two branches the last job migrates the branch's Supabase project and
+# deploys the commit to Vercel once every check has passed (deploy, below): Vercel's own Git deployments are off for
+# them (vercel.json, git.deploymentEnabled), so a deployment never runs ahead of the schema it reads. The docs-versions
+# workflow, whose pushes start no workflow, runs this one on master and staging after committing.
 on:
   push:
     branches: [master, staging]
   pull_request:
   workflow_dispatch:
 
+# A pull request's superseded run is cancelled; a push's never is, since cancelling the deploy job between the
+# migration and the promotion would leave the database ahead of the deployment. Pushes to one branch run in turn.
 concurrency:
   group: test-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -128,3 +132,82 @@ jobs:
           eval "$(supabase status -o env)"
           FEED_E2E_SUPABASE_URL="$API_URL" FEED_E2E_ANON_KEY="$ANON_KEY" FEED_E2E_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
             pnpm test:feed-e2e
+
+  deploy:
+    name: Migrate the database, then deploy
+    # master is production (tenantry.dev, the Supabase project tenantry); staging is the sandbox (sandbox.tenantry.dev,
+    # the project tenantry-sandbox). The order is the cutover's (plans-and-investigations/LAUNCH-SETUP.md, §P): build
+    # the deployment without making it live, apply the pending migrations and run the database tests against the
+    # migrated project, then make the deployment live. The migrations drop tables the previous deployment reads, so
+    # the previous deployment runs on the new schema only for the moment of the promotion, and the new deployment never
+    # runs on the old schema. A failed migration leaves the built deployment unpromoted and the previous one live.
+    # Vercel's Git integration does not deploy these branches (vercel.json); this job does, with the CLI.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [test, build, database, feed]
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/staging')
+    concurrency:
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      VERCEL_ORG_ID: team_GxhXa2sWWfguEzbj2nXnRvKO
+      VERCEL_PROJECT_ID: prj_Apj9G8ovV17UlB9LEq1VuLwqJyyH
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      # The branch's project and its database password (Supabase → the project → Settings → Database).
+      SUPABASE_PROJECT_REF: ${{ github.ref_name == 'master' && 'xoqqgenzhqefyeyzahim' || 'pfsuojxtufvpwygmgasc' }}
+      SUPABASE_DB_PASSWORD: ${{ github.ref_name == 'master' && secrets.SUPABASE_DB_PASSWORD_PRODUCTION || secrets.SUPABASE_DB_PASSWORD_SANDBOX }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.nvmrc'
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.119.0
+      - name: Check the settings this job needs
+        run: |
+          missing=''
+          [ -n "$VERCEL_TOKEN" ] || missing="$missing VERCEL_TOKEN"
+          [ -n "$SUPABASE_ACCESS_TOKEN" ] || missing="$missing SUPABASE_ACCESS_TOKEN"
+          [ -n "$SUPABASE_DB_PASSWORD" ] || missing="$missing SUPABASE_DB_PASSWORD_$([ "$GITHUB_REF_NAME" = master ] && echo PRODUCTION || echo SANDBOX)"
+          if [ -n "$missing" ]; then
+            echo "::error::Set the repository secret(s)$missing (README.md, Deploying) before pushing to $GITHUB_REF_NAME; nothing was deployed."
+            exit 1
+          fi
+      # The same check as audit.yml, so a deployment waits for it as it waited for Vercel's deployment checks; it reads
+      # the lockfile only.
+      - run: pnpm audit --audit-level high
+      - run: npm install --global vercel@65.9.0
+      # The deployment is built from this checkout, with the branch's Vercel environment, and is not made live:
+      # --skip-domain keeps the production domain on the previous deployment, and a preview deployment gets its branch
+      # domain from the alias step below. The Git metadata is what a Git deployment would carry.
+      - name: Build the deployment
+        id: deployment
+        run: |
+          args=(--yes --token "$VERCEL_TOKEN" --meta "githubCommitSha=$GITHUB_SHA" --meta "githubCommitRef=$GITHUB_REF_NAME")
+          if [ "$GITHUB_REF_NAME" = master ]; then
+            args+=(--prod --skip-domain)
+          fi
+          url="$(vercel deploy "${args[@]}")"
+          echo "Built $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      # Pending migrations are applied in order; a migration older than the newest applied one is refused (no
+      # --include-all), as it would have been written against a schema the project has moved past. The pgTAP tests then
+      # run against the migrated project, inside transactions they roll back.
+      - name: Migrate the database
+        run: |
+          supabase migration list --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          supabase db push --yes --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          supabase test db --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Make the deployment live
+        env:
+          URL: ${{ steps.deployment.outputs.url }}
+        run: |
+          if [ "$GITHUB_REF_NAME" = master ]; then
+            vercel promote "$URL" --yes --token "$VERCEL_TOKEN"
+            curl --proto '=https' -fsS --retry 5 --retry-delay 5 -o /dev/null https://tenantry.dev/
+          else
+            vercel alias set "$URL" sandbox.tenantry.dev --token "$VERCEL_TOKEN"
+          fi

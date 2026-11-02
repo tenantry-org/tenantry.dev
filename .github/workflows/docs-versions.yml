@@ -6,7 +6,7 @@ name: docs-versions
 # staging, which redeploys the site. A new minor appears once both Core and Pro have released in it; a later patch in
 # a minor updates it. A release whose docs lack their folder or
 # changelog section is left out, with a warning. Hourly, so a release is live within the hour; on demand as well.
-# Production deploys the commit once the test and audit workflows pass on it (README.md, Docs pipeline).
+# The test workflow deploys the commit once its checks pass on it (its deploy job; README.md, Docs pipeline).
 on:
   schedule:
     - cron: '23 * * * *'
@@ -18,7 +18,7 @@ concurrency:
 
 permissions:
   contents: write
-  actions: write # to run the test and audit workflows on the new commit
+  actions: write # to run the test workflow on the new commit
 
 jobs:
   update:
@@ -39,28 +39,33 @@ jobs:
         run: node scripts/docs-versions-update.mjs update
       - name: Commit and deploy a change
         run: |
-          # Production deploys a commit only once the test and audit workflows pass on it (Vercel Deployment Checks),
-          # and a push made with this token starts no workflow, so this job runs both on its own commits. If that
-          # failed last time, master's head is still this job's commit without those runs, and it runs them now. The
-          # sandbox follows production (staging is master): a run that pushed master but not staging is caught up the
-          # same way, by a fast-forward only, so a change pushed to staging to try out is left alone.
+          # The test workflow deploys a commit once its checks pass on it (its deploy job, which also runs the audit),
+          # and a push made with this token starts no workflow, so this job runs it on its own commits, on master and on
+          # staging. If that failed last time, master's head is still this job's commit without that run, and it runs it
+          # now. The sandbox follows production (staging is master): a run that pushed master but not staging is caught
+          # up the same way, by a fast-forward only, so a change pushed to staging to try out is left alone.
           bot='41898282+github-actions[bot]@users.noreply.github.com'
-          run_on_master() {
+          run_test_on() {
             for _ in 1 2 3; do
-              gh workflow run "$1" --ref master && return 0
+              gh workflow run test.yml --ref "$1" && return 0
               sleep 10
             done
             return 1
           }
+          check_branch() {
+            if [ "$(gh run list --workflow test.yml --branch "$1" --commit "$(git rev-parse HEAD)" --json databaseId --jq length)" = 0 ]; then
+              run_test_on "$1" || return 1
+            fi
+          }
           check_master() {
-            for workflow in test.yml audit.yml; do
-              if [ "$(gh run list --workflow "$workflow" --commit "$(git rev-parse HEAD)" --json databaseId --jq length)" = 0 ]; then
-                run_on_master "$workflow" || return 1
-              fi
-            done
+            check_branch master
           }
           follow_master() {
-            git push origin HEAD:staging || echo "::warning::staging has commits master lacks; left as it is"
+            if git push origin HEAD:staging; then
+              check_branch staging
+            else
+              echo "::warning::staging has commits master lacks; left as it is"
+            fi
           }
           if git diff --quiet -- docs-versions.json newest-release.json; then
             echo "No change."
@@ -80,6 +85,7 @@ jobs:
           # has are dropped from it, and the warning lists them; they remain in the branch they were pushed from.
           dropped="$(git log --format='%h %s' "HEAD..$staging")"
           git push --force-with-lease="staging:$staging" origin HEAD:staging
+          check_branch staging
           if [ -n "$dropped" ]; then
             dropped="${dropped//%/%25}"
             echo "::warning::staging reset to master, dropping the commits master lacks:%0A${dropped//$'\n'/%0A}"

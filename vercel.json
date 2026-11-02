@@ -1,5 +1,12 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["dub1"],
+  "git": {
+    "deploymentEnabled": {
+      "master": false,
+      "staging": false
+    }
+  },
   "crons": [
     {
       "path": "/api/reconcile",

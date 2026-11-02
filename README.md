@@ -72,8 +72,29 @@ pnpm dev        # runs sync:docs, then next dev
 
 `pnpm test` runs lint + Prettier + `tsc` + Vitest. CI (`.github/workflows/test.yml`) runs it, actionlint on the
 workflows, ShellCheck on `scripts/*.sh`, `pnpm build`, the database tests and the package feed's end-to-end test on
-every push to master or staging and every pull request; production deployments wait for those jobs (Vercel Deployment
-Checks). Copy [`.env.example`](.env.example) to `.env.local` and fill in the values for the services you need.
+every push to master or staging and every pull request. On master and staging its last job then deploys
+([Deploying](#deploying)). Copy [`.env.example`](.env.example) to `.env.local` and fill in the values for the services
+you need.
+
+## Deploying
+
+A push to master deploys production (tenantry.dev, the Supabase project `tenantry`); a push to staging deploys the
+sandbox (sandbox.tenantry.dev, the project `tenantry-sandbox`). Vercel's Git integration does not deploy either branch
+(`vercel.json`, `git.deploymentEnabled`); the `deploy` job of `.github/workflows/test.yml` does, once every other job
+has passed, in the order that keeps the code and the schema together: it builds the deployment with the Vercel CLI
+without making it live, applies the branch's pending migrations to the branch's project (`supabase db push`, in order,
+refusing one older than the newest applied) and runs the pgTAP tests against the migrated project, then makes the
+deployment live (`vercel promote` for production, the `sandbox.tenantry.dev` alias for the sandbox). The previous
+deployment runs on the new schema only for the moment of the switch, and the new one never runs on the old schema. A
+failed migration or test leaves the built deployment unpromoted and the previous one live; fix and push again. Runs on
+one branch queue rather than cancel each other, so two pushes migrate in order. Other branches still get Vercel's
+preview deployments, without a migration.
+
+The job needs four repository secrets, and fails before building when one is missing: `VERCEL_TOKEN` (Vercel → Account
+→ Tokens, scoped to the team), `SUPABASE_ACCESS_TOKEN` (Supabase → Account → Access Tokens), and the two projects'
+database passwords, `SUPABASE_DB_PASSWORD_PRODUCTION` and `SUPABASE_DB_PASSWORD_SANDBOX` (each project → Settings →
+Database). The migrations have no down migrations: before merging one that drops or rewrites data into master, take a
+dump (`supabase db dump --linked`, as LAUNCH-SETUP.md §P step 1 says) and check the project's backups.
 
 **TypeScript is installed twice, under aliases.** `@typescript/native` is TypeScript 7 (`npm:typescript@^7`): its
 `tsc` is what `pnpm typecheck` runs, in `pnpm test` and CI. `typescript` is TypeScript 6
@@ -212,13 +233,13 @@ every minor from that one is shown, and each product's changelog starts at its o
 The same run reads what the site says about the newest release from the release itself and writes it to
 [`newest-release.json`](newest-release.json): the .NET versions Core's package targets and the number of sample
 folders. The home, Pro and comparison pages take these from the file, and the version badge and the docs from `docs-versions.json`. When either file changes, the
-workflow commits both to master and staging and runs the test and audit workflows on the commit, since its own pushes
-start none. Production deploys the commit once they pass. Staging is reset to master: commits that only staging has are
-dropped from it, and the run's warning lists them. A run that finds nothing new but sees its own commit at master's
-head runs those workflows if they never ran on it, and fast-forwards staging to it. That run leaves staging alone, with
-a warning, when staging has commits master lacks. A release is live at the first run after its packages are published,
-so within the hour, plus the few minutes the checks and the build take. Run the workflow from the Actions tab to
-publish sooner.
+workflow commits both to master and staging and runs the test workflow on the commit on each, since its own pushes
+start none. That workflow's deploy job deploys the commit once its checks pass ([Deploying](#deploying)). Staging is
+reset to master: commits that only staging has are dropped from it, and the run's warning lists them. A run that finds
+nothing new but sees its own commit at master's head runs the test workflow if it never ran on it, and fast-forwards
+staging to it. That run leaves staging alone, with a warning, when staging has commits master lacks. A release is live
+at the first run after its packages are published, so within the hour, plus the few minutes the checks and the build
+take. Run the workflow from the Actions tab to publish sooner.
 
 A release whose tag has no `docs` folder, or whose `CHANGELOG.md` has no section for it, is left out, and its line keeps
 the release before it. So is a release of the newest line that does not give the facts above: a nuspec without target
@@ -234,8 +255,8 @@ release's guide says.
 
 If a release has not reached the site after an hour, check in this order: NuGet lists the Core version
 (`https://www.nuget.org/packages/Tenantry.Core`), or tenantry-pro-docs has the Pro tag (Pro's publish-docs job may need
-a re-run); the latest `docs-versions` run, whose summary names any release it left out; the test and audit runs on its
-commit on master; then the Vercel deployment. `pnpm docs:update` does the same as the workflow locally, and
+a re-run); the latest `docs-versions` run, whose summary names any release it left out; the test run on its commit on master,
+whose deploy job deploys it; then the Vercel deployment. `pnpm docs:update` does the same as the workflow locally, and
 `pnpm docs:check` fails unless both files match the releases.
 
 To preview unreleased docs locally, set an override, for example `PRO_DOCS_DIR=../tenantry-pro/docs pnpm dev` (or
@@ -265,7 +286,7 @@ has a page locally and in the sandbox, marked as one, but is never in production
 sitemap or on dev.to.
 
 **dev.to.** After each push to master, the `devto` workflow (`scripts/devto-sync.mjs`) waits until tenantry.dev serves
-the pushed commit's posts, and only them (`/blog/posts.json`; production deploys a commit once its checks pass), then
+the pushed commit's posts, and only them (`/blog/posts.json`; the test workflow deploys a commit once its checks pass), then
 creates each published post's dev.to article, or updates it when the post changed. It finds the article by its
 canonical URL, the post's address here, so dev.to links back and search engines credit the site. A post put back to
 draft or removed has its article unpublished, and published again with the post; the account's articles whose
