@@ -34,6 +34,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { PRODUCTION_SUPABASE_URL } from './production-environment.mjs';
+import { reconcileRefusal } from './reconcile-answer.mjs';
 
 const TXN = 'txn_rehearsal_';
 const ADJ = 'adj_rehearsal_';
@@ -267,15 +268,19 @@ async function reconcile() {
     console.log(`Queued a reconcile of ${customerId}. Run it now:\n  ${command}`);
     return;
   }
+  // Not following redirects: a protected deployment redirects to a login page, which answers 200.
   const response = await fetch(`${NEXT_PUBLIC_SITE_URL}/api/reconcile`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${CRON_SECRET}` },
+    redirect: 'manual',
   });
-  if (!response.ok) {
-    console.log(`The reconcile answered ${response.status}; the job stays queued. Run it with:\n  ${command}`);
+  const body = await response.text();
+  const refusal = reconcileRefusal(response.status, body);
+  if (refusal) {
+    console.log(`${refusal} The job stays queued. Run it with:\n  ${command}`);
     return;
   }
-  console.log(`Reconciled: ${await response.text()}`);
+  console.log(`Reconciled: ${body}`);
   await show();
 }
 

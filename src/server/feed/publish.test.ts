@@ -411,6 +411,20 @@ describe('release dates', () => {
     expect((await dated('9.9.0', '2028-05-31T13:00:00Z')).status).toBe(201);
   });
 
+  it('bounds a patch release only by its own minor, so a newer minor’s patch may be dated before an older one’s', async () => {
+    // A security fix for two minors: 9.9.2 is tagged first, but 9.8.6 is published first, with its later tag's date.
+    releases.set('9.8.0', { security: false, publishedAt: '2028-05-20T00:00:00Z' });
+    releases.set('9.8.6', { security: true, publishedAt: '2028-05-31T10:05:00Z' });
+    releases.set('9.9.0', { security: false, publishedAt: '2028-05-25T00:00:00Z' });
+    releases.set('9.9.1', { security: false, publishedAt: '2028-05-31T09:00:00Z' });
+
+    expect((await dated('9.9.2', '2028-05-31T08:00:00Z', true)).status).toBe(400);
+    expect((await dated('9.9.2', '2028-05-31T10:00:00Z', true)).status).toBe(201);
+    // An X.Y.0 release or a candidate is dated for vesting by its own date, so every earlier version still bounds it.
+    expect((await dated('9.10.0', '2028-05-31T10:00:00Z')).status).toBe(400);
+    expect((await dated('9.9.3-rc.1', '2028-05-31T10:00:00Z')).status).toBe(400);
+  });
+
   it('refuses a date before an earlier version when the releases run beyond the API row limit', async () => {
     // The newest earlier release comes last, beyond what one request returns.
     tables.pro_releases = {

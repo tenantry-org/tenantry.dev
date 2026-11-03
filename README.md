@@ -161,8 +161,10 @@ Pro's release workflow writes from the signed tag (its date, and `Security:` in 
 3 days before the push and 5 minutes after it, and not before an earlier version's date (a candidate is earlier than its
 release); without it the release is dated when its first package is published. Every patch release, a security fix or
 not, is dated as its `X.Y.0` release for vesting, so customers whose vested releases include `X.Y.0` can restore all of
-its patches; the security flag is recorded and listed, and changes no date. The first package of a release fixes its
-date and flag; later packages of the same release are checked only for the flag.
+its patches; the security flag is recorded and listed, and changes no date. For the same reason only its own minor's
+earlier releases bound a patch release's `releasedAt`, so a fix released for two minors at once publishes in either
+order. The first package of a release fixes its date and flag; later packages of the same release are checked only for
+the flag.
 
 `GET /feed/v3/package` with the publish key in `X-NuGet-ApiKey` lists what the feed holds: each release's version, dates
 and security flag, with its packages' ids, sizes and SHA-512s. Feed tokens and OIDC tokens cannot read it.
