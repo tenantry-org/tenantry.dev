@@ -29,12 +29,13 @@
  * Paddle lists, so the rows stay until undone.
  *
  * It reads NEXT_PUBLIC_PADDLE_ENV, NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, and, to run the reconcile
- * itself, NEXT_PUBLIC_SITE_URL and CRON_SECRET (otherwise it prints the command). It refuses unless
- * NEXT_PUBLIC_PADDLE_ENV is `sandbox` and the Supabase URL is not production's.
+ * itself, NEXT_PUBLIC_SITE_URL and CRON_SECRET (otherwise it prints the command; when the site does not answer, it
+ * prints why and the command, and exits with 1). It refuses unless NEXT_PUBLIC_PADDLE_ENV is `sandbox` and the
+ * Supabase URL is not production's.
  */
 import { createClient } from '@supabase/supabase-js';
 import { PRODUCTION_SUPABASE_URL } from './production-environment.mjs';
-import { reconcileRefusal } from './reconcile-answer.mjs';
+import { reconcileRefusal, unreachable } from './reconcile-answer.mjs';
 
 const TXN = 'txn_rehearsal_';
 const ADJ = 'adj_rehearsal_';
@@ -269,12 +270,19 @@ async function reconcile() {
     return;
   }
   // Not following redirects: a protected deployment redirects to a login page, which answers 200.
-  const response = await fetch(`${NEXT_PUBLIC_SITE_URL}/api/reconcile`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${CRON_SECRET}` },
-    redirect: 'manual',
-  });
-  const body = await response.text();
+  let response;
+  let body;
+  try {
+    response = await fetch(`${NEXT_PUBLIC_SITE_URL}/api/reconcile`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${CRON_SECRET}` },
+      redirect: 'manual',
+    });
+    body = await response.text();
+  } catch (error) {
+    // The rows above are written and the job queued, so the rehearsal needs only the reconcile run.
+    fail(`${unreachable(NEXT_PUBLIC_SITE_URL, error)} The reconcile job is already queued. Run it with:\n  ${command}`);
+  }
   const refusal = reconcileRefusal(response.status, body);
   if (refusal) {
     console.log(`${refusal} The job stays queued. Run it with:\n  ${command}`);

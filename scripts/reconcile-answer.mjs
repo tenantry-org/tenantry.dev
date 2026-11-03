@@ -24,3 +24,14 @@ function answeredOk(body) {
     return false;
   }
 }
+
+/**
+ * Why the site could not be asked to reconcile, from the error fetch rejects with. Node's fetch rejects with "fetch
+ * failed" whatever went wrong and puts the reason in its cause, such as a refused connection or an unknown host. When
+ * every address of a host refuses, the cause is an AggregateError with no message, only a code.
+ */
+export function unreachable(siteUrl, error) {
+  const cause = error?.cause;
+  const reason = cause?.message || cause?.code || error?.message || String(error);
+  return `The site at ${siteUrl} did not answer: ${reason}.`;
+}
