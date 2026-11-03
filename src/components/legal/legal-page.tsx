@@ -12,7 +12,8 @@ interface Props {
 /**
  * Shared shell for legal documents. The legal entity comes from constants/legal-entity.ts. Each page says it is an
  * unreviewed template only while the entity has placeholders: filling them in ends counsel's review and removes the
- * note, and a server with checkout enabled refuses to start before then, so no buyer accepts a page that says it.
+ * note, and a production server with checkout enabled refuses to start before then, so no real buyer accepts a page
+ * that says it.
  */
 export function LegalPage({ title, lastUpdated, children }: Props) {
   return (
