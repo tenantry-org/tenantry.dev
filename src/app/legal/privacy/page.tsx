@@ -12,34 +12,45 @@ export default function PrivacyPage() {
       </p>
 
       <h2>1. Data we collect</h2>
-      <ul>
-        <li>
-          <strong>Account data:</strong> email address and authentication identifiers (via Supabase Auth).
-        </li>
-        <li>
-          <strong>GitHub identity:</strong> when you sign in with GitHub, the identifiers GitHub passes to Supabase
-          Auth, used only to sign you in.
-        </li>
-        <li>
-          <strong>Billing data:</strong> processed by Paddle.com as merchant of record. We receive subscription status,
-          customer identifiers and, for each Tenantry Pro payment, its billing period, amounts, currency and any
-          refunds, credits or chargebacks, not payment-card details.
-        </li>
-        <li>
-          <strong>Entitlement records:</strong> subscription status, the licence keys issued to your account, and the
-          vesting worked out from your payments (your paid time and each annual term, and the date each vests through).
-          For each feed token: the name you give it, its first few characters, when it was created and revoked, and when
-          it was last used, recorded at most once an hour. We store a hash of each feed token, not the token itself. For
-          each package download: the feed token, the package and version, the time, and your network rather than your IP
-          address (its first three numbers for IPv4, its first three groups for IPv6), kept for 90 days to spot a token
-          that is shared or misused.
-        </li>
-        <li>
-          <strong>Usage and performance data:</strong> pages visited, referring site, country, browser, device type and
-          page-load measurements, collected by Vercel Web Analytics and Speed Insights without cookies and without
-          identifying you (see section 4).
-        </li>
-      </ul>
+      <dl className={'flex flex-col gap-4 [&_dd]:mt-1 [&_dt]:font-semibold [&_dt]:text-foreground'}>
+        <div>
+          <dt>Account data</dt>
+          <dd>Your email address and authentication identifiers (via Supabase Auth).</dd>
+        </div>
+        <div>
+          <dt>GitHub identity</dt>
+          <dd>
+            When you sign in with GitHub, the identifiers GitHub passes to Supabase Auth, used only to sign you in.
+          </dd>
+        </div>
+        <div>
+          <dt>Billing data</dt>
+          <dd>
+            Processed by Paddle.com as merchant of record. We receive subscription status, customer identifiers and, for
+            each Tenantry Pro payment, its billing period, amounts, currency and any refunds, credits or chargebacks,
+            not payment-card details.
+          </dd>
+        </div>
+        <div>
+          <dt>Entitlement records</dt>
+          <dd>
+            Subscription status, the licence keys issued to your account, and the vesting worked out from your payments
+            (your paid time and each annual term, and the date each vests through). For each feed token: the name you
+            give it, its first few characters, when it was created and revoked, and when it was last used, recorded at
+            most once an hour. We store a hash of each feed token, not the token itself. For each package download: the
+            feed token, the package and version, the time, and your network rather than your IP address (its first three
+            numbers for IPv4, its first three groups for IPv6), kept for 90 days to spot a token that is shared or
+            misused.
+          </dd>
+        </div>
+        <div>
+          <dt>Usage and performance data</dt>
+          <dd>
+            Pages visited, referring site, country, browser, device type and page-load measurements, collected by Vercel
+            Web Analytics and Speed Insights without cookies and without identifying you (see section 4).
+          </dd>
+        </div>
+      </dl>
 
       <h2>2. How we use data</h2>
       <ul>

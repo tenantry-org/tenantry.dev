@@ -19,6 +19,9 @@ export default function Layout({ children }: Props) {
   );
 }
 
+// The proxy (update-session.ts) sends a signed-out request to the login page with the page to return to. This check
+// catches only what the proxy let through, such as a session that ends in between, and a layout is not given the
+// requested path, so it sends no `next`.
 async function SignedIn({ children }: Props) {
   if (!(await getCurrentUser())) redirect('/login');
   return children;

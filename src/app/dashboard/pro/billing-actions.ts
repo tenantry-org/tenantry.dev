@@ -38,7 +38,7 @@ export async function openBillingPortal(target: BillingPortalTarget): Promise<Re
 
     return url ? { url } : { error: UNAVAILABLE };
   } catch (e) {
-    console.log('Error opening the billing portal', e);
+    console.error('Error opening the billing portal', e);
     return { error: UNAVAILABLE };
   }
 }
@@ -60,7 +60,7 @@ export async function keepSubscription(subscriptionId: string): Promise<Result<{
     revalidatePath('/dashboard/pro', 'layout'); // Access, Install and Billing all show this customer's state
     return { kept: true };
   } catch (e) {
-    console.log('Error keeping subscription', e);
+    console.error('Error keeping subscription', e);
     return { error: 'Something went wrong, please try again later' };
   }
 }

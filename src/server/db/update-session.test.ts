@@ -19,11 +19,13 @@ describe('updateSession', () => {
     session.error = null;
   });
 
-  it('redirects a signed-out dashboard request to the login page', async () => {
-    const response = await updateSession(request('/dashboard/pro?tab=licence'), supabase);
+  it('redirects a signed-out dashboard request to the login page, which continues to the requested page', async () => {
+    const response = await updateSession(request('/dashboard/pro/install?tab=licence'), supabase);
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://tenantry.dev/login');
+    expect(response.headers.get('location')).toBe(
+      'https://tenantry.dev/login?next=%2Fdashboard%2Fpro%2Finstall%3Ftab%3Dlicence',
+    );
   });
 
   it('lets a signed-in user reach the dashboard', async () => {
