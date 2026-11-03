@@ -12,10 +12,10 @@ import { errorMessage } from '@/lib/errors';
  * FEED_DOWNLOAD_RETENTION_DAYS and the customer jobs done more than DONE_JOB_RETENTION_DAYS ago, queues a reconcile job
  * for every customer whose state may need correcting (customers_to_reconcile), then runs the due jobs until `budgetMs`
  * from the start of the run has passed. The deletions come first, so a run stopped at its time limit has still done
- * them; a deletion that fails is logged and alerted on, and the run goes on. The worker runs each reconcile (reconcile-customer.ts) in order with that customer's Paddle
- * events and never alongside one, so reconciling cannot race a webhook: it sees the customer's entitlements as the
- * events before it left them. Jobs the run does not reach, or that fail and back off, are picked up by later runs and
- * webhooks.
+ * them; a deletion that fails is logged and alerted on, and the run goes on. The worker runs each reconcile
+ * (reconcile-customer.ts) in order with that customer's Paddle events and never alongside one, so reconciling cannot
+ * race a webhook: it sees the customer's entitlements as the events before it left them. Jobs the run does not reach,
+ * or that fail and back off, are picked up by later runs and webhooks.
  */
 export interface ReconcileResult {
   customers: number;

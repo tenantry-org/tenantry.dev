@@ -42,7 +42,7 @@ describe('the security headers', () => {
     );
   });
 
-  it('lets a page send data only to the site, Supabase and Paddle', () => {
+  it("lets a page's scripts call only the site, Supabase and Paddle", () => {
     expect(directives(production)['connect-src']).toEqual([
       "'self'",
       'https://abcd1234.supabase.co',

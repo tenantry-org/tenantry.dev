@@ -29,8 +29,8 @@ import { FEED_PATH } from '@/lib/install-snippets';
  * Every package resource needs a feed token as the basic-auth password; without a live one the answer is 401 with a
  * Basic challenge, which makes NuGet send the credentials configured for the source. Responses are never cached by
  * anyone but the client: each customer's lists differ. Every request counts against the feed's rate limit
- * (rate-limit.ts), and each package download is recorded with its token (feed_downloads), kept for 90 days. A HEAD for a
- * package answers 200 with no redirect and records nothing.
+ * (rate-limit.ts), and each package download is recorded with its token (feed_downloads), kept for 90 days. A HEAD for
+ * a package answers 200 with no redirect and records nothing.
  */
 
 /** How long a download's signed URL works. NuGet follows the redirect at once. */

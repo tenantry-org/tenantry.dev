@@ -3,13 +3,15 @@ import { createMDX } from 'fumadocs-mdx/next';
 const withMDX = createMDX();
 
 /**
- * The Content-Security-Policy for every page. It limits where a page can send data, so a script injected into a page
- * that shows the licence key or a new feed token cannot post them to another host: requests go only to the site,
- * Supabase and Paddle. Scripts load only from the site, Paddle, Turnstile and, in development, Vercel Analytics' debug
- * script; frames only from Paddle's checkout and Turnstile. Inline scripts stay allowed: Next.js inlines its own, and a
- * nonce would make every page render on request, which Partial Prerendering's static shells cannot do. One policy
- * covers the whole site because a page keeps its policy across client-side navigation, so every page the dashboard
- * links to runs under it too. The Vercel Toolbar, which preview deployments inject, is allowed there.
+ * The Content-Security-Policy for every page. A page's scripts can fetch from and post to only the site, Supabase and
+ * Paddle (connect-src), so a script injected into a page that shows the licence key or a new feed token cannot post
+ * them to another host. Images, styles and fonts may still come from anywhere, so such a script could put a value in
+ * an image's address: the policy narrows the ways out rather than closing them all. Scripts load only from the site,
+ * Paddle, Turnstile and, in development, Vercel Analytics' debug script; frames only from Paddle's checkout and
+ * Turnstile. Inline scripts stay allowed: Next.js inlines its own, and a nonce would make every page render on request,
+ * which Partial Prerendering's static shells cannot do. One policy covers the whole site because a page keeps its
+ * policy across client-side navigation, so every page the dashboard links to runs under it too. The Vercel Toolbar,
+ * which preview deployments inject, is allowed there.
  *
  * @param {Record<string, string | undefined>} env the build's environment
  */
