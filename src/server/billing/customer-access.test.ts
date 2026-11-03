@@ -115,7 +115,7 @@ describe('syncCustomer', () => {
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
-  it('in manual mode records access and welcomes the customer but issues no licence, and still ends access', async () => {
+  it('in manual mode records access and sends the welcome but issues no licence, and still ends access', async () => {
     deps.config = testServerConfig({ provisioning: 'manual' });
 
     await expect(entitle()).resolves.toBe('started');
