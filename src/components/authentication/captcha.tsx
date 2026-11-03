@@ -74,8 +74,8 @@ export function useCaptcha(): CaptchaState & { element: ReactNode } {
     if (!siteKey) return;
     let current = true;
 
-    loadTurnstile().then(
-      (turnstile) => {
+    loadTurnstile()
+      .then((turnstile) => {
         if (!current || !container.current) return;
         const id = turnstile.render(container.current, {
           sitekey: siteKey,
@@ -93,12 +93,12 @@ export function useCaptcha(): CaptchaState & { element: ReactNode } {
           size: 'flexible',
         });
         widget.current = { turnstile, id };
-      },
-      (error) => {
-        console.error(error);
+      })
+      // The script did not load, or Turnstile refused the widget (a site key it does not know).
+      .catch((error: unknown) => {
+        console.error('Turnstile could not run:', error);
         if (current) setFailed(true);
-      },
-    );
+      });
 
     return () => {
       current = false;
