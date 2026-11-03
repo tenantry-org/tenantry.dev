@@ -309,5 +309,10 @@ through `serverConfig()` (`src/server/config/server-config.ts`), which the serve
 browser through `publicConfig()` (`src/lib/public-config.ts`): the `NEXT_PUBLIC_` variables it uses, which are
 compiled into the build, so the build checks them too and a change needs a redeploy. (`NEXT_PUBLIC_SITE_URL` is read
 by the server only.) ESLint keeps `process.env` out of other code.
+
+Every page is sent with a Content-Security-Policy (`next.config.mjs`, `contentSecurityPolicy`): a page may send
+requests only to the site, the Supabase project and Paddle, load scripts only from the site, Paddle and Turnstile, and
+frame only Paddle's checkout and Turnstile. A new third-party script, frame or API the browser calls must be added
+there, or the browser blocks it (the console names the directive).
 Operational runbooks (setting up each environment, key rotation, reconcile) are maintained privately by the
 maintainers.
