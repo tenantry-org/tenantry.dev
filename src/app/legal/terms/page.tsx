@@ -76,10 +76,6 @@ export default function TermsPage() {
       <p>
         Questions about these Terms: <a href="mailto:legal@tenantry.dev">legal@tenantry.dev</a>.
       </p>
-
-      <p className="text-sm text-muted-foreground">
-        This document is a template and must be reviewed by qualified legal counsel before launch.
-      </p>
     </LegalPage>
   );
 }

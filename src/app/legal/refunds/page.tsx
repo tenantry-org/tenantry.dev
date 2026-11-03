@@ -41,10 +41,6 @@ export default function RefundsPage() {
         kept still counts if you subscribe again. A partial refund, a credit or a full refund of an earlier billing
         period does not cancel it.
       </p>
-
-      <p className="text-sm text-muted-foreground">
-        This document is a template and must be reviewed by qualified legal counsel before launch.
-      </p>
     </LegalPage>
   );
 }

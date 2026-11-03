@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { CodeFigure } from '@/components/shared/code-figure';
 import { ProofStrip } from '@/components/shared/proof-strip';
 import { TrackedLink } from '@/components/shared/tracked-link';
-import { DOTNET_SUPPORT } from '@/constants/dotnet-support';
+import { DOTNET_SUPPORT, V1_NOT_BEFORE } from '@/constants/dotnet-support';
 import { SUPPORT_REPLY_WITHIN } from '@/constants/pro-offer';
 import { VESTING_RULES } from '@/constants/vesting';
 import { latestDocsVersion, publishedSince } from '@/lib/docs-versions';
@@ -128,7 +128,7 @@ const QUESTIONS = [
         <Suspense fallback={null}>
           <ProPriceSentence />
         </Suspense>
-        {`Every Tenantry Pro release while you subscribe, a licence key, and email support with a reply within ${SUPPORT_REPLY_WITHIN}. Releases come from the package feed, Tenantry’s private NuGet feed. After 12 paid months in total or a year paid up front, you keep the releases published while you paid when the subscription ends.`}
+        {`Every Tenantry Pro release while you subscribe, a licence key, and email support with a reply within ${SUPPORT_REPLY_WITHIN}. Releases come from the package feed, Tenantry’s private NuGet feed. After 12 paid months in total or a year paid up front, you keep the releases published up to the end of the time you paid for when the subscription ends.`}
       </>
     ),
     link: { label: 'What you keep', href: '#subscription-ends' },
@@ -141,12 +141,12 @@ const QUESTIONS = [
   },
   {
     question: 'Which versions and databases?',
-    answer: `${DOTNET_SUPPORT}, each with its own EF Core version. Provisioning and migrations on SQL Server, PostgreSQL and MySQL; schema per tenant on SQL Server and PostgreSQL.`,
+    answer: `${DOTNET_SUPPORT}, each with its own EF Core version. Provisioning and migrations on SQL Server and PostgreSQL, and on MySQL up to .NET 10, since no MySQL provider supports EF Core 11 yet; schema per tenant on SQL Server and PostgreSQL.`,
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
     question: 'Is it production-ready?',
-    answer: `Tenantry Core and Pro are in beta until 1.0, which comes no earlier than 10 November 2027. The isolation is tested on every build against SQL Server, PostgreSQL, MySQL and SQLite. Releases are numbered 0.x, and a minor release (${latestDocsVersion.version} to ${nextMinor}) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.`,
+    answer: `Tenantry Core and Pro are in beta until 1.0, which comes no earlier than ${V1_NOT_BEFORE}. The isolation is tested on every build against SQL Server, PostgreSQL, MySQL and SQLite. Releases are numbered 0.x, and a minor release (${latestDocsVersion.version} to ${nextMinor}) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.`,
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {

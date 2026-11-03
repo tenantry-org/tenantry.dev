@@ -5,6 +5,7 @@ import { highlight } from 'fumadocs-core/highlight';
 import { Button } from '@/components/ui/button';
 import { GithubIcon } from '@/components/icons/github-icon';
 import { latestDocsVersion } from '@/lib/docs-versions';
+import { V1_NOT_BEFORE } from '@/constants/dotnet-support';
 
 // From Tenantry Core's README and getting-started guide, with the access check that guide asks for in production
 // (docs/access-control.md): a header alone lets any caller name any tenant.
@@ -57,7 +58,7 @@ export async function HeroSection() {
               'inline-flex items-center gap-2 rounded-full border border-accent-foreground/15 bg-accent px-3 py-1 text-xs font-medium text-accent-foreground hover:underline'
             }
           >
-            Beta · {latestDocsVersion.version} · 1.0 not before November 2027
+            Beta · {latestDocsVersion.version} · 1.0 not before {V1_NOT_BEFORE}
           </Link>
           <h1
             className={

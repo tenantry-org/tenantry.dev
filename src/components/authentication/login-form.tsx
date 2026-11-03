@@ -26,7 +26,7 @@ export function LoginForm({ notice, next }: Props) {
       // On success the action redirects, and the button stays pending until the next page shows.
       const data = await login({ email, password }, next);
       if (data?.error) {
-        toast({ description: 'Invalid email or password', variant: 'destructive' });
+        toast({ description: data.error, variant: 'destructive' });
       }
     });
   }

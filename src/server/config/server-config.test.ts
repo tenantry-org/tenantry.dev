@@ -1,7 +1,7 @@
 import { generateKeyPairSync, KeyObject } from 'crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConfigError } from '@/lib/public-config';
-import { PRODUCTION_LICENCE_PUBLIC_KEY, validateServerConfig } from './server-config';
+import { PRODUCTION_LICENCE_PUBLIC_KEY, PRODUCTION_SUPABASE_URL, validateServerConfig } from './server-config';
 
 // Stand-ins for the two environments' licence keypairs: the "production" public key is passed to the
 // validator in place of the real embedded one, whose private half never leaves the production secret store.
@@ -18,7 +18,8 @@ const sandboxKey = keypair();
 function environment(paddleEnvironment: 'sandbox' | 'production', overrides: Record<string, string | undefined> = {}) {
   return {
     NEXT_PUBLIC_PADDLE_ENV: paddleEnvironment,
-    NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+    NEXT_PUBLIC_SUPABASE_URL:
+      paddleEnvironment === 'production' ? PRODUCTION_SUPABASE_URL : 'https://project.supabase.co',
     NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon',
     SUPABASE_SERVICE_ROLE_KEY: 'service',
     PADDLE_API_KEY: 'paddle',
@@ -54,7 +55,7 @@ describe('validateServerConfig', () => {
 
     expect(config).toEqual({
       siteUrl: 'https://tenantry.dev',
-      supabase: { url: 'https://project.supabase.co', anonKey: 'anon', serviceRoleKey: 'service' },
+      supabase: { url: PRODUCTION_SUPABASE_URL, anonKey: 'anon', serviceRoleKey: 'service' },
       paddle: {
         environment: 'production',
         clientToken: 'test_client_token',
@@ -207,6 +208,19 @@ describe('validateServerConfig', () => {
     expect(
       problems(environment('production', { NEXT_PUBLIC_SUPABASE_URL: 'https://xoqqgenzhqefyeyzahim.supabase.co' })),
     ).toEqual([]);
+  });
+
+  it("keeps a production server on production's own database and site", () => {
+    expect(problems(environment('production', { NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co' }))).toEqual([
+      expect.stringContaining("NEXT_PUBLIC_SUPABASE_URL must be production's database"),
+    ]);
+    expect(problems(environment('production', { NEXT_PUBLIC_SITE_URL: 'https://sandbox.tenantry.dev' }))).toEqual([
+      expect.stringContaining('NEXT_PUBLIC_SITE_URL must be https://tenantry.dev in production'),
+    ]);
+    expect(problems(environment('production', { NEXT_PUBLIC_SITE_URL: 'https://tenantry-site.vercel.app' }))).toEqual([
+      expect.stringContaining('NEXT_PUBLIC_SITE_URL must be https://tenantry.dev in production'),
+    ]);
+    expect(problems(environment('production', { NEXT_PUBLIC_SITE_URL: 'https://tenantry.dev/' }))).toEqual([]);
   });
 
   it('needs the email settings and alert address only in production', () => {

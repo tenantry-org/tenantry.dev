@@ -1,6 +1,7 @@
 import 'server-only';
 import { createPrivateKey, createPublicKey, type KeyObject } from 'node:crypto';
 import { LegalEntity, legalEntityIncomplete } from '@/constants/legal-entity';
+import { SITE_ORIGIN } from '@/constants/site';
 import {
   ConfigError,
   deepFreeze,
@@ -21,8 +22,9 @@ export const PRODUCTION_LICENCE_PUBLIC_KEY =
 
 /**
  * Production's Supabase project (scripts/production-environment.mjs). A sandbox server must not use it, so a sandbox
- * purchase (free, with test cards) can never write to real customers' records. Each environment has its own services;
- * this makes a misconfiguration fail at startup.
+ * purchase (free, with test cards) can never write to real customers' records, and a production server must, so a
+ * real purchase is never recorded in another database. Each environment has its own services; this makes a
+ * misconfiguration fail at startup.
  */
 export { PRODUCTION_SUPABASE_URL };
 
@@ -164,6 +166,22 @@ export function validateServerConfig(
     if (sameOrigin(publicConfig.supabase.url, PRODUCTION_SUPABASE_URL)) {
       problems.push(
         "NEXT_PUBLIC_SUPABASE_URL is production's database: sandbox events would write real customers' records",
+      );
+    }
+  }
+
+  // A value that is missing, or a site URL that is not an origin, is reported above and not again here.
+  if (production) {
+    if (publicConfig.supabase.url && !sameOrigin(publicConfig.supabase.url, PRODUCTION_SUPABASE_URL)) {
+      problems.push(
+        `NEXT_PUBLIC_SUPABASE_URL must be production's database, ${PRODUCTION_SUPABASE_URL} (it is ` +
+          `"${publicConfig.supabase.url}"): real purchases would be recorded in another environment's database`,
+      );
+    }
+    if (siteUrl && siteUrl !== SITE_ORIGIN) {
+      problems.push(
+        `NEXT_PUBLIC_SITE_URL must be ${SITE_ORIGIN} in production (it is "${siteUrl}"): the package feed, emails ` +
+          'and sign-in redirects would send customers to another host',
       );
     }
   }

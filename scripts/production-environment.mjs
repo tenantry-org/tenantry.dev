@@ -1,6 +1,7 @@
 /**
- * What identifies production, for the checks that keep everything else off it: the server's configuration
- * (src/server/config/server-config.ts) and the operator scripts that write to a database (scripts/rehearse.mjs).
+ * What identifies production, for the checks that keep production on its own database and everything else off it: the
+ * server's configuration (src/server/config/server-config.ts) and the operator scripts that write to a database
+ * (scripts/rehearse.mjs).
  */
 
 /** Production's Supabase project. A sandbox server, and a rehearsal, must never use it. */

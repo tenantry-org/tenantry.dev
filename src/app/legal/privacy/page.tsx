@@ -87,10 +87,6 @@ export default function PrivacyPage() {
         Privacy enquiries: <a href="mailto:privacy@tenantry.dev">privacy@tenantry.dev</a>. Data controller:{' '}
         {LegalEntity.name}, {LegalEntity.address}.
       </p>
-
-      <p className="text-sm text-muted-foreground">
-        This document is a template and must be reviewed by qualified legal counsel before launch.
-      </p>
     </LegalPage>
   );
 }
