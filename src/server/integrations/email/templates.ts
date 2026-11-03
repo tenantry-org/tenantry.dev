@@ -33,7 +33,7 @@ export function welcomeProEmail(to: string, siteUrl: string): EmailMessage {
       `<h1 style="font-size:20px">Welcome to Tenantry Pro</h1>
 <p>Thanks for subscribing. Log in to Tenantry with this email address and create a feed token on your Pro access page. NuGet sends it to the package feed, which serves the Tenantry Pro packages at <code>${feedUrl(siteUrl)}</code>.</p>
 <p><a href="${siteUrl}/dashboard/pro" style="${BUTTON}">Create a feed token</a></p>
-<p>The same page has your licence key. The <a href="${siteUrl}/dashboard/pro/install" style="color:#2563EB">Install page</a> has the <code>nuget.config</code> to commit next to your solution, and what to set in CI and Docker builds.</p>`,
+<p>The same page shows your licence key once it is issued. The <a href="${siteUrl}/dashboard/pro/install" style="color:#2563EB">Install page</a> has the <code>nuget.config</code> to commit next to your solution, and what to set in CI and Docker builds.</p>`,
     ),
   };
 }

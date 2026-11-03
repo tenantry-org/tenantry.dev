@@ -59,6 +59,13 @@ describe('email templates', () => {
     expect(welcomeProEmail('cust@example.com', SITE).html).toContain('Log in to Tenantry with this email address');
   });
 
+  it('welcomeProEmail does not promise the licence key is there yet: in manual issuing it appears once issued', () => {
+    const { html } = welcomeProEmail('cust@example.com', SITE);
+
+    expect(html).toContain('The same page shows your licence key once it is issued.');
+    expect(html).not.toContain('The same page has your licence key.');
+  });
+
   it('feedTokenCreatedEmail names the token, escaping its name, and links the access page to revoke it', () => {
     const { to, html } = feedTokenCreatedEmail(
       'cust@example.com',
