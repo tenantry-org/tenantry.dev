@@ -72,7 +72,8 @@ export function articleFor(post, organizationId) {
  * the organisation too is chosen only then.
  */
 export function updateFor(post) {
-  const { tags: _tags, ...update } = articleFor(post);
+  const update = articleFor(post);
+  delete update.tags;
   return update;
 }
 
