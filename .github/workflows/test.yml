@@ -200,7 +200,8 @@ jobs:
         run: |
           supabase migration list --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
           supabase db push --yes --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          supabase test db --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          # test db has no --password: the CLI reads SUPABASE_DB_PASSWORD from the environment for the linked project.
+          supabase test db --linked --project-ref "$SUPABASE_PROJECT_REF"
       - name: Make the deployment live
         env:
           URL: ${{ steps.deployment.outputs.url }}
