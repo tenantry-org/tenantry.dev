@@ -318,9 +318,10 @@ compiled into the build, so the build checks them too and a change needs a redep
 by the server only.) ESLint keeps `process.env` out of other code.
 
 Every page is sent with a Content-Security-Policy (`next.config.mjs`, `contentSecurityPolicy`): a page's scripts may
-call only the site, the Supabase project and Paddle, scripts load only from the site, Paddle and Turnstile, and frames
-only from Paddle's checkout and Turnstile. Images, styles and fonts are not limited. A new third-party script, frame or
-API the browser calls must be added there, or the browser blocks it (the console names the directive).
+call only the site, the Supabase project and Paddle, scripts load only from the site, Paddle and Turnstile, frames
+only from Paddle's checkout and Turnstile, images only from the site, `data:` and `blob:` URLs and Paddle, stylesheets
+only from the site and Paddle, and fonts only from the site. A new third-party script, frame, image, stylesheet, font
+or API the browser calls must be added there, or the browser blocks it (the console names the directive).
 
 Operational runbooks (setting up each environment, key rotation, reconcile) are maintained privately by the
 maintainers.

@@ -66,10 +66,21 @@ describe('the security headers', () => {
     });
   });
 
+  it('loads images, stylesheets and fonts only from the site and Paddle', () => {
+    expect(directives(production)).toMatchObject({
+      'img-src': ["'self'", 'data:', 'blob:', 'https://*.paddle.com'],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://*.paddle.com'],
+      'font-src': ["'self'"],
+    });
+  });
+
   it("allows the Vercel Toolbar on preview deployments and React's eval in development", () => {
     const preview = directives({ ...production, VERCEL_ENV: 'preview' });
     expect(preview['script-src']).toContain('https://vercel.live');
     expect(preview['frame-src']).toContain('https://vercel.live');
+    expect(preview['img-src']).toEqual(expect.arrayContaining(['https://vercel.live', 'https://vercel.com']));
+    expect(preview['style-src']).toContain('https://vercel.live');
+    expect(preview['font-src']).toEqual(expect.arrayContaining(['https://vercel.live', 'https://assets.vercel.com']));
     expect(directives({ ...production, VERCEL_ENV: 'production' })['script-src']).not.toContain('https://vercel.live');
     expect(directives({ ...production, NODE_ENV: 'development' })['script-src']).toContain("'unsafe-eval'");
   });

@@ -5,13 +5,18 @@ const withMDX = createMDX();
 /**
  * The Content-Security-Policy for every page. A page's scripts can fetch from and post to only the site, Supabase and
  * Paddle (connect-src), so a script injected into a page that shows the licence key or a new feed token cannot post
- * them to another host. Images, styles and fonts may still come from anywhere, so such a script could put a value in
- * an image's address: the policy narrows the ways out rather than closing them all. Scripts load only from the site,
- * Paddle, Turnstile and, in development, Vercel Analytics' debug script; frames only from Paddle's checkout and
- * Turnstile. Inline scripts stay allowed: Next.js inlines its own, and a nonce would make every page render on request,
- * which Partial Prerendering's static shells cannot do. One policy covers the whole site because a page keeps its
- * policy across client-side navigation, so every page the dashboard links to runs under it too. The Vercel Toolbar,
- * which preview deployments inject, is allowed there.
+ * them to another host. Images, stylesheets and fonts load only from where the site's own come from, so such a script
+ * cannot send a value out in an image's or a font's address either: images from the site, data: and blob: URLs and
+ * Paddle (Paddle.js loads a health-check image from its CDN), stylesheets from the site and Paddle (Paddle.js adds its
+ * overlay's stylesheet from its CDN), and fonts from the site (next/font serves Inter and JetBrains Mono from it). The
+ * docs and the blog have no images from other hosts; one added to them would be blocked. Inline styles stay allowed:
+ * React, Shiki's highlighting and Paddle.js set style attributes and inline style elements. Scripts load only from the
+ * site, Paddle, Turnstile and, in development, Vercel Analytics' debug script; frames only from Paddle's checkout and
+ * Turnstile. Turnstile adds only its frame to the page. Inline scripts stay allowed: Next.js inlines its own, and a
+ * nonce would make every page render on request, which Partial Prerendering's static shells cannot do. One policy
+ * covers the whole site because a page keeps its policy across client-side navigation, so every page the dashboard
+ * links to runs under it too. The Vercel Toolbar, which preview deployments inject, is allowed there, with the hosts
+ * Vercel's toolbar documentation lists.
  *
  * @param {Record<string, string | undefined>} env the build's environment
  */
@@ -36,6 +41,9 @@ export function contentSecurityPolicy(env = process.env) {
     )}`,
     `connect-src ${sources("'self'", supabase, paddle, toolbar && 'https://vercel.live wss://ws-us3.pusher.com')}`,
     `frame-src ${sources(paddle, turnstile, toolbar && 'https://vercel.live')}`,
+    `img-src ${sources("'self'", 'data:', 'blob:', paddle, toolbar && 'https://vercel.live https://vercel.com')}`,
+    `style-src ${sources("'self'", "'unsafe-inline'", paddle, toolbar && 'https://vercel.live')}`,
+    `font-src ${sources("'self'", toolbar && 'https://vercel.live https://assets.vercel.com')}`,
     "form-action 'self'",
     "frame-ancestors 'self'",
     "object-src 'none'",
