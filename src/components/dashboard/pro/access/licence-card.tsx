@@ -24,7 +24,7 @@ export function LicenceCard({ licenceKey }: Readonly<{ licenceKey: string | null
             >
               {licenceKey}
             </code>
-            <div className={'flex gap-2'}>
+            <div className={'flex flex-col items-start gap-2'}>
               <CopyButton value={licenceKey} label={'Copy key'} />
             </div>
             <p className={'text-sm text-muted-foreground'}>

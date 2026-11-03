@@ -77,12 +77,11 @@ export function FeedTokensCard({ tokens, canCreate, limit }: Readonly<Props>) {
           <div className={'flex flex-col gap-2 rounded-md border border-border p-3'} role={'status'}>
             <p className={'font-medium'}>Copy the feed token {created.name} now. It is not shown again.</p>
             <code className={'block rounded-md bg-code p-3 font-mono text-xs break-all'}>{created.token}</code>
-            <div className={'flex gap-2'}>
-              <CopyButton value={created.token} label={'Copy token'} />
+            <CopyButton value={created.token} label={'Copy token'}>
               <Button type={'button'} variant={'outline'} size={'sm'} onClick={() => setCreated(null)}>
                 Done
               </Button>
-            </div>
+            </CopyButton>
           </div>
         )}
 
