@@ -16,7 +16,10 @@ describe('InstallPanel', () => {
     const html = render();
 
     expect(html).toContain('4. Add the packages');
-    expect(html).toContain('dotnet add package Tenantry.Pro\ndotnet add package Tenantry.Pro.EfCore');
+    // Tenantry Core's web package too: neither Pro package brings it in, and it has the resolvers and UseTenantry.
+    expect(html).toContain(
+      'dotnet add package Tenantry.AspNetCore\ndotnet add package Tenantry.Pro\ndotnet add package Tenantry.Pro.EfCore',
+    );
     expect(html).toMatch(
       /does not start without your licence key: the <a [^>]*href="\/dashboard\/pro"[^>]*>Access page/,
     );

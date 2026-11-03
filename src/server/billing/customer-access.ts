@@ -42,8 +42,9 @@ export interface CustomerSync {
 
 /**
  * Recomputes the customer's access and entitlement and stores them, then sends the welcome email only when access
- * starts, and the access-ended email only when it ends. While the customer is entitled it issues the licence if they
- * have none (a first start, a failed issuance, or access that started while provisioning was manual).
+ * starts (whatever the provisioning mode), and the access-ended email only when it ends. While the customer is
+ * entitled and provisioning is automatic, it issues the licence if they have none (a first start, a failed issuance,
+ * or access that started while provisioning was manual).
  *
  * Called after every Paddle event that recorded something for the customer (the worker runs one customer's jobs at a
  * time), and by reconcile. `set_customer_entitlement` makes concurrent calls see each change of access once.
@@ -98,20 +99,19 @@ export async function syncCustomer(
   }
 
   // Provisioning gate: in manual mode (PROVISIONING_MODE not 'auto') access is recorded but the licence is left to
-  // the operator. The package feed follows the recorded access whatever the mode.
-  if (deps.config.provisioning !== 'auto') {
+  // the operator. The package feed follows the recorded access whatever the mode, so the welcome email, which says how
+  // to restore from it, is sent either way: it is sent only when access starts, so withholding it here would lose it.
+  let licence: LicenceOutcome | null = null;
+  if (deps.config.provisioning === 'auto') {
+    licence = await ensureLicence(customerId, deps);
+  } else {
     console.warn(
       `Customer access: automated provisioning is off (PROVISIONING_MODE) for customer ${customerId}; ` +
         'recording access but withholding the licence.',
     );
-    return { change: wasEntitled ? 'unchanged' : 'started', licence: null, entitlement };
   }
 
-  if (wasEntitled) {
-    return { change: 'unchanged', licence: await ensureLicence(customerId, deps), entitlement };
-  }
-
-  const licence = await ensureLicence(customerId, deps);
+  if (wasEntitled) return { change: 'unchanged', licence, entitlement };
 
   if (email) {
     await deps.sendEmail(welcomeProEmail(email, deps.config.siteUrl)); // sendEmail never throws

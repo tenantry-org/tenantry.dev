@@ -115,16 +115,29 @@ describe('syncCustomer', () => {
     expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
-  it('in manual mode records access but issues no licence, and still ends access and says so', async () => {
+  it('in manual mode records access and sends the welcome but issues no licence, and still ends access', async () => {
     deps.config = testServerConfig({ provisioning: 'manual' });
 
     await expect(entitle()).resolves.toBe('started');
     expect(memory.state.access.get('ctm_1')).toBe('active');
     expect(memory.licences('ctm_1')).toEqual([]);
-    expect(deps.sendEmail).not.toHaveBeenCalled();
+    // The feed serves them whatever the mode, and the welcome is sent only when access starts.
+    expect(emailSubjects()).toEqual(['Welcome to Tenantry Pro: create a feed token to install it']);
+    vi.clearAllMocks();
 
     await expect(entitle({ status: 'canceled' })).resolves.toBe('ended');
     expect(emailSubjects()).toEqual(['Your Tenantry Pro subscription has ended']);
+  });
+
+  it('issues the licence once provisioning is automatic, without welcoming the customer a second time', async () => {
+    deps.config = testServerConfig({ provisioning: 'manual' });
+    await entitle();
+    vi.clearAllMocks();
+
+    deps.config = testServerConfig({ provisioning: 'auto' });
+    await expect(reconcileLicence()).resolves.toBe('issued');
+    expect(memory.licences('ctm_1')).toHaveLength(1);
+    expect(deps.sendEmail).not.toHaveBeenCalled();
   });
 
   it('records nothing when reading the subscriptions fails, so the event is retried whole', async () => {

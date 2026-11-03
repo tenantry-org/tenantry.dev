@@ -5,7 +5,8 @@ name: docs-versions
 # and the samples. When either differs from docs-versions.json or newest-release.json, it commits both to master and
 # staging, which redeploys the site. A new minor appears once both Core and Pro have released in it; a later patch in
 # a minor updates it. A release whose docs lack their folder or
-# changelog section is left out, with a warning. Hourly, so a release is live within the hour; on demand as well.
+# changelog section is left out, with a warning. Scheduled hourly, but GitHub drops many scheduled runs, so a release
+# can wait several hours for one; run it by hand (gh workflow run docs-versions.yml) to publish a release at once.
 # The test workflow deploys the commit once its checks pass on it (its deploy job; README.md, Docs pipeline).
 on:
   schedule:

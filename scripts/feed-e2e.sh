@@ -473,9 +473,11 @@ fi
 # Unvested and unknown: refused.
 dir="$(consumer unvested '1.*')"
 if output="$(restore "$dir")"; then
-  fail 'a lapsed customer who never vested is refused with 403' "$output"
+  fail 'a lapsed customer who never vested is refused with 403, and told why' "$output"
 else
-  check 'a lapsed customer who never vested is refused with 403' '[[ "$output" == *403* ]]' "$output"
+  # NuGet prints only the status line of a failed request; the reason reaches the output as an X-NuGet-Warning.
+  check 'a lapsed customer who never vested is refused with 403, and told why' \
+    '[[ "$output" == *403* && "$output" == *"no releases are vested"* ]]' "$output"
 fi
 dir="$(consumer unknown '1.*')"
 if output="$(restore "$dir")"; then

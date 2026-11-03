@@ -62,8 +62,13 @@ export function nugetConfig(siteUrl: string): string {
 export const feedTokenShell = `export ${FEED_TOKEN_VARIABLE}=tpf_your_feed_token`;
 export const feedTokenPowerShell = `[Environment]::SetEnvironmentVariable('${FEED_TOKEN_VARIABLE}', 'tpf_your_feed_token', 'User')`;
 
-/** Adding Tenantry Pro's packages to a project; the job and message integrations are added the same way. */
-export const addProPackages = `dotnet add package Tenantry.Pro
+/**
+ * Adding Tenantry Pro's packages to a web project, with Tenantry Core's ASP.NET Core package (from nuget.org), which
+ * neither Pro package brings in, as the installation guide does; the job and message integrations are added the same
+ * way. No comments on the lines: zsh, the macOS shell, does not treat `#` as a comment when it is typed or pasted.
+ */
+export const addProPackages = `dotnet add package Tenantry.AspNetCore
+dotnet add package Tenantry.Pro
 dotnet add package Tenantry.Pro.EfCore`;
 
 /** Restoring with the lock file: the first restore writes packages.lock.json, which is committed. */

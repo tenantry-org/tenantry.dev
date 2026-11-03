@@ -116,7 +116,7 @@ Some mistakes do not reach the test, because Tenantry refuses to build the model
 context, failed with:
 
 ```text
-Tenantry.EfCore.TenantIsolationViolationException : Entity 'Invoice' is tenant-owned but its base entity type
+Tenantry.TenantIsolationViolationException : Entity 'Invoice' is tenant-owned but its base entity type
 'Document' is not. EF Core applies query filters to the root of an inheritance hierarchy only, so implement
 ITenantEntity<String> on 'Document'.
 ```
@@ -170,7 +170,7 @@ builder.Services.AddTenantry<string>(tenant => tenant
 ```
 
 ```text
-Tenantry.EfCore.TenantIsolationViolationException: 'AppDbContext' requires every entity type that is not tenant-owned
+Tenantry.TenantIsolationViolationException: 'AppDbContext' requires every entity type that is not tenant-owned
 to be marked as shared across tenants (EfCoreIsolationOptions.OnUnmarkedEntityType = Reject), and these are not:
 Note. Mark each that every tenant shares with [SharedAcrossTenants] or, in OnModelCreating, IsSharedAcrossTenants(),
 and implement ITenantEntity<String> on each whose rows belong to a tenant.
