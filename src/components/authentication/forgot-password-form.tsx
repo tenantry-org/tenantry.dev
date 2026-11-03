@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { requestPasswordReset } from '@/app/forgot-password/actions';
+import { useCaptcha } from '@/components/authentication/captcha';
 
 interface Props {
   /** Shown above the form, such as when a reset link has expired. */
@@ -17,13 +18,16 @@ export function ForgotPasswordForm({ notice }: Props) {
   const [email, setEmail] = useState('');
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const captcha = useCaptcha();
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     startTransition(async () => {
-      const result = await requestPasswordReset(email);
-      if ('error' in result) toast({ description: result.error, variant: 'destructive' });
-      else setSentTo(email);
+      const result = await requestPasswordReset(email, captcha.token ?? undefined);
+      if ('error' in result) {
+        toast({ description: result.error, variant: 'destructive' });
+        captcha.reset();
+      } else setSentTo(email);
     });
   }
 
@@ -59,7 +63,13 @@ export function ForgotPasswordForm({ notice }: Props) {
           onChange={(e) => setEmail(e.target.value)}
         />
       </div>
-      <Button type={'submit'} className={'w-full'} disabled={pending} aria-busy={pending}>
+      {captcha.element}
+      <Button
+        type={'submit'}
+        className={'w-full'}
+        disabled={pending || (captcha.required && !captcha.token)}
+        aria-busy={pending}
+      >
         {pending ? 'Sending…' : 'Send reset link'}
       </Button>
     </form>

@@ -23,9 +23,16 @@ beforeEach(() => {
 });
 
 describe('login', () => {
-  it('signs in and continues to the page it was given', async () => {
-    await expect(login(credentials, '/checkout/pri_1')).rejects.toThrow('redirect:/checkout/pri_1');
-    expect(auth.signInWithPassword).toHaveBeenCalledWith(credentials);
+  it('signs in, with the Turnstile token when there is one, and continues to the page it was given', async () => {
+    await expect(login({ ...credentials, captchaToken: 'turnstile' }, '/checkout/pri_1')).rejects.toThrow(
+      'redirect:/checkout/pri_1',
+    );
+    expect(auth.signInWithPassword).toHaveBeenCalledWith({ ...credentials, options: { captchaToken: 'turnstile' } });
+  });
+
+  it('says when the check for scripts did not pass, rather than blame the password', async () => {
+    auth.signInWithPassword.mockResolvedValue({ data: {}, error: { code: 'captcha_failed', message: 'x' } });
+    expect(await login(credentials)).toEqual({ error: expect.stringContaining('did not pass') });
   });
 
   it('reports a wrong password as one', async () => {

@@ -44,9 +44,28 @@ export function eventCustomerId(event: PaddleEventJson): string | null {
 }
 
 /**
- * Stores a verified Paddle notification as a job. Returns false if it was already stored: its id is Paddle's
- * notification id, so a retried delivery of the same notification, even a concurrent one, is a no-op (`INSERT … ON
- * CONFLICT DO NOTHING`). A replay from Paddle is a new notification of the same event, so it is stored and runs again.
+ * The notification as it is stored: a transaction's payment attempts lose their `method_details` (the card's type, last
+ * four digits, expiry and cardholder name, or a PayPal address), which nothing here reads and the privacy policy says
+ * the site keeps no payment-card details. Each attempt stays, with `method_details: null`, which the Paddle SDK reads
+ * as an attempt without details, so the job still parses (Webhooks.fromJson needs `payments` to be a list).
+ */
+export function withoutPaymentMethods(event: PaddleEventJson): PaddleEventJson {
+  const payments = event.data?.payments;
+  if (!Array.isArray(payments)) return event;
+
+  const attempts = payments.map((attempt) =>
+    attempt !== null && typeof attempt === 'object' && !Array.isArray(attempt)
+      ? { ...attempt, method_details: null }
+      : attempt,
+  );
+  return { ...event, data: { ...event.data, payments: attempts } };
+}
+
+/**
+ * Stores a verified Paddle notification as a job, without its payment method details (`withoutPaymentMethods`).
+ * Returns false if it was already stored: its id is Paddle's notification id, so a retried delivery of the same
+ * notification, even a concurrent one, is a no-op (`INSERT … ON CONFLICT DO NOTHING`). A replay from Paddle is a new
+ * notification of the same event, so it is stored and runs again.
  */
 export async function enqueuePaddleEvent(event: PaddleEventJson): Promise<boolean> {
   const supabase = createServiceRoleClient();
@@ -59,7 +78,7 @@ export async function enqueuePaddleEvent(event: PaddleEventJson): Promise<boolea
         customer_id: eventCustomerId(event),
         occurred_at: event.occurred_at,
         event_type: event.event_type,
-        payload: event,
+        payload: withoutPaymentMethods(event),
       },
       { onConflict: 'id', ignoreDuplicates: true },
     )
@@ -144,6 +163,24 @@ export async function retryJob(job: Job, failure: unknown, now: Date = new Date(
   if (error) throw error;
 
   return giveUp ? 'failed' : 'retrying';
+}
+
+/**
+ * Deletes the jobs that were done before `cutoff` and returns how many. A Paddle event's job holds the notification,
+ * with the customer's name and email in a customer event, and nothing reads a job once it is done: the claim takes only
+ * pending ones. A failed job stays until someone deals with it.
+ */
+export async function deleteDoneJobsBefore(cutoff: Date): Promise<number> {
+  const supabase = createServiceRoleClient();
+  const { error, count } = await supabase
+    .from('customer_jobs')
+    .delete({ count: 'exact' })
+    .eq('status', 'done')
+    .lt('processed_at', cutoff.toISOString());
+
+  if (error) throw error;
+
+  return count ?? 0;
 }
 
 /**

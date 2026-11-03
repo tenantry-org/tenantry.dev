@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Webhooks } from '@paddle/paddle-node-sdk';
+import { transactionEvent } from '@/test/paddle-events';
 import type { FakeCall } from '@/test/fake-supabase';
 import type { Tables } from '@/lib/supabase/database.types';
 import {
   claimJobs,
+  deleteDoneJobsBefore,
   enqueuePaddleEvent,
   enqueueReconcileJobs,
   eventCustomerId,
@@ -110,6 +113,49 @@ describe('enqueuePaddleEvent', () => {
     });
   });
 
+  it("stores a transaction's payment attempts without their card or PayPal details", async () => {
+    const card = { type: 'visa', last4: '4242', expiry_month: 1, expiry_year: 2030, cardholder_name: 'Ada Lovelace' };
+    const attempt = {
+      payment_attempt_id: 'pay_1',
+      stored_payment_method_id: 'paymtd_1',
+      amount: '3900',
+      status: 'captured',
+      created_at: '2026-09-01T00:05:00Z',
+    };
+    const event = transactionEvent({ eventId: 'evt_txn' });
+    const completed: PaddleEventJson = {
+      ...event,
+      data: {
+        ...event.data,
+        payments: [
+          { ...attempt, method_details: { type: 'card', card } },
+          { ...attempt, payment_attempt_id: 'pay_2', method_details: { type: 'paypal', card: null } },
+        ],
+      },
+    };
+    state.inserted = [{ id: completed.notification_id }];
+
+    await enqueuePaddleEvent(completed);
+
+    const upsert = state.calls.find((call) => call.method === 'upsert')!;
+    const { payload } = upsert.args[0] as { payload: PaddleEventJson };
+    expect(payload).toEqual({
+      ...completed,
+      data: {
+        ...completed.data,
+        payments: [
+          { ...attempt, method_details: null },
+          { ...attempt, payment_attempt_id: 'pay_2', method_details: null },
+        ],
+      },
+    });
+    expect(JSON.stringify(payload)).not.toMatch(/4242|Ada Lovelace|paypal/);
+    // The stored notification still parses as the worker parses it.
+    expect(Webhooks.fromJson(payload as unknown as Parameters<typeof Webhooks.fromJson>[0])).toMatchObject({
+      data: { payments: [{ paymentAttemptId: 'pay_1', methodDetails: null }, { methodDetails: null }] },
+    });
+  });
+
   it('drops a second delivery of the same notification', async () => {
     state.jobs = new Set();
 
@@ -124,6 +170,19 @@ describe('enqueuePaddleEvent', () => {
     await expect(enqueuePaddleEvent(subscriptionCreated)).resolves.toBe(true);
     await expect(enqueuePaddleEvent(replay)).resolves.toBe(true);
     expect([...state.jobs]).toEqual(['ntf_1', 'ntf_2']);
+  });
+});
+
+describe('deleteDoneJobsBefore', () => {
+  it('deletes the jobs done before a time and says how many, leaving pending and failed ones', async () => {
+    state.inserted = [{}, {}];
+
+    await expect(deleteDoneJobsBefore(new Date('2026-10-01T04:00:00Z'))).resolves.toBe(2);
+    expect(state.calls.map(({ method, args }) => [method, args])).toEqual([
+      ['delete', [{ count: 'exact' }]],
+      ['eq', ['status', 'done']],
+      ['lt', ['processed_at', '2026-10-01T04:00:00.000Z']],
+    ]);
   });
 });
 

@@ -27,6 +27,12 @@ export interface PublicConfig {
    * payment.
    */
   checkoutEnabled: boolean;
+  /**
+   * The Cloudflare Turnstile site key (NEXT_PUBLIC_TURNSTILE_SITE_KEY), or null when it is not set. With it, the
+   * sign-up, log-in and password reset forms show Turnstile's check and send its token to Supabase Auth, whose CAPTCHA
+   * protection holds the secret key; without it they send none, so Supabase's CAPTCHA protection must stay off.
+   */
+  turnstileSiteKey: string | null;
 }
 
 export type Env = Record<string, string | undefined>;
@@ -91,6 +97,7 @@ export function readPublicConfig(
     supabase,
     paddle: { environment: environment as PaddleEnvironment, clientToken, prices },
     checkoutEnabled,
+    turnstileSiteKey: value('NEXT_PUBLIC_TURNSTILE_SITE_KEY') ?? null,
   };
 }
 
@@ -126,6 +133,7 @@ function publicEnv(): Env {
     NEXT_PUBLIC_PADDLE_PRICE_MONTHLY: process.env.NEXT_PUBLIC_PADDLE_PRICE_MONTHLY,
     NEXT_PUBLIC_PADDLE_PRICE_YEARLY: process.env.NEXT_PUBLIC_PADDLE_PRICE_YEARLY,
     NEXT_PUBLIC_CHECKOUT_ENABLED: process.env.NEXT_PUBLIC_CHECKOUT_ENABLED,
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
   };
 }
 

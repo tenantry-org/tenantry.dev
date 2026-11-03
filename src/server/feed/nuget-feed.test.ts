@@ -136,7 +136,7 @@ beforeEach(() => {
 const FEED_REQUEST = new Request(`${BASE}/flat/tenantry.pro/index.json`);
 
 /** A request to the feed, with the customer's token as the basic-auth password (any username, as NuGet sends). */
-function get(path: string, customer?: string, init: { authorization?: string; ip?: string } = {}) {
+function get(path: string, customer?: string, init: { authorization?: string; ip?: string; method?: string } = {}) {
   const headers = new Headers(init.ip ? { 'x-real-ip': init.ip } : {});
   const authorization =
     init.authorization ??
@@ -145,7 +145,7 @@ function get(path: string, customer?: string, init: { authorization?: string; ip
 
   const url = new URL(`${BASE}/${path}`);
   const segments = url.pathname.replace('/feed/v3/', '').split('/').filter(Boolean);
-  return handleFeedRequest(new Request(url, { headers }), segments, deps);
+  return handleFeedRequest(new Request(url, { headers, method: init.method }), segments, deps);
 }
 
 async function versions(customer: string, id = 'tenantry.pro') {
@@ -671,6 +671,19 @@ describe('download records', () => {
     await afterResponse();
 
     expect(store.recordFeedDownload).not.toHaveBeenCalled();
+  });
+
+  it('records nothing and signs nothing for a HEAD, which answers that the package is there', async () => {
+    const response = await get('flat/tenantry.pro/1.4.0/tenantry.pro.1.4.0.nupkg', 'vested', { method: 'HEAD' });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(deps.storage.signedDownloadUrl).not.toHaveBeenCalled();
+    expect(store.recordFeedDownload).not.toHaveBeenCalled();
+    expect((await get('flat/tenantry.pro/1.6.0/tenantry.pro.1.6.0.nupkg', 'vested', { method: 'HEAD' })).status).toBe(
+      404,
+    );
   });
 
   it('still serves the download when the record cannot be written', async () => {

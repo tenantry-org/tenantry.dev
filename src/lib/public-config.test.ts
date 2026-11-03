@@ -27,6 +27,7 @@ describe('readPublicConfig', () => {
           prices: { month: 'pri_01month', year: 'pri_01year' },
         },
         checkoutEnabled: true,
+        turnstileSiteKey: null,
       },
       problems: [],
     });
@@ -94,6 +95,14 @@ describe('readPublicConfig', () => {
     expect(readWith({ ...production, NEXT_PUBLIC_CHECKOUT_ENABLED: undefined }, placeholder)).toEqual([]);
     // The sandbox sells test transactions only, so it may run checkout before the entity is set.
     expect(readWith(complete, placeholder)).toEqual([]);
+  });
+
+  it('takes the Turnstile site key, which is optional', () => {
+    expect(read({ ...complete, NEXT_PUBLIC_TURNSTILE_SITE_KEY: ' 0x4AAAAAAA ' })).toMatchObject({
+      config: { turnstileSiteKey: '0x4AAAAAAA' },
+      problems: [],
+    });
+    expect(read({ ...complete, NEXT_PUBLIC_TURNSTILE_SITE_KEY: ' ' }).config.turnstileSiteKey).toBeNull();
   });
 });
 

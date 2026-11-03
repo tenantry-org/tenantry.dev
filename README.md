@@ -42,7 +42,9 @@ Key code is in `src/server`, in layers whose imports point only down this list (
   `paddle-assumptions.ts`); storing that and keeping their licence and emails in line with it (`customer-access.ts`);
   applying Paddle's notifications (`apply-paddle-event.ts`); the reconcile run; and the Pro pages' read models, one
   per page, each reading only what its page shows (`pro-pages.ts`).
-- `jobs/`: the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order.
+- `jobs/`: the worker that runs each customer's jobs (Paddle events and reconciles) one at a time and in order. A
+  Paddle event is stored without its payment attempts' card or PayPal details, and the daily reconcile run deletes
+  jobs done more than 30 days ago, the period the privacy policy states.
 - `integrations/`: Paddle, email (Resend) and the licence issuer.
 - `db/`: `createUserClient` (the signed-in user's session; RLS applies) and `createServiceRoleClient` (bypasses
   RLS), and the only modules that query the database: the billing tables' store, the customer jobs and the
@@ -127,7 +129,9 @@ contract both rely on; change it here and in both clients together.
   `<site>/feed` (`https://tenantry.dev/feed` in production). The site checks it against GitHub's signing keys and
   accepts it only from `.github/workflows/release.yml` in `tenantry-org/tenantry-pro`, running for a `v*` tag pushed by
   a login in `FEED_PUBLISH_ACTORS` (comma-separated). Without that setting, no token is accepted. No key is stored
-  anywhere for it (`src/server/feed/github-oidc.ts`).
+  anywhere for it (`src/server/feed/github-oidc.ts`). The repository is also matched by its numeric id and its org's,
+  which GitHub never reuses, so a repository that takes the name after a rename or deletion cannot publish; if Pro's
+  repository is ever recreated or moved to another org, update the two ids in `github-oidc.ts`.
 - The operator's script, for the sandbox, sends a publish key in the `X-NuGet-ApiKey` header. The deployment holds only
   the key's SHA-256 (`FEED_PUBLISH_KEY_SHA256`); without it every push with a key is refused. Production can leave it
   unset once releases publish with OIDC tokens.
@@ -194,7 +198,8 @@ not shaped like a feed token is refused without a database query.
 Each package download (a redirect to the package file) is recorded in `feed_downloads`, once the redirect has been
 sent: the token, the package and version, the time, and the client's network (an IPv4 address's /24, an IPv6 address's
 /48). Only the service role reads it. The daily reconcile run deletes records older than 90 days, the period the
-privacy policy states.
+privacy policy states. A HEAD request for a package (a mirror's or a monitor's check) answers 200 without the redirect
+and is not recorded.
 
 `scripts/feed-e2e.sh` (`pnpm test:feed-e2e`, and a job in CI) runs the whole journey against a local stack:
 publishing, creating tokens through the Access page's actions, restoring as a subscriber, a lapsed customer with vested
@@ -311,5 +316,11 @@ through `serverConfig()` (`src/server/config/server-config.ts`), which the serve
 browser through `publicConfig()` (`src/lib/public-config.ts`): the `NEXT_PUBLIC_` variables it uses, which are
 compiled into the build, so the build checks them too and a change needs a redeploy. (`NEXT_PUBLIC_SITE_URL` is read
 by the server only.) ESLint keeps `process.env` out of other code.
+
+Every page is sent with a Content-Security-Policy (`next.config.mjs`, `contentSecurityPolicy`): a page's scripts may
+call only the site, the Supabase project and Paddle, scripts load only from the site, Paddle and Turnstile, and frames
+only from Paddle's checkout and Turnstile. Images, styles and fonts are not limited. A new third-party script, frame or
+API the browser calls must be added there, or the browser blocks it (the console names the directive).
+
 Operational runbooks (setting up each environment, key rotation, reconcile) are maintained privately by the
 maintainers.

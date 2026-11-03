@@ -30,7 +30,7 @@ import { FEED_PATH } from '@/lib/install-snippets';
  * Basic challenge, which makes NuGet send the credentials configured for the source. Responses are never cached by
  * anyone but the client: each customer's lists differ. Every request counts against the feed's rate limit
  * (rate-limit.ts), and each package download is recorded with its token (feed_downloads), kept for 90 days, once the
- * redirect has been sent.
+ * redirect has been sent. A HEAD for a package answers 200 with no redirect and records nothing.
  */
 
 /** How long a download's signed URL works. NuGet follows the redirect at once. */
@@ -121,6 +121,9 @@ async function flat(
   if (!pkg) return notFound();
 
   if (name === `${lowerId}.${version}.nupkg`) {
+    // A HEAD (a mirror's or a monitor's check) downloads nothing: it is not recorded, and it gets no signed URL, which
+    // would let the package be fetched from storage with no record of it.
+    if (download.request.method === 'HEAD') return new Response(null, { status: 200, headers: PRIVATE });
     const location = await deps.storage.signedDownloadUrl(pkg.storagePath, DOWNLOAD_URL_SECONDS);
     // Nothing waits on the record, so it is written after the redirect has gone out.
     deps.afterResponse(() => recordDownload(download.tokenId, pkg, download.request, deps));

@@ -5,7 +5,7 @@ export const metadata = { title: 'Privacy Policy | Tenantry' };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" lastUpdated="2026-10-06">
+    <LegalPage title="Privacy Policy" lastUpdated="2026-11-02">
       <p>
         This Privacy Policy explains how {LegalEntity.name} (&quot;Tenantry&quot;, &quot;we&quot;) collects, uses, and
         protects personal data when you use our website and Services.
@@ -27,8 +27,10 @@ export default function PrivacyPage() {
           <dt>Billing data</dt>
           <dd>
             Processed by Paddle.com as merchant of record. We receive subscription status, customer identifiers and, for
-            each Tenantry Pro payment, its billing period, amounts, currency and any refunds, credits or chargebacks,
-            not payment-card details.
+            each Tenantry Pro payment, its billing period, amounts, currency and any refunds, credits or chargebacks. We
+            do not keep payment-card or PayPal details: we remove them from Paddle&apos;s notifications before storing
+            them. We keep each notification, which can include your name and email address, for 30 days after we act on
+            it, or until we have dealt with one we could not act on.
           </dd>
         </div>
         <div>
@@ -67,8 +69,9 @@ export default function PrivacyPage() {
       <p>
         We share data with sub-processors that operate the Services on our behalf, each under its own terms: Paddle
         (billing, as merchant of record), Supabase (authentication and database), GitHub (sign-in, if you use it),
-        Vercel (hosting, Web Analytics and Speed Insights) and Resend (email). Some of them process data outside the UK
-        and the EEA, under appropriate safeguards such as standard contractual clauses.
+        Vercel (hosting, Web Analytics and Speed Insights), Resend (email) and Cloudflare (Turnstile, which checks that
+        the sign-up, log-in and password reset forms are used by a person rather than a script). Some of them process
+        data outside the UK and the EEA, under appropriate safeguards such as standard contractual clauses.
       </p>
 
       <h2>4. Cookies and analytics</h2>
@@ -82,8 +85,8 @@ export default function PrivacyPage() {
       <h2>5. Data retention</h2>
       <p>
         We retain account and entitlement data for as long as your account is active and as required for legal and
-        accounting purposes. Package download records are deleted after 90 days. You may request deletion subject to
-        those obligations.
+        accounting purposes. Package download records are deleted after 90 days, and Paddle&apos;s notifications 30 days
+        after we act on them. You may request deletion subject to those obligations.
       </p>
 
       <h2>6. Your rights</h2>
