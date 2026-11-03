@@ -126,7 +126,7 @@ export function llmsTxt(pages: MarkdownPage[], posts: LinkedPost[], prices: Base
     [
       SUMMARY,
       `These are the docs of the newest release, Tenantry ${version} (Core ${coreTag}, Pro ${proTag}), as Markdown. ` +
-        'Each page is also a web page at the same address without `.md`. Tenantry is in beta until 1.0.' +
+        'Each page is also a web page at the same address without `.md`. Releases are numbered 0.x until 1.0.' +
         (older.length > 0
           ? ` Earlier releases' docs: ${older.map((entry) => `[${entry.version}](${absolute(markdownUrl(entry.base))})`).join(', ')}.`
           : ''),

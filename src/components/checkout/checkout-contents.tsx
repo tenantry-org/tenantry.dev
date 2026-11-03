@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { track } from '@vercel/analytics';
 import { usePaddle } from '@/hooks/use-paddle';
+import { V1_NOT_BEFORE } from '@/constants/dotnet-support';
 
 interface Props {
   priceId: string;
@@ -64,7 +65,8 @@ export function CheckoutContents({ priceId, userEmail }: Props) {
         <div className={'w-full md:w-[360px] md:shrink-0'}>
           <PriceSection checkoutData={checkoutData} />
           <p className={'mt-6 text-sm text-muted-foreground'}>
-            Tenantry is in beta until 1.0, so a minor release can change the API. Each release says how to update.
+            Until 1.0, no earlier than {V1_NOT_BEFORE}, a minor release can change the API. Each release says how to
+            update.
           </p>
           <p className={'mt-3 text-sm text-muted-foreground'}>
             Subscribing accepts the{' '}

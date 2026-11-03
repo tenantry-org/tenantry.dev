@@ -46,7 +46,7 @@ describe('docs as Markdown', () => {
           'provisioning and offboarding, migrations across tenant databases, schema per tenant and mixed mode, the ' +
           'tenant in background jobs and messages, and audit logging.',
         'These are the docs of the newest release, Tenantry 0.6 (Core v0.6.2, Pro v0.6.1), as Markdown. Each page is ' +
-          'also a web page at the same address without `.md`. Tenantry is in beta until 1.0. ' +
+          'also a web page at the same address without `.md`. Releases are numbered 0.x until 1.0. ' +
           "Earlier releases' docs: [0.5](https://tenantry.dev/docs/v0.5.md).",
         [
           '## About',

@@ -34,4 +34,13 @@ describe('CheckoutContents', () => {
     expect(html).toMatch(/href="\/legal\/eula"[^>]*>Tenantry Pro EULA</);
     expect(html).toMatch(/full refund within 14 days \(<a [^>]*href="\/legal\/refunds"[^>]*>refund policy</);
   });
+
+  it('states the rule for releases before 1.0 with its earliest date, not a beta label', () => {
+    usePaddle.mockReturnValue({ status: 'loading' });
+
+    const html = renderToStaticMarkup(<CheckoutContents priceId={'pri_01month'} userEmail={'buyer@example.com'} />);
+
+    expect(html).toContain('Until 1.0, no earlier than 10 May 2027, a minor release can change the API.');
+    expect(html).not.toMatch(/beta/i);
+  });
 });

@@ -89,6 +89,8 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
     cells: [
       'Yours',
       <>
+        {/* Finbuckle's README, at v10.1.4 and on main on 3 November 2026, gives the fee's start as "November 10th,
+            20026", a typo, so the sentence states no date. */}
         Apache-2.0. Its{' '}
         <a
           href={'https://github.com/Finbuckle/Finbuckle.MultiTenant/blob/v10.1.4/README.md#open-source-maintenance-fee'}
@@ -98,8 +100,8 @@ const ROWS: { label: string; cells: [ReactNode, ReactNode, ReactNode, ReactNode]
         >
           README
         </a>{' '}
-        says that from 10 November 2026, use of its official releases in revenue-generating work falls under an Open
-        Source Maintenance Fee. Its{' '}
+        says that use of its official releases in revenue-generating activities requires adherence to an Open Source
+        Maintenance Fee. Its{' '}
         <a
           href={'https://github.com/sponsors/Finbuckle'}
           target={'_blank'}

@@ -38,7 +38,7 @@ const NOTES: { title: string; text: string | string[] }[] = [
   },
   {
     title: 'Versions',
-    text: `Tenantry is in beta: its releases are numbered 0.x, the newest is ${latestDocsVersion.version}, and 1.0 comes no earlier than ${V1_NOT_BEFORE}. From version 10, Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only; its 9.x and 8.x lines still get fixes (9.4.13 and 8.1.18 in September 2026). Tenantry supports ${DOTNET_SUPPORT}.`,
+    text: `Tenantry’s releases are numbered 0.x: the newest is ${latestDocsVersion.version}, and 1.0 comes no earlier than ${V1_NOT_BEFORE}. From version 10, Finbuckle.MultiTenant’s major versions follow .NET’s, and version 10 targets .NET 10 only; its 9.x and 8.x lines still get fixes (9.4.15 and 8.1.20 on 30 October 2026). Tenantry supports ${DOTNET_SUPPORT}.`,
   },
 ];
 

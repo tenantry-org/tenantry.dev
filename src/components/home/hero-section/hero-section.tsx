@@ -53,14 +53,14 @@ export async function HeroSection() {
         }
       >
         <div className={'flex flex-col items-start'}>
-          {/* The date is the end of .NET 8 and 9's support, which 1.0 drops: the compatibility guide explains it. */}
+          {/* 1.0 comes no earlier than this date and drops .NET 8 and 9: the compatibility guide explains it. */}
           <Link
             href={'/docs/core/compatibility#net-versions'}
             className={
               'inline-flex items-center gap-2 rounded-full border border-accent-foreground/15 bg-accent px-3 py-1 text-xs font-medium text-accent-foreground hover:underline'
             }
           >
-            Beta · {latestDocsVersion.version} · 1.0 not before {V1_NOT_BEFORE}
+            Version {latestDocsVersion.version} · 1.0 not before {V1_NOT_BEFORE}
           </Link>
           <h1
             className={

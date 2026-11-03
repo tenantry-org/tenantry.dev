@@ -146,7 +146,7 @@ const QUESTIONS = [
   },
   {
     question: 'Is it production-ready?',
-    answer: `Tenantry Core and Pro are in beta until 1.0, which comes no earlier than ${V1_NOT_BEFORE}. The isolation is tested on every build against SQL Server, PostgreSQL, MySQL and SQLite. Releases are numbered 0.x, and a minor release (${latestDocsVersion.version} to ${nextMinor}) can change the API, with the steps to update in its release notes. Pro releases each minor version with Core's.`,
+    answer: `Yes. The isolation is tested on every build against SQL Server, PostgreSQL, MySQL and SQLite. What can still change is the API: releases are numbered 0.x until 1.0, which comes no earlier than ${V1_NOT_BEFORE}, so a minor release (${latestDocsVersion.version} to ${nextMinor}) can change it, with the steps to update in its release notes. Pro releases each minor version with Core's.`,
     link: { label: 'Compatibility', href: '/docs/pro/compatibility' },
   },
   {
